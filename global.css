@@ -1,0 +1,97 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap');
+
+:root {
+  --bg:        #060008;
+  --surface:   #12010f;
+  --surface2:  #1c0118;
+  --surface3:  #261020;
+  --border:    rgba(255,255,255,0.07);
+  --pink:      #ff007a;
+  --pink-glow: rgba(255,0,122,0.35);
+  --pink-soft: rgba(255,0,122,0.12);
+  --text:      #ffffff;
+  --muted:     #6b7280;
+  --muted2:    #3f4451;
+  --green:     #00d26a;
+  --amber:     #f59e0b;
+  --font-display: 'Syne', sans-serif;
+  --font-mono:    'DM Mono', monospace;
+}
+
+html { scroll-behavior: smooth; }
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  background:
+    radial-gradient(ellipse at 0% 0%,    #1a0030 0%, transparent 55%),
+    radial-gradient(ellipse at 100% 100%, #2a0020 0%, transparent 55%),
+    radial-gradient(ellipse at 50% 50%,   #0d000f 0%, transparent 80%),
+    #060008;
+  background-attachment: fixed;
+  color: var(--text);
+  font-family: var(--font-display);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  opacity: 0.4;
+  pointer-events: none;
+  z-index: 0;
+}
+
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: #060008; }
+::-webkit-scrollbar-thumb { background: #3a1030; border-radius: 2px; }
+
+/* Hide number input spinners */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; }
+input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+/* Animations */
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px #00d26a; }
+  50%       { opacity: 0.5; box-shadow: 0 0 2px #00d26a; }
+}
+@keyframes fadeSlideIn {
+  from { opacity: 0; max-height: 0; }
+  to   { opacity: 1; max-height: 300px; }
+}
+
+.animate-slide-down  { animation: slideDown 0.6s cubic-bezier(.22,1,.36,1) 0.1s both; }
+.animate-fade-up-1   { animation: fadeUp   0.8s cubic-bezier(.22,1,.36,1) 0.3s both; }
+.animate-fade-up-2   { animation: fadeUp   0.7s cubic-bezier(.22,1,.36,1) 0.45s both; }
+.animate-fade-up-3   { animation: fadeUp   0.6s ease 0.7s both; }
+
+.spinner {
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
