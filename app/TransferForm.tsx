@@ -245,7 +245,7 @@ export default function TransferForm(): React.JSX.Element {
   }, [amount, selected?.symbol, address])
 
   // ── Smart CTA state ────────────────────────────────────────────────────
-  const isWrongNetwork = isConnected && chainId !== TARGET_CHAIN_ID
+  const isWrongNetwork = isConnected && chainId !== base.id && chainId !== baseSepolia.id
   const rawVal         = parseAmt()
   const split          = rawVal ? calcSplit(rawVal) : null
   const busy           = ['approving','wait_approve','signing','wait_send'].includes(phase)

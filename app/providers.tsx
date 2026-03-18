@@ -1,16 +1,8 @@
 'use client'
 
-/**
- * providers.tsx v2
- *
- * MULTI-NETWORK: base + baseSepolia configurate
- * CHAIN GUARD: hook useChainGuard per bloccare invii su rete sbagliata
- * ERROR INTERCEPTOR: decodifica errori wallet incluso EIP-1193 code 4001
- */
-
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { WagmiProvider }                    from 'wagmi'
-import { base, baseSepolia }                from 'wagmi/chains'
+import { WagmiProvider } from 'wagmi'
+import { base, baseSepolia } from 'wagmi/chains'
 import {
   getDefaultConfig,
   RainbowKitProvider,
@@ -18,9 +10,8 @@ import {
 } from '@rainbow-me/rainbowkit'
 import '@rainbow-me/rainbowkit/styles.css'
 import { useState, useEffect, createContext, useContext } from 'react'
-import { useChainId, useSwitchChain }       from 'wagmi'
+import { useChainId, useSwitchChain } from 'wagmi'
 
-// ── Wagmi config con Base + Base Sepolia ───────────────────────────────────
 const config = getDefaultConfig({
   appName:   'FeeRouter B2B',
   projectId: process.env.NEXT_PUBLIC_WC_PROJECT_ID!,
@@ -28,7 +19,6 @@ const config = getDefaultConfig({
   ssr:       false,
 })
 
-// ── Query client ottimizzato ───────────────────────────────────────────────
 function makeQueryClient() {
   return new QueryClient({
     defaultOptions: {
@@ -41,7 +31,12 @@ function makeQueryClient() {
   })
 }
 
-// ── Chain Guard Context ────────────────────────────────────────────────────
+const TARGET_CHAIN_ID = process.env.NEXT_PUBLIC_TARGET_CHAIN_ID
+  ? parseInt(process.env.NEXT_PUBLIC_TARGET_CHAIN_ID)
+  : base.id
+
+const TARGET_CHAIN_NAME = TARGET_CHAIN_ID === base.id ? 'Base Mainnet' : 'Base Sepolia'
+
 interface ChainGuardCtx {
   isCorrectChain: boolean
   currentChainId: number
@@ -58,21 +53,18 @@ const ChainGuardContext = createContext<ChainGuardCtx>({
   targetName:     'Base',
 })
 
-// Legge la chain target dall'env (default: Base Mainnet)
-const TARGET_CHAIN_ID = process.env.NEXT_PUBLIC_TARGET_CHAIN_ID
-  ? parseInt(process.env.NEXT_PUBLIC_TARGET_CHAIN_ID)
-  : base.id
-
-const TARGET_CHAIN_NAME = TARGET_CHAIN_ID === base.id ? 'Base Mainnet' : 'Base Sepolia'
-
-function ChainGuardProvider({ children }: { children: React.ReactNode }) {
+function ChainGuardProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
   const chainId = useChainId()
   const { switchChain } = useSwitchChain()
 
-  const isCorrectChain = chainId === TARGET_CHAIN_ID
+const isCorrectChain = chainId === base.id || chainId === baseSepolia.id
 
   const switchToTarget = () => {
-    switchChain({ chainId: TARGET_CHAIN_ID as typeof base.id | typeof baseSepolia.id })
+    if (TARGET_CHAIN_ID === base.id) {
+      switchChain({ chainId: base.id })
+    } else {
+      switchChain({ chainId: baseSepolia.id })
+    }
   }
 
   return (
@@ -92,73 +84,35 @@ export function useChainGuard() {
   return useContext(ChainGuardContext)
 }
 
-// ── Global Error Interceptor ───────────────────────────────────────────────
-
-/**
- * Decodifica errori wallet/contract in messaggi italiani professionali.
- * Gestisce EIP-1193 (MetaMask), viem errors, contract reverts.
- */
 export function decodeWalletError(error: unknown): {
   message: string
   type: 'rejected' | 'funds' | 'gas' | 'network' | 'contract' | 'unknown'
   isUserAction: boolean
 } {
-  const raw = error instanceof Error ? error.message : String(error)
+  const raw  = error instanceof Error ? error.message : String(error)
   const code = (error as { code?: number })?.code
 
-  // EIP-1193: User rejected (code 4001)
   if (code === 4001 || raw.includes('rejected') || raw.includes('denied') || raw.includes('cancel')) {
-    return {
-      message: 'Firma negata: l\'operazione è stata annullata senza costi.',
-      type: 'rejected',
-      isUserAction: true,
-    }
+    return { message: "Firma negata: l'operazione è stata annullata senza costi.", type: 'rejected', isUserAction: true }
   }
-
-  // Fondi insufficienti
   if (raw.includes('insufficient funds') || raw.includes('insufficient balance')) {
-    return {
-      message: 'Fondi insufficienti per completare la transazione. Verifica il saldo ETH per il gas.',
-      type: 'funds',
-      isUserAction: false,
-    }
+    return { message: 'Fondi insufficienti. Verifica il saldo ETH per il gas.', type: 'funds', isUserAction: false }
   }
-
-  // Gas
   if (raw.includes('gas') || raw.includes('intrinsic')) {
-    return {
-      message: 'Errore nella stima del gas. La rete potrebbe essere congestionata. Riprova.',
-      type: 'gas',
-      isUserAction: false,
-    }
+    return { message: 'Errore nella stima del gas. Riprova.', type: 'gas', isUserAction: false }
   }
-
-  // Rete sbagliata
   if (raw.includes('chain') || raw.includes('network') || raw.includes('chainId')) {
-    return {
-      message: 'Rete non corretta. Passa a ' + TARGET_CHAIN_NAME + ' in MetaMask.',
-      type: 'network',
-      isUserAction: false,
-    }
+    return { message: 'Rete non corretta. Passa a ' + TARGET_CHAIN_NAME + ' in MetaMask.', type: 'network', isUserAction: false }
   }
-
-  // Contract revert
   if (raw.includes('revert') || raw.includes('execution reverted')) {
-    if (raw.includes('ZeroAddress'))   return { message: 'Indirizzo non valido (zero address).', type: 'contract', isUserAction: false }
-    if (raw.includes('ZeroAmount'))    return { message: 'Importo non può essere zero.', type: 'contract', isUserAction: false }
-    if (raw.includes('ETHTransfer'))   return { message: 'Trasferimento ETH fallito. Il destinatario potrebbe aver rifiutato i fondi.', type: 'contract', isUserAction: false }
+    if (raw.includes('ZeroAddress')) return { message: 'Indirizzo non valido.', type: 'contract', isUserAction: false }
+    if (raw.includes('ZeroAmount'))  return { message: 'Importo non può essere zero.', type: 'contract', isUserAction: false }
     return { message: 'Transazione rifiutata dal contratto. Verifica i parametri.', type: 'contract', isUserAction: false }
   }
-
-  return {
-    message: 'Errore imprevisto: ' + raw.slice(0, 100),
-    type: 'unknown',
-    isUserAction: false,
-  }
+  return { message: 'Errore imprevisto: ' + raw.slice(0, 100), type: 'unknown', isUserAction: false }
 }
 
-// ── Chain Warning Banner ───────────────────────────────────────────────────
-function ChainWarningBanner() {
+function ChainWarningBanner(): React.JSX.Element | null {
   const { isCorrectChain, switchToTarget, targetName, currentChainId } = useChainGuard()
 
   if (isCorrectChain) return null
@@ -171,8 +125,7 @@ function ChainWarningBanner() {
       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
       fontFamily: 'var(--font-mono)', fontSize: 13,
     }}>
-      <span>⚠ Rete non corretta (Chain ID: {currentChainId}). Questa dApp richiede <strong>{targetName}</strong>.</span>
-      <button
+      <span>⚠ Rete non supportata (Chain ID: {currentChainId}). Usa <strong>Base Mainnet</strong> o <strong>Base Sepolia</strong>.</span>      <button
         onClick={switchToTarget}
         style={{
           padding: '4px 14px', borderRadius: 6, border: 'none',
@@ -186,8 +139,7 @@ function ChainWarningBanner() {
   )
 }
 
-// ── Provider root ──────────────────────────────────────────────────────────
-export function Providers({ children }: { children: React.ReactNode }) {
+export function Providers({ children }: { children: React.ReactNode }): React.JSX.Element {
   const [queryClient] = useState(makeQueryClient)
   const [mounted, setMounted] = useState(false)
   useEffect(() => setMounted(true), [])
@@ -197,10 +149,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider
           theme={darkTheme({
-            accentColor:            '#ff007a',
-            accentColorForeground:  'white',
-            borderRadius:           'medium',
-            fontStack:              'system',
+            accentColor:           '#ff007a',
+            accentColorForeground: 'white',
+            borderRadius:          'medium',
+            fontStack:             'system',
           })}
           modalSize="compact"
         >
