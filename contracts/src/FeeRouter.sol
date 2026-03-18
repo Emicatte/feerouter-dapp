@@ -2,59 +2,62 @@
 pragma solidity ^0.8.24;
 
 /**
- * ╔══════════════════════════════════════════════════════════════╗
- * ║  FeeRouter.sol — B2B Payment Gateway su Base Network         ║
- * ║                                                              ║
- * ║  Deploy: Base Mainnet (chain 8453)                           ║
- * ║  Ottimizzazioni gas:                                         ║
- * ║    - immutable per feeRecipient iniziale                     ║
- * ║    - custom errors invece di require string (risparmi ~50%)  ║
- * ║    - unchecked per aritmetica sicura (fee < total garantito) ║
- * ║    - packed storage: feeBps + owner in slot singolo          ║
- * ║    - events indicizzati per filtering efficiente             ║
- * ╚══════════════════════════════════════════════════════════════╝
+ * ╔══════════════════════════════════════════════════════════════════╗
+ * ║  FeeRouter.sol v2 — B2B Payment Gateway (MiCA/DAC8 Ready)       ║
+ * ║  Base Network — Stateless, Atomic, Gas-Optimized                ║
+ * ╚══════════════════════════════════════════════════════════════════╝
  *
- * OpenZeppelin v5 — installazione:
- *   npm install @openzeppelin/contracts
+ * ARCHITETTURA SICUREZZA:
+ * 1. Stateless: zero accumulo fondi — ogni TX è pass-through immediato
+ * 2. Checks-Effects-Interactions: validazioni PRIMA di qualsiasi transfer
+ * 3. ReentrancyGuard: previene attacchi di rientranza
+ * 4. Atomicità: se fee transfer fallisce → revert dell'intera TX
+ * 5. immutable: feeRecipient non modificabile post-deploy (gas saving)
+ *
+ * GAS OPTIMIZATIONS:
+ * - immutable per indirizzi governance (no SLOAD, legge bytecode direttamente)
+ * - custom errors (~50% risparmio vs require string)
+ * - unchecked arithmetic dove overflow impossibile per design
+ * - packed storage: feeBps (uint16) + owner in stesso slot
  */
 
-import {Ownable}    from "@openzeppelin/contracts/access/Ownable.sol";
-import {IERC20}     from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20}  from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Ownable}        from "@openzeppelin/contracts/access/Ownable.sol";
+import {IERC20}         from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20}      from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-// ── Custom Errors (risparmio gas vs string require) ───────────────────────
+// ── Custom Errors (gas saving ~50% vs string require) ──────────────────────
 error ZeroAddress();
 error ZeroAmount();
 error FeeTooHigh();
-error ETHTransferFailed();
-error InsufficientBalance();
-error InvalidReference();
+error ETHTransferFailed(address target, uint256 amount);
+error InsufficientValue(uint256 sent, uint256 required);
 
 contract FeeRouter is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    // ── Storage (packed in single slot per gas optimization) ─────────────
-    // slot 0: feeRecipient (20 bytes) + feeBps (2 bytes) = 22 bytes < 32
-    address public feeRecipient;
-    uint16  public feeBps;          // basis points: 50 = 0.5%, max 1000 = 10%
+    // ── immutable: letto dal bytecode, nessun SLOAD ───────────────────────
+    // feeRecipient è immutable per sicurezza: non può essere modificato
+    // dopo il deploy neanche dall'owner (protezione da compromissione chiavi)
+    address public immutable feeRecipient;
 
-    uint16  public constant MAX_FEE_BPS  = 1_000; // 10% hard cap
-    uint16  public constant BPS_DENOM    = 10_000;
+    // feeBps è in storage (modificabile dall'owner fino al max)
+    uint16  public feeBps;
+    uint16  public constant MAX_FEE_BPS = 1_000; // 10% hard cap
+    uint16  public constant BPS_DENOM   = 10_000;
 
-    // ── Events ────────────────────────────────────────────────────────────
-    // indexed fields permettono filtraggio efficiente via getLogs
-    event PaymentSent(
+    // ── DAC8 / MiCA: evento ricco per riconciliazione contabile ──────────
+    event PaymentProcessed(
         address indexed sender,
         address indexed recipient,
-        address indexed token,      // address(0) = ETH nativo
+        address indexed token,       // address(0) = ETH nativo
         uint256 grossAmount,
         uint256 netAmount,
         uint256 feeAmount,
-        bytes32 paymentRef          // keccak256 del riferimento pagamento
+        bytes32 paymentRef,          // keccak256(invoiceId)
+        string  fiscalRef            // ID fiscale / riferimento fattura (DAC8)
     );
 
-    event FeeRecipientUpdated(address indexed oldRecipient, address indexed newRecipient);
     event FeeBpsUpdated(uint16 oldBps, uint16 newBps);
 
     // ── Constructor ───────────────────────────────────────────────────────
@@ -64,85 +67,85 @@ contract FeeRouter is Ownable, ReentrancyGuard {
         address _owner
     ) Ownable(_owner) {
         if (_feeRecipient == address(0)) revert ZeroAddress();
-        if (_feeBps > MAX_FEE_BPS)      revert FeeTooHigh();
+        if (_feeBps > MAX_FEE_BPS)       revert FeeTooHigh();
 
-        feeRecipient = _feeRecipient;
+        feeRecipient = _feeRecipient;   // immutable — assegnato solo nel constructor
         feeBps       = _feeBps;
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    //  Core: splitTransfer — ETH nativo
+    //  ETH — Stateless pass-through atomico
     // ══════════════════════════════════════════════════════════════════════
 
     /**
-     * @notice Invia ETH splittando automaticamente la fee.
-     * @param _to           Destinatario finale
-     * @param _paymentRef   Riferimento pagamento (es. invoice ID) per contabilità
+     * @notice Invia ETH con split automatico fee. Pass-through immediato.
      *
-     * Gas ottimizzazioni:
-     *   - nonReentrant protegge da reentrancy senza overhead eccessivo
-     *   - unchecked: fee < msg.value è garantito dalla divisione intera
-     *   - call{} invece di transfer{} per compatibilità EIP-1884
+     * Pattern Checks-Effects-Interactions:
+     *   1. CHECKS: validazioni input
+     *   2. EFFECTS: calcolo split (nessuno state change — stateless)
+     *   3. INTERACTIONS: transfer ETH
+     *
+     * Atomicità garantita: se fee transfer fallisce → revert → nessun ETH perso
      */
     function splitTransferETH(
-        address _to,
-        bytes32 _paymentRef
+        address  _to,
+        bytes32  _paymentRef,
+        string calldata _fiscalRef
     ) external payable nonReentrant {
-        if (_to == address(0))  revert ZeroAddress();
-        if (msg.value == 0)     revert ZeroAmount();
+        // ── CHECKS ────────────────────────────────────────────────────────
+        if (_to == address(0)) revert ZeroAddress();
+        if (msg.value == 0)    revert ZeroAmount();
 
         uint256 gross = msg.value;
 
-        // Safe math: fee = floor(gross * feeBps / 10000)
-        // unchecked: feeBps <= 1000, gross <= type(uint256).max
-        // fee <= gross * 10% — overflow impossibile
+        // ── EFFECTS (calcolo — nessun state change) ───────────────────────
         uint256 fee;
         uint256 net;
         unchecked {
+            // Safe: feeBps <= 1000, gross <= type(uint256).max
+            // fee <= gross * 10% → overflow impossibile
             fee = (gross * feeBps) / BPS_DENOM;
             net = gross - fee;
         }
 
-        // Invia netto al destinatario
+        // ── INTERACTIONS (atomiche: revert se una fallisce) ───────────────
         (bool ok1, ) = _to.call{value: net}("");
-        if (!ok1) revert ETHTransferFailed();
+        if (!ok1) revert ETHTransferFailed(_to, net);
 
-        // Invia fee al wallet di commissione
         (bool ok2, ) = feeRecipient.call{value: fee}("");
-        if (!ok2) revert ETHTransferFailed();
+        if (!ok2) revert ETHTransferFailed(feeRecipient, fee);
 
-        emit PaymentSent(
+        emit PaymentProcessed(
             msg.sender, _to, address(0),
-            gross, net, fee, _paymentRef
+            gross, net, fee, _paymentRef, _fiscalRef
         );
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    //  Core: splitTransfer — ERC20 (USDC, DEGEN, cbBTC, qualsiasi token)
+    //  ERC20 — SafeERC20 per token non-standard (USDT, cbBTC)
     // ══════════════════════════════════════════════════════════════════════
 
     /**
-     * @notice Invia token ERC20 splittando automaticamente la fee.
-     * @param _token        Indirizzo del contratto token (USDC, DEGEN, cbBTC…)
-     * @param _to           Destinatario finale
-     * @param _amount       Importo lordo in unità raw (es. 1000000 = 1 USDC)
-     * @param _paymentRef   Riferimento pagamento per contabilità on-chain
+     * @notice Invia ERC20 con split automatico. PREREQUISITO: approve(this, amount)
      *
-     * PREREQUISITO: il chiamante deve aver eseguito
-     *   token.approve(feeRouterAddress, _amount) prima di questa chiamata.
-     *
-     * Gas note: SafeERC20 gestisce token non-standard (USDT senza return value).
+     * SafeERC20 gestisce:
+     * - Token senza return value (USDT legacy)
+     * - Token con return value non-standard
+     * - Protezione da race condition su allowance
      */
     function splitTransferERC20(
-        address _token,
-        address _to,
-        uint256 _amount,
-        bytes32 _paymentRef
+        address  _token,
+        address  _to,
+        uint256  _amount,
+        bytes32  _paymentRef,
+        string calldata _fiscalRef
     ) external nonReentrant {
+        // ── CHECKS ────────────────────────────────────────────────────────
         if (_token == address(0)) revert ZeroAddress();
         if (_to    == address(0)) revert ZeroAddress();
-        if (_amount == 0)         revert ZeroAmount();
+        if (_amount == 0)          revert ZeroAmount();
 
+        // ── EFFECTS ───────────────────────────────────────────────────────
         uint256 fee;
         uint256 net;
         unchecked {
@@ -150,27 +153,21 @@ contract FeeRouter is Ownable, ReentrancyGuard {
             net = _amount - fee;
         }
 
+        // ── INTERACTIONS (atomiche via SafeERC20) ─────────────────────────
         IERC20 token = IERC20(_token);
-
-        // SafeERC20 handles non-standard ERC20 (USDT, etc.)
         token.safeTransferFrom(msg.sender, _to,          net);
         token.safeTransferFrom(msg.sender, feeRecipient, fee);
 
-        emit PaymentSent(
+        emit PaymentProcessed(
             msg.sender, _to, _token,
-            _amount, net, fee, _paymentRef
+            _amount, net, fee, _paymentRef, _fiscalRef
         );
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    //  View helpers
+    //  View helpers (gas-free, off-chain)
     // ══════════════════════════════════════════════════════════════════════
 
-    /**
-     * @notice Calcola fee e netto per un dato importo (gas-free, chiamata off-chain).
-     * @return net   Importo che arriverà al destinatario
-     * @return fee   Commissione trattenuta
-     */
     function calcSplit(uint256 _amount)
         external view
         returns (uint256 net, uint256 fee)
@@ -179,39 +176,26 @@ contract FeeRouter is Ownable, ReentrancyGuard {
         net = _amount - fee;
     }
 
-    /**
-     * @notice Verifica se allowance ERC20 è sufficiente per una transazione.
-     * @return sufficient  true se approve non è necessario
-     * @return current     Allowance attuale
-     */
-    function checkAllowance(
-        address _token,
-        address _owner,
-        uint256 _amount
-    ) external view returns (bool sufficient, uint256 current) {
+    function checkAllowance(address _token, address _owner, uint256 _amount)
+        external view
+        returns (bool sufficient, uint256 current)
+    {
         current   = IERC20(_token).allowance(_owner, address(this));
         sufficient = current >= _amount;
     }
 
     // ══════════════════════════════════════════════════════════════════════
-    //  Owner functions
+    //  Owner — governance limitata (feeBps only)
     // ══════════════════════════════════════════════════════════════════════
 
-    /// @notice Aggiorna il wallet che riceve le commissioni
-    function setFeeRecipient(address _newRecipient) external onlyOwner {
-        if (_newRecipient == address(0)) revert ZeroAddress();
-        emit FeeRecipientUpdated(feeRecipient, _newRecipient);
-        feeRecipient = _newRecipient;
-    }
-
-    /// @notice Aggiorna la percentuale di commissione (max 10%)
+    /// @notice Aggiorna fee (max 10%). feeRecipient è immutable.
     function setFeeBps(uint16 _newBps) external onlyOwner {
         if (_newBps > MAX_FEE_BPS) revert FeeTooHigh();
         emit FeeBpsUpdated(feeBps, _newBps);
         feeBps = _newBps;
     }
 
-    // ── Safety: rifiuta ETH diretto (usa splitTransferETH) ───────────────
+    // ── Safety net ────────────────────────────────────────────────────────
     receive()  external payable { revert("Usa splitTransferETH()"); }
-    fallback() external payable { revert("Funzione non riconosciuta"); }
+    fallback() external payable { revert("Funzione sconosciuta"); }
 }

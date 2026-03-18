@@ -1,127 +1,78 @@
 'use client'
 
 /**
- * TransferForm_b2b.tsx — B2B Corporate Payment Gateway
+ * TransferForm.tsx — WalletConnect-First Edition
  *
- * Architettura transazionale:
- *
- *  ETH:   1 TX → FeeRouter.splitTransferETH(to, ref) {value: amount}
- *
- *  ERC20: 2 step —
- *    Step 1 (solo se allowance < amount):
- *      token.approve(FeeRouterAddress, amount)
- *    Step 2:
- *      FeeRouter.splitTransferERC20(token, to, amount, ref)
- *
- *  Il contratto gestisce lo split on-chain:
- *    99.5% → destinatario, 0.5% → feeRecipient
- *
- *  Una sola firma utente per ETH.
- *  Due firme per ERC20 se approve necessario, altrimenti una sola.
+ * 1. Smart CTA: macchina a stati (disconnected→wrong_network→insufficient→ready)
+ * 2. Silent Flow: skip approve se allowance sufficiente + micro-copy ⚡
+ * 3. EIP-1193 error handling: toast non invasivo per user rejected
+ * 4. localStorage persistence: rp_tx_history (DAC8 ready)
+ * 5. MAX con stima gas dinamica per ETH
+ * 6. Saldo real-time del token selezionato nell'header
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   useAccount, useBalance, useReadContracts,
   useWriteContract, useWaitForTransactionReceipt,
-  usePublicClient,
+  usePublicClient, useChainId, useSwitchChain,
 } from 'wagmi'
+import { ConnectButton } from '@rainbow-me/rainbowkit'
 import {
   parseEther, parseUnits, formatEther, formatUnits,
   erc20Abi, keccak256, toBytes, isAddress, getAddress,
   type Abi,
 } from 'viem'
+import { base, baseSepolia } from 'wagmi/chains'
+import {
+  TxStatus, phaseToTxStatus, buildCallbackPayload,
+  TransactionStatusUI,
+} from './TransactionStatus'
+import { generatePdfReceipt } from '../lib/usePdfReceipt'
 
-// ══════════════════════════════════════════════════════════════════════════
-//  CONFIG — imposta dopo il deploy del contratto
-// ══════════════════════════════════════════════════════════════════════════
+// ── Config ─────────────────────────────────────────────────────────────────
+const TARGET_CHAIN_ID   = process.env.NEXT_PUBLIC_TARGET_CHAIN_ID
+  ? parseInt(process.env.NEXT_PUBLIC_TARGET_CHAIN_ID)
+  : base.id
+const IS_TESTNET        = TARGET_CHAIN_ID === baseSepolia.id
+const FEE_ROUTER_ADDRESS = (process.env.NEXT_PUBLIC_FEE_ROUTER_ADDRESS
+  ?? '0xdE6224de0BAC254d4b0e4127057AB740678117c6') as `0x${string}`
+const LS_KEY = 'rp_tx_history'
 
-/**
- * Indirizzo del contratto FeeRouter deployato su Base Mainnet.
- * Ottieni questo dopo aver deployato FeeRouter.sol con Foundry o Hardhat.
- */
-const FEE_ROUTER_ADDRESS = '0x0000000000000000000000000000000000000000' as `0x${string}`
-
-// ABI minima del contratto FeeRouter (solo funzioni usate dal frontend)
 const FEE_ROUTER_ABI: Abi = [
-  // ETH
   {
-    name: 'splitTransferETH',
-    type: 'function',
-    stateMutability: 'payable',
+    name: 'splitTransferETH', type: 'function', stateMutability: 'payable',
     inputs: [
       { name: '_to',         type: 'address' },
       { name: '_paymentRef', type: 'bytes32' },
+      { name: '_fiscalRef',  type: 'string'  },
     ],
     outputs: [],
   },
-  // ERC20
   {
-    name: 'splitTransferERC20',
-    type: 'function',
-    stateMutability: 'nonpayable',
+    name: 'splitTransferERC20', type: 'function', stateMutability: 'nonpayable',
     inputs: [
       { name: '_token',      type: 'address' },
       { name: '_to',         type: 'address' },
       { name: '_amount',     type: 'uint256' },
       { name: '_paymentRef', type: 'bytes32' },
+      { name: '_fiscalRef',  type: 'string'  },
     ],
     outputs: [],
   },
-  // View
-  {
-    name: 'calcSplit',
-    type: 'function',
-    stateMutability: 'view',
-    inputs:  [{ name: '_amount', type: 'uint256' }],
-    outputs: [{ name: 'net', type: 'uint256' }, { name: 'fee', type: 'uint256' }],
-  },
-  {
-    name: 'checkAllowance',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [
-      { name: '_token',  type: 'address' },
-      { name: '_owner',  type: 'address' },
-      { name: '_amount', type: 'uint256' },
-    ],
-    outputs: [
-      { name: 'sufficient', type: 'bool'    },
-      { name: 'current',    type: 'uint256' },
-    ],
-  },
-  // Events (per BaseScan linking)
-  {
-    name: 'PaymentSent',
-    type: 'event',
-    inputs: [
-      { name: 'sender',     type: 'address', indexed: true  },
-      { name: 'recipient',  type: 'address', indexed: true  },
-      { name: 'token',      type: 'address', indexed: true  },
-      { name: 'grossAmount',type: 'uint256', indexed: false },
-      { name: 'netAmount',  type: 'uint256', indexed: false },
-      { name: 'feeAmount',  type: 'uint256', indexed: false },
-      { name: 'paymentRef', type: 'bytes32', indexed: false },
-    ],
-  },
 ]
 
-// ── Token registry Base Mainnet ────────────────────────────────────────────
 const TOKENS = [
+  { symbol: 'ETH',   address: undefined,                                                       decimals: 18, icon: '⬡', color: '#627EEA' },
   { symbol: 'USDC',  address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as `0x${string}`, decimals: 6,  icon: '💵', color: '#2775CA' },
   { symbol: 'DEGEN', address: '0x4edbc9320305298056041910220e3663a92540b6' as `0x${string}`, decimals: 18, icon: '🎩', color: '#845ef7' },
   { symbol: 'cbBTC', address: '0xcbB7C300c5aa597b90224F84d701f893d8F9696C' as `0x${string}`, decimals: 8,  icon: '₿',  color: '#F7931A' },
 ] as const
 
-// ── Tipi ───────────────────────────────────────────────────────────────────
-type Phase =
-  | 'idle'
-  | 'approving'   // ERC20: approve in corso
-  | 'wait_approve'// ERC20: attesa conferma approve
-  | 'sending'     // invio splitTransfer
-  | 'wait_send'   // attesa conferma finale
-  | 'done'
-  | 'error'
+type Phase = 'idle' | 'approving' | 'wait_approve' | 'signing' | 'wait_send' | 'done' | 'error'
+
+// ── Smart CTA states ───────────────────────────────────────────────────────
+type CtaState = 'disconnected' | 'wrong_network' | 'insufficient' | 'no_recipient' | 'no_amount' | 'ready' | 'busy'
 
 interface TokenOption {
   symbol: string; icon: string; color: string
@@ -129,56 +80,118 @@ interface TokenOption {
 }
 
 interface TxReport {
-  txHash: `0x${string}`
-  gross: bigint
-  net: bigint
-  fee: bigint
-  decimals: number
-  symbol: string
-  recipient: string
-  paymentRef: string
+  txHash: `0x${string}`; gross: bigint; net: bigint; fee: bigint
+  decimals: number; symbol: string; sender: string
+  recipient: string; paymentRef: string; fiscalRef: string
+  timestamp: string; eurValue?: string
 }
 
-function calcSplitLocal(raw: bigint, bps = 50n, den = 10_000n) {
-  const fee = (raw * bps) / den
+function calcSplit(raw: bigint) {
+  const fee = (raw * 50n) / 10_000n
   return { main: raw - fee, fee }
 }
-
 function fmtU(raw: bigint, dec: number, dp = 6) {
   return parseFloat(formatUnits(raw, dec)).toFixed(dp)
 }
 
+// ── Persistent logger (localStorage rp_tx_history) ─────────────────────────
+function txLog(event: string, data: Record<string, unknown>) {
+  const entry = {
+    event,
+    timestamp: new Date().toISOString(),
+    network: IS_TESTNET ? 'BASE_SEPOLIA' : 'BASE',
+    ...data,
+  }
+  // Console (dev)
+  console.log('[rp_tx]', JSON.stringify(entry, null, 2))
+  // Persist in localStorage
+  try {
+    const raw = localStorage.getItem(LS_KEY)
+    const history: unknown[] = raw ? JSON.parse(raw) : []
+    history.push(entry)
+    // Mantieni max 200 entries
+    if (history.length > 200) history.splice(0, history.length - 200)
+    localStorage.setItem(LS_KEY, JSON.stringify(history))
+  } catch { /* localStorage non disponibile (SSR) */ }
+}
+
+// ── EUR feed ───────────────────────────────────────────────────────────────
+async function fetchEurPrice(symbol: string): Promise<number | null> {
+  try {
+    const id = symbol === 'ETH' ? 'ethereum' : symbol === 'USDC' ? 'usd-coin'
+      : symbol === 'DEGEN' ? 'degen-base' : symbol === 'cbBTC' ? 'coinbase-wrapped-btc' : null
+    if (!id) return null
+    const res  = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=eur`)
+    const data = await res.json()
+    return data?.[id]?.eur ?? null
+  } catch { return null }
+}
+
 // ══════════════════════════════════════════════════════════════════════════
-//  Componente principale
+//  TOAST — notifica non invasiva EIP-1193
+// ══════════════════════════════════════════════════════════════════════════
+function Toast({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+  useEffect(() => {
+    const t = setTimeout(onDismiss, 4000)
+    return () => clearTimeout(t)
+  }, [onDismiss])
+
+  return (
+    <div style={{
+      position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)',
+      zIndex: 9999, minWidth: 280, maxWidth: 400,
+      background: '#1c1c1c', border: '1px solid #333',
+      borderRadius: 12, padding: '12px 18px',
+      display: 'flex', alignItems: 'center', gap: 10,
+      boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+      animation: 'fadeUp 0.3s ease',
+    }}>
+      <span style={{ fontSize: 16 }}>↩</span>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: '#9ca3af', flex: 1 }}>{message}</span>
+      <button onClick={onDismiss} style={{ color: '#555', background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, padding: 0, lineHeight: 1 }}>✕</button>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  COMPONENTE PRINCIPALE
 // ══════════════════════════════════════════════════════════════════════════
 export default function TransferForm(): React.JSX.Element {
-  const { address } = useAccount()
-  const publicClient = usePublicClient()
+  const { address, isConnected } = useAccount()
+  const chainId                  = useChainId()
+  const { switchChain }          = useSwitchChain()
+  const publicClient             = usePublicClient()
 
-  // Form state
+  // Form
   const [tokens,     setTokens]     = useState<TokenOption[]>([])
   const [selected,   setSelected]   = useState<TokenOption | null>(null)
   const [recipient,  setRecipient]  = useState('')
   const [amount,     setAmount]     = useState('')
   const [paymentRef, setPaymentRef] = useState('')
-  const [focused,    setFocused]    = useState<string | null>(null)
+  const [fiscalRef,  setFiscalRef]  = useState('')
+  const [focused,    setFocused]    = useState(false)
   const [addrError,  setAddrError]  = useState('')
+  const [showExtras, setShowExtras] = useState(false)
+  const [eurPrice,   setEurPrice]   = useState<number | null>(null)
+  const [copied,     setCopied]     = useState(false)
+  const [silentFlow, setSilentFlow] = useState(false)
+  const [toast,      setToast]      = useState<string | null>(null)
 
-  // TX state
+  // TX
   const [phase,      setPhase]      = useState<Phase>('idle')
   const [approvHash, setApprovHash] = useState<`0x${string}` | undefined>()
   const [sendHash,   setSendHash]   = useState<`0x${string}` | undefined>()
-  const [txError,    setTxError]    = useState('')
   const [report,     setReport]     = useState<TxReport | null>(null)
 
   const inputRef = useRef<HTMLInputElement>(null)
 
   // ── Data fetching ──────────────────────────────────────────────────────
   const { data: ethBal } = useBalance({ address })
+  const erc20List = TOKENS.filter(t => t.address !== undefined)
 
   const { data: erc20Bals } = useReadContracts({
-    contracts: TOKENS.map(t => ({
-      address: t.address, abi: erc20Abi,
+    contracts: erc20List.map(t => ({
+      address: t.address as `0x${string}`, abi: erc20Abi,
       functionName: 'balanceOf' as const, args: [address!],
     })),
     query: { enabled: !!address },
@@ -186,87 +199,174 @@ export default function TransferForm(): React.JSX.Element {
 
   useEffect(() => {
     const list: TokenOption[] = []
-    if (ethBal?.value && ethBal.value > 0n)
-      list.push({ symbol: 'ETH', icon: '⬡', color: '#627EEA', decimals: 18, balance: ethBal.value })
-    TOKENS.forEach((t, i) => {
+    if (ethBal?.value && ethBal.value > 0n) {
+      const eth = TOKENS.find(t => t.symbol === 'ETH')!
+      list.push({ ...eth, balance: ethBal.value })
+    }
+    erc20List.forEach((t, i) => {
       const raw = erc20Bals?.[i]?.result as bigint | undefined
       if (raw && raw > 0n) list.push({ ...t, balance: raw })
     })
+    // Se connesso ma nessun saldo, mostra comunque ETH con 0
+    if (isConnected && list.length === 0) {
+      const eth = TOKENS.find(t => t.symbol === 'ETH')!
+      list.push({ ...eth, balance: ethBal?.value ?? 0n })
+    }
     setTokens(list)
     setSelected(prev => prev ? (list.find(t => t.symbol === prev.symbol) ?? list[0] ?? null) : (list[0] ?? null))
-  }, [ethBal, erc20Bals])
+  }, [ethBal, erc20Bals, isConnected])
 
-  // ── Receipt watchers ───────────────────────────────────────────────────
-  const { isSuccess: approveConfirmed } = useWaitForTransactionReceipt({
+  useEffect(() => {
+    if (!selected) return
+    fetchEurPrice(selected.symbol).then(setEurPrice)
+  }, [selected?.symbol])
+
+  // ── Parse amount ───────────────────────────────────────────────────────
+  const parseAmt = useCallback((): bigint | null => {
+    if (!selected || !amount || isNaN(Number(amount)) || Number(amount) <= 0) return null
+    try { return selected.symbol === 'ETH' ? parseEther(amount) : parseUnits(amount, selected.decimals) }
+    catch { return null }
+  }, [selected, amount])
+
+  // ── Silent flow check ──────────────────────────────────────────────────
+  useEffect(() => {
+    const check = async () => {
+      const r = parseAmt()
+      if (!r || !selected || selected.symbol === 'ETH' || !address) { setSilentFlow(false); return }
+      try {
+        const allowance = await publicClient?.readContract({
+          address: selected.address!, abi: erc20Abi,
+          functionName: 'allowance', args: [address, FEE_ROUTER_ADDRESS],
+        }) as bigint | undefined
+        setSilentFlow(!!(allowance && allowance >= r))
+      } catch { setSilentFlow(false) }
+    }
+    check()
+  }, [amount, selected?.symbol, address])
+
+  // ── Smart CTA state ────────────────────────────────────────────────────
+  const isWrongNetwork = isConnected && chainId !== TARGET_CHAIN_ID
+  const rawVal         = parseAmt()
+  const split          = rawVal ? calcSplit(rawVal) : null
+  const busy           = ['approving','wait_approve','signing','wait_send'].includes(phase)
+  const hasInsufficientFunds = isConnected && rawVal && selected
+    ? rawVal > selected.balance
+    : false
+
+  const ctaState: CtaState = (() => {
+    if (!isConnected)          return 'disconnected'
+    if (isWrongNetwork)        return 'wrong_network'
+    if (busy)                  return 'busy'
+    if (hasInsufficientFunds)  return 'insufficient'
+    if (!recipient || addrError) return 'no_recipient'
+    if (!rawVal)               return 'no_amount'
+    return 'ready'
+  })()
+
+  const ctaConfig: Record<CtaState, { label: string; disabled: boolean; action: (() => void) | null; color: string }> = {
+    disconnected: { label: 'Connetti wallet',    disabled: false, action: null,           color: '#ff007a' },
+    wrong_network:{ label: `Passa a ${IS_TESTNET ? 'Base Sepolia' : 'Base'}`, disabled: false, action: () => switchChain({ chainId: TARGET_CHAIN_ID as typeof base.id }), color: '#f59e0b' },
+    insufficient: { label: 'Saldo insufficiente', disabled: true, action: null,           color: '#ef4444' },
+    no_recipient: { label: 'Inserisci destinatario', disabled: true, action: null,        color: '#ff007a' },
+    no_amount:    { label: 'Inserisci un importo',   disabled: true, action: null,        color: '#ff007a' },
+    ready:        { label: `Invia ${selected?.symbol ?? 'ETH'}`, disabled: false, action: () => handleTransfer(), color: '#ff007a' },
+    busy:         { label: 'In corso…',           disabled: true, action: null,           color: '#ff007a' },
+  }
+
+  const cta = ctaConfig[ctaState]
+
+  // ── Receipts ───────────────────────────────────────────────────────────
+  const { isSuccess: approveOk } = useWaitForTransactionReceipt({
     hash: approvHash,
     query: { enabled: !!approvHash && phase === 'wait_approve' },
   })
-
-  const { isSuccess: sendConfirmed } = useWaitForTransactionReceipt({
+  const { isSuccess: sendOk } = useWaitForTransactionReceipt({
     hash: sendHash,
     query: { enabled: !!sendHash && phase === 'wait_send' },
   })
 
-  // Approve confermato → esegui splitTransferERC20
-  useEffect(() => {
-    if (approveConfirmed && phase === 'wait_approve') execSend()
-  }, [approveConfirmed, phase])
+  const { writeContractAsync } = useWriteContract()
 
-  // Send confermato → genera report
+  const execSend = useCallback(async () => {
+    const r = parseAmt(); if (!r || !selected) return
+    const ref = keccak256(toBytes(paymentRef || ''))
+    setPhase('signing')
+    txLog('tx.signing', { type: 'splitTransferERC20', token: selected.symbol, amount: formatUnits(r, selected.decimals) })
+    try {
+      const hash = await writeContractAsync({
+        address: FEE_ROUTER_ADDRESS, abi: FEE_ROUTER_ABI,
+        functionName: 'splitTransferERC20',
+        args: [selected.address!, getAddress(recipient) as `0x${string}`, r, ref, fiscalRef],
+      })
+      txLog('tx.broadcast', { hash, status: TxStatus.PENDING })
+      setSendHash(hash); setPhase('wait_send')
+    } catch (e) {
+      handleTxError(e)
+    }
+  }, [parseAmt, selected, paymentRef, fiscalRef, recipient])
+
   useEffect(() => {
-    if (sendConfirmed && phase === 'wait_send' && sendHash && selected) {
-      const raw = parseAmtSafe()
-      if (raw) {
-        const { main, fee } = calcSplitLocal(raw)
-        setReport({
-          txHash: sendHash,
-          gross: raw, net: main, fee,
-          decimals: selected.decimals,
-          symbol: selected.symbol,
-          recipient,
-          paymentRef: paymentRef || '—',
+    if (approveOk && phase === 'wait_approve') {
+      txLog('tx.approved', { status: TxStatus.ORDER_SCHEDULED })
+      execSend()
+    }
+  }, [approveOk, phase, execSend])
+
+  useEffect(() => {
+    if (sendOk && phase === 'wait_send' && sendHash && selected && address) {
+      const r = parseAmt()
+      if (r) {
+        const { main, fee } = calcSplit(r)
+        const eurVal = eurPrice ? (parseFloat(amount) * eurPrice).toFixed(2) + ' EUR' : undefined
+        const rep: TxReport = {
+          txHash: sendHash, gross: r, net: main, fee,
+          decimals: selected.decimals, symbol: selected.symbol,
+          sender: address, recipient,
+          paymentRef: paymentRef || '—', fiscalRef: fiscalRef || '—',
+          timestamp: new Date().toISOString(), eurValue: eurVal,
+        }
+        setReport(rep)
+        // Payload Mercuryo completo → localStorage
+        const payload = buildCallbackPayload({
+          txHash: sendHash, sender: address, recipient,
+          gross: r, net: main, fee,
+          decimals: selected.decimals, symbol: selected.symbol,
+          paymentRef: paymentRef || '—', fiscalRef: fiscalRef || '—',
+          eurValue: eurVal, isTestnet: IS_TESTNET,
         })
+        txLog('tx.completed', { ...payload })
         setPhase('done')
       }
     }
-  }, [sendConfirmed, phase])
+  }, [sendOk, phase])
 
-  const { writeContractAsync } = useWriteContract()
+  // ── EIP-1193 error handler ─────────────────────────────────────────────
+  function handleTxError(e: unknown) {
+    const m   = e instanceof Error ? e.message : String(e)
+    const code = (e as { code?: number })?.code
 
-  // ── Helpers ────────────────────────────────────────────────────────────
-  const parseAmtSafe = (): bigint | null => {
-    if (!selected || !amount || isNaN(Number(amount)) || Number(amount) <= 0) return null
-    try {
-      return selected.symbol === 'ETH'
-        ? parseEther(amount)
-        : parseUnits(amount, selected.decimals)
-    } catch { return null }
+    if (code === 4001 || m.includes('rejected') || m.includes('denied') || m.includes('cancel')) {
+      // User rejected → toast non invasivo, ritorna a idle
+      txLog('tx.cancelled', { status: TxStatus.CANCELLED, message: 'EIP-1193 code 4001' })
+      setToast('Transazione annullata sul wallet.')
+      setPhase('idle')
+    } else {
+      const msg = m.includes('insufficient funds') ? 'Fondi insufficienti.'
+        : m.includes('gas') ? 'Errore stima gas. Riprova.'
+        : 'Errore: ' + m.slice(0, 100)
+      txLog('tx.error', { message: msg, status: TxStatus.FAILED })
+      setPhase('error')
+    }
   }
 
-  const encodeRef = (ref: string): `0x${string}` => {
-    if (!ref) return '0x0000000000000000000000000000000000000000000000000000000000000000'
-    return keccak256(toBytes(ref))
-  }
-
-  const decodeErr = (e: unknown): string => {
-    const m = e instanceof Error ? e.message : String(e)
-    if (m.includes('rejected') || m.includes('denied') || m.includes('cancel'))
-      return 'Transazione rifiutata dall\'utente.'
-    if (m.includes('insufficient funds') || m.includes('insufficient balance'))
-      return 'Fondi insufficienti per completare la transazione.'
-    if (m.includes('gas')) return 'Errore nella stima del gas. Riprova.'
-    if (m.includes('allowance')) return 'Allowance insufficiente. Approva il token prima.'
-    return 'Errore: ' + m.slice(0, 120)
-  }
-
+  // ── Handlers ───────────────────────────────────────────────────────────
   const fmtBal = (t: TokenOption) =>
-    parseFloat(formatUnits(t.balance, t.decimals))
-      .toFixed(t.symbol === 'USDC' ? 2 : t.symbol === 'cbBTC' ? 6 : 5)
+    parseFloat(formatUnits(t.balance, t.decimals)).toFixed(t.symbol === 'USDC' ? 2 : t.symbol === 'cbBTC' ? 6 : 5)
 
-  const validateRecipient = (addr: string) => {
+  const validateAddr = (addr: string) => {
     if (!addr) { setAddrError(''); return false }
-    try { getAddress(addr); setAddrError(''); return true }
-    catch { setAddrError('Indirizzo non valido'); return false }
+    if (!isAddress(addr)) { setAddrError('Indirizzo non valido'); return false }
+    setAddrError(''); return true
   }
 
   const handleMax = async () => {
@@ -277,360 +377,349 @@ export default function TransferForm(): React.JSX.Element {
         const cost = (21_000n * gp * 12n) / 10n
         setAmount(formatEther(selected.balance > cost ? selected.balance - cost : 0n))
       } catch { setAmount(formatEther(selected.balance)) }
-    } else {
-      setAmount(formatUnits(selected.balance, selected.decimals))
-    }
+    } else { setAmount(formatUnits(selected.balance, selected.decimals)) }
     setTimeout(() => inputRef.current?.focus(), 10)
   }
 
-  // ── TX Flow ────────────────────────────────────────────────────────────
   const handleTransfer = async () => {
-    const raw = parseAmtSafe()
-    if (!raw || !selected || !validateRecipient(recipient)) return
-    if (FEE_ROUTER_ADDRESS === '0x0000000000000000000000000000000000000000') {
-      setTxError('FEE_ROUTER_ADDRESS non configurato. Deploya prima il contratto.')
-      setPhase('error'); return
-    }
-
-    setTxError('')
-    const ref = encodeRef(paymentRef)
-
+    const r = parseAmt(); if (!r || !selected || !validateAddr(recipient)) return
+    const ref = keccak256(toBytes(paymentRef || ''))
+    txLog('tx.initiated', { status: TxStatus.NEW, token: selected.symbol, amount: formatUnits(r, selected.decimals), recipient, silentFlow })
     try {
       if (selected.symbol === 'ETH') {
-        // ── ETH: una sola TX ────────────────────────────────────────────
-        setPhase('sending')
+        setPhase('signing')
         const hash = await writeContractAsync({
-          address: FEE_ROUTER_ADDRESS,
-          abi: FEE_ROUTER_ABI,
+          address: FEE_ROUTER_ADDRESS, abi: FEE_ROUTER_ABI,
           functionName: 'splitTransferETH',
-          args: [getAddress(recipient) as `0x${string}`, ref],
-          value: raw,
+          args: [getAddress(recipient) as `0x${string}`, ref, fiscalRef],
+          value: r,
         })
-        setSendHash(hash)
-        setPhase('wait_send')
-
+        txLog('tx.broadcast', { hash, status: TxStatus.FINALIZING })
+        setSendHash(hash); setPhase('wait_send')
       } else {
-        // ── ERC20: controlla allowance → approve se necessario → send ──
-        const allowance = await publicClient?.readContract({
-          address: selected.address!,
-          abi: erc20Abi,
-          functionName: 'allowance',
-          args: [address!, FEE_ROUTER_ADDRESS],
-        }) as bigint | undefined
-
-        if (!allowance || allowance < raw) {
-          // Step 1: Approve
-          setPhase('approving')
-          const approveHash = await writeContractAsync({
-            address: selected.address!,
-            abi: erc20Abi,
-            functionName: 'approve',
-            args: [FEE_ROUTER_ADDRESS, raw],
-          })
-          setApprovHash(approveHash)
-          setPhase('wait_approve')
-          // execSend() viene chiamato automaticamente dal useEffect
-        } else {
-          // Allowance sufficiente → salta approve
+        if (silentFlow) {
+          txLog('tx.silent_flow', { message: 'Allowance sufficiente — skip approve' })
           await execSend()
+        } else {
+          setPhase('approving')
+          txLog('tx.approving', { token: selected.symbol })
+          const ah = await writeContractAsync({
+            address: selected.address!, abi: erc20Abi,
+            functionName: 'approve', args: [FEE_ROUTER_ADDRESS, r],
+          })
+          txLog('tx.approve_broadcast', { hash: ah })
+          setApprovHash(ah); setPhase('wait_approve')
         }
       }
-    } catch (e) {
-      setTxError(decodeErr(e))
-      setPhase('error')
-    }
-  }
-
-  const execSend = async () => {
-    const raw = parseAmtSafe()
-    if (!raw || !selected) return
-    const ref = encodeRef(paymentRef)
-    setPhase('sending')
-    try {
-      const hash = await writeContractAsync({
-        address: FEE_ROUTER_ADDRESS,
-        abi: FEE_ROUTER_ABI,
-        functionName: 'splitTransferERC20',
-        args: [selected.address!, getAddress(recipient) as `0x${string}`, raw, ref],
-      })
-      setSendHash(hash)
-      setPhase('wait_send')
-    } catch (e) {
-      setTxError(decodeErr(e))
-      setPhase('error')
-    }
+    } catch (e) { handleTxError(e) }
   }
 
   const reset = () => {
-    setPhase('idle'); setAmount(''); setRecipient('')
-    setPaymentRef(''); setReport(null)
-    setApprovHash(undefined); setSendHash(undefined); setTxError('')
+    setPhase('idle'); setAmount(''); setRecipient(''); setPaymentRef('')
+    setFiscalRef(''); setReport(null)
+    setApprovHash(undefined); setSendHash(undefined)
   }
 
-  const raw   = parseAmtSafe()
-  const split = raw ? calcSplitLocal(raw) : null
-  const busy  = ['approving','wait_approve','sending','wait_send'].includes(phase)
-  const dec   = selected?.decimals ?? 18
-  const sym   = selected?.symbol ?? 'ETH'
-
-  // ── Stili corporate dark ───────────────────────────────────────────────
-  const S: Record<string, React.CSSProperties> = {
-    card:   { borderRadius: 16, background: '#0f0f0f', border: '1px solid #1e1e1e', boxShadow: '0 32px 80px rgba(0,0,0,0.8)', overflow: 'hidden', fontFamily: 'var(--font-display)' },
-    header: { padding: '20px 24px 0', borderBottom: '1px solid #1a1a1a', paddingBottom: 16 },
-    body:   { padding: '20px 24px 24px' },
-    label:  { display: 'block', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' as const, color: '#555', marginBottom: 8, fontFamily: 'var(--font-mono)' },
-    input:  (f: boolean) => ({ width: '100%', background: f ? '#181818' : '#141414', border: `1px solid ${f ? '#ff007a44' : '#222'}`, borderRadius: 10, padding: '12px 14px', color: '#fff', fontSize: 14, outline: 'none', transition: 'all 0.2s', fontFamily: 'var(--font-mono)', boxSizing: 'border-box' as const }),
-    row:    { display: 'flex', gap: 12 },
-    mono:   { fontFamily: 'var(--font-mono)' },
-    divider:{ height: 1, background: '#1a1a1a', margin: '20px 0' },
+  const handleDownloadPdf = () => {
+    if (!report || !address) return
+    generatePdfReceipt({
+      txHash: report.txHash, timestamp: report.timestamp,
+      sender: address, recipient: report.recipient,
+      grossAmount: fmtU(report.gross, report.decimals),
+      netAmount:   fmtU(report.net,   report.decimals),
+      feeAmount:   fmtU(report.fee,   report.decimals),
+      symbol: report.symbol, paymentRef: report.paymentRef,
+      fiscalRef: report.fiscalRef, eurValue: report.eurValue,
+      network: IS_TESTNET ? 'Base Sepolia' : 'Base Mainnet',
+    })
   }
 
-  const StatusRow = ({ icon, text, color = '#555' }: { icon: string; text: string; color?: string }) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 8, background: '#141414', marginBottom: 8 }}>
-      <span>{icon}</span>
-      <span style={{ ...S.mono, fontSize: 13, color }}>{text}</span>
+  const dec    = selected?.decimals ?? 18
+  const sym    = selected?.symbol ?? 'ETH'
+  const eurVal = eurPrice && amount && Number(amount) > 0 ? (parseFloat(amount) * eurPrice).toFixed(2) : null
+
+  // ── Stili — Uniswap look mantenuto ─────────────────────────────────────
+  const C = {
+    card:   { borderRadius: 28, background: '#12010f', border: '1px solid rgba(255,255,255,0.07)', overflow: 'hidden', boxShadow: '0 24px 80px rgba(0,0,0,0.6)' } satisfies React.CSSProperties,
+    box:    { borderRadius: 20, background: focused ? '#201020' : '#1c0118', padding: '16px 18px', borderWidth: 1.5, borderStyle: 'solid' as const, borderColor: focused ? 'rgba(255,0,122,0.4)' : 'transparent', transition: 'all 0.2s', cursor: 'text' } satisfies React.CSSProperties,
+    box2:   { borderRadius: 20, background: '#1c0118', padding: '16px 18px' } satisfies React.CSSProperties,
+    row:    { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } satisfies React.CSSProperties,
+    mono:   { fontFamily: 'var(--font-mono)' } satisfies React.CSSProperties,
+    bigNum: { fontFamily: 'var(--font-display)', fontSize: '2.5rem', fontWeight: 300, letterSpacing: '-0.03em' } satisfies React.CSSProperties,
+    muted:  { color: '#6b7280', fontSize: 13, fontWeight: 600 } satisfies React.CSSProperties,
+    input:  { width: '100%', background: 'rgba(0,0,0,0.4)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: '12px 14px', color: '#fff', fontSize: 14, outline: 'none', transition: 'all 0.2s', fontFamily: 'var(--font-mono)', boxSizing: 'border-box' as const } satisfies React.CSSProperties,
+  }
+
+  const TokenPill = ({ pink = false }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 13px 9px 9px', borderRadius: 18, background: pink ? 'rgba(255,0,122,0.1)' : '#261020', border: pink ? '1px solid rgba(255,0,122,0.2)' : '1px solid rgba(255,255,255,0.08)' }}>
+      <div style={{ width: 24, height: 24, borderRadius: '50%', background: selected?.color ?? '#627EEA', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#fff', flexShrink: 0 }}>{selected?.icon ?? '⬡'}</div>
+      <span style={{ fontSize: 14, fontWeight: 700, color: pink ? '#ff9dc8' : '#fff' }}>{sym}</span>
+      {!pink && <span style={{ color: '#6b7280', fontSize: 10 }}>▾</span>}
     </div>
   )
 
-  // ── Empty state ────────────────────────────────────────────────────────
-  if (tokens.length === 0) {
-    return (
-      <div style={{ ...S.card, padding: 48, textAlign: 'center' }}>
-        <div style={{ fontSize: 40, marginBottom: 12 }}>💳</div>
-        <p style={{ color: '#555', fontFamily: 'var(--font-mono)', fontSize: 14 }}>Nessun saldo su Base.</p>
-      </div>
-    )
-  }
-
-  // ── SUCCESS REPORT ─────────────────────────────────────────────────────
-  if (phase === 'done' && report) {
-    return (
-      <div style={S.card}>
-        <div style={{ ...S.header, borderBottom: '1px solid #1a1a1a' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#00d26a', boxShadow: '0 0 8px #00d26a' }} />
-            <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' as const, color: '#00d26a', fontFamily: 'var(--font-mono)' }}>
-              Pagamento Confermato
-            </span>
-          </div>
+  // ── SUCCESS ───────────────────────────────────────────────────────────
+  if (phase === 'done' && report) return (
+    <>
+      <div style={C.card}>
+        <div style={{ padding: '18px 20px 16px', borderBottom: '1px solid #1a1a1a', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#00d26a', boxShadow: '0 0 10px #00d26a' }} />
+          <span style={{ ...C.mono, color: '#00d26a', fontSize: 13, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.05em' }}>Pagamento Confermato</span>
+          <span style={{ ...C.mono, fontSize: 11, color: '#333', marginLeft: 'auto' }}>{new Date(report.timestamp).toLocaleString('it-IT')}</span>
         </div>
-        <div style={S.body}>
-          {/* Amount summary */}
-          <div style={{ borderRadius: 12, border: '1px solid #1e1e1e', background: '#0a0a0a', overflow: 'hidden', marginBottom: 20 }}>
-            {[
-              { label: 'Importo lordo',  value: fmtU(report.gross, report.decimals) + ' ' + report.symbol, color: '#fff'     },
-              { label: 'Inviati',        value: fmtU(report.net,   report.decimals) + ' ' + report.symbol, color: '#00d26a'  },
-              { label: 'Fee (0.5%)',     value: fmtU(report.fee,   report.decimals) + ' ' + report.symbol, color: '#ff9dc8'  },
-              { label: 'Destinatario',   value: report.recipient.slice(0,8)+'…'+report.recipient.slice(-6), color: '#aaa' },
-              { label: 'Rif. Pagamento', value: report.paymentRef,                                          color: '#888' },
-            ].map((r, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '11px 16px', borderBottom: i < 4 ? '1px solid #111' : 'none', fontSize: 13, ...S.mono }}>
-                <span style={{ color: '#555' }}>{r.label}</span>
-                <span style={{ color: r.color, fontWeight: 600 }}>{r.value}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* TX Hash */}
-          <div style={{ borderRadius: 10, background: '#141414', border: '1px solid #222', padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: '#555', fontFamily: 'var(--font-mono)', textTransform: 'uppercase' as const, marginBottom: 4 }}>TX Hash</div>
-              <div style={{ ...S.mono, color: '#888', fontSize: 12 }}>{report.txHash.slice(0,18)}…{report.txHash.slice(-8)}</div>
-            </div>
-            <a
-              href={'https://basescan.org/tx/' + report.txHash}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 8, background: 'rgba(255,0,122,0.08)', border: '1px solid rgba(255,0,122,0.2)', color: '#ff9dc8', fontSize: 12, fontWeight: 700, textDecoration: 'none', ...S.mono }}
-            >
-              BaseScan ↗
-            </a>
-          </div>
-
-          <button onClick={reset} style={{ width: '100%', padding: '14px', borderRadius: 12, border: '1px solid #222', background: 'transparent', color: '#555', fontSize: 14, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s', fontFamily: 'var(--font-display)' }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = '#333'; e.currentTarget.style.color = '#888' }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = '#222'; e.currentTarget.style.color = '#555' }}
-          >
-            Nuovo pagamento
-          </button>
+        <div style={{ padding: '20px' }}>
+          <TransactionStatusUI
+            phase="done" txHash={report.txHash} isTestnet={IS_TESTNET}
+            grossStr={fmtU(report.gross, report.decimals)}
+            netStr={fmtU(report.net,   report.decimals)}
+            feeStr={fmtU(report.fee,   report.decimals)}
+            symbol={report.symbol}
+            recipient={report.recipient} paymentRef={report.paymentRef}
+            fiscalRef={report.fiscalRef} eurValue={report.eurValue}
+            timestamp={report.timestamp}
+            onCopyHash={async () => { await navigator.clipboard.writeText(report.txHash); setCopied(true); setTimeout(()=>setCopied(false),2000) }}
+            copied={copied} onReset={reset} onDownloadPdf={handleDownloadPdf}
+          />
         </div>
       </div>
-    )
-  }
+      {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
+    </>
+  )
 
-  // ── MAIN FORM ──────────────────────────────────────────────────────────
+  // ── MAIN FORM ─────────────────────────────────────────────────────────
   return (
-    <div style={S.card}>
-      {/* Header */}
-      <div style={S.header}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 16 }}>
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.02em' }}>Pagamento B2B</div>
-            <div style={{ ...S.mono, fontSize: 11, color: '#555', marginTop: 2 }}>Base Mainnet · FeeRouter v1</div>
+    <>
+      <div style={C.card}>
+        {/* Header */}
+        <div style={{ ...C.row, padding: '18px 20px 10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 16, fontWeight: 700 }}>Invia</span>
+            {/* Silent flow badge */}
+            {silentFlow && selected?.symbol !== 'ETH' && (
+              <span style={{ ...C.mono, fontSize: 10, color: '#00d26a', background: 'rgba(0,210,106,0.08)', padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(0,210,106,0.2)' }}>
+                ⚡ Autorizzazione già presente
+              </span>
+            )}
+            {/* Wrong network warning */}
+            {isWrongNetwork && (
+              <span style={{ ...C.mono, fontSize: 10, color: '#f59e0b', background: 'rgba(245,158,11,0.08)', padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(245,158,11,0.2)' }}>
+                ⚠ Rete errata
+              </span>
+            )}
           </div>
-          {FEE_ROUTER_ADDRESS === '0x0000000000000000000000000000000000000000' && (
-            <div style={{ ...S.mono, fontSize: 11, padding: '4px 10px', borderRadius: 6, background: 'rgba(255,165,0,0.1)', color: '#f59e0b', border: '1px solid rgba(255,165,0,0.2)' }}>
-              ⚠ Contratto non configurato
-            </div>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* Saldo real-time del token selezionato */}
+            {isConnected && selected && (
+              <span style={{ ...C.mono, fontSize: 11, color: '#555' }}>
+                {fmtBal(selected)} {sym}
+              </span>
+            )}
+            <button
+              onClick={() => setShowExtras(p => !p)}
+              style={{ width: 34, height: 34, borderRadius: 12, background: showExtras ? 'rgba(255,0,122,0.1)' : 'transparent', border: 'none', color: showExtras ? '#ff9dc8' : '#6b7280', cursor: 'pointer', fontSize: 16, transition: 'all 0.3s' }}
+              title="Riferimento pagamento / ID fiscale"
+              onMouseEnter={e => { if (!showExtras) e.currentTarget.style.transform = 'rotate(45deg)' }}
+              onMouseLeave={e => { if (!showExtras) e.currentTarget.style.transform = 'rotate(0deg)' }}
+            >⚙</button>
+          </div>
         </div>
-      </div>
 
-      <div style={S.body}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ padding: '0 8px' }}>
 
-          {/* Asset selector */}
-          <div>
-            <span style={S.label}>Asset</span>
-            <div style={{ display: 'flex', gap: 8 }}>
-              {tokens.map(t => (
-                <button
-                  key={t.symbol}
-                  onClick={() => { setSelected(t); setAmount('') }}
-                  style={{
-                    flex: 1, padding: '10px 12px', borderRadius: 10, cursor: 'pointer',
-                    border: selected?.symbol === t.symbol ? '1px solid ' + t.color + '55' : '1px solid #1e1e1e',
-                    background: selected?.symbol === t.symbol ? t.color + '11' : '#141414',
-                    color: selected?.symbol === t.symbol ? '#fff' : '#555',
-                    fontWeight: 700, fontSize: 13, transition: 'all 0.15s',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                    fontFamily: 'var(--font-display)',
-                  }}
+          {/* SELL */}
+          <div style={C.box} onClick={() => inputRef.current?.focus()}>
+            <div style={{ ...C.row, marginBottom: 8 }}>
+              <span style={C.muted}>Sell</span>
+              <button onClick={e => { e.stopPropagation(); handleMax() }}
+                style={{ ...C.mono, fontSize: 12, color: '#ff007a', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 500, padding: 0 }}>
+                {isConnected && selected ? `Saldo: ${fmtBal(selected)} MAX` : 'MAX'}
+              </button>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <input
+                ref={inputRef}
+                type="number" placeholder="0" min="0" step="any"
+                value={amount} onChange={e => setAmount(e.target.value)}
+                onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+                disabled={busy}
+                style={{ ...C.bigNum, flex: 1, background: 'transparent', border: 'none', outline: 'none', color: busy ? '#555' : '#fff', minWidth: 0 }}
+              />
+              <div style={{ position: 'relative' }}>
+                <TokenPill />
+                <select
+                  value={selected?.symbol ?? ''}
+                  onChange={e => { setSelected(tokens.find(t => t.symbol === e.target.value) ?? null); setAmount('') }}
+                  style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%' }}
                 >
-                  <span style={{ fontSize: 14 }}>{t.icon}</span>
-                  <div style={{ textAlign: 'left' as const }}>
-                    <div style={{ fontSize: 13 }}>{t.symbol}</div>
-                    <div style={{ fontSize: 10, color: '#555', fontFamily: 'var(--font-mono)' }}>{fmtBal(t)}</div>
-                  </div>
-                </button>
-              ))}
+                  {tokens.map(t => <option key={t.symbol} value={t.symbol}>{t.symbol}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{ ...C.row, marginTop: 6, ...C.mono, fontSize: 13, color: '#6b7280' }}>
+              <span>{eurVal ? '≈ ' + eurVal + ' EUR' : '$0'}</span>
+              {hasInsufficientFunds && (
+                <span style={{ color: '#ef4444', fontSize: 12 }}>Saldo insufficiente</span>
+              )}
+            </div>
+          </div>
+
+          {/* Arrow */}
+          <div style={{ display: 'flex', justifyContent: 'center', margin: '6px 0' }}>
+            <button
+              style={{ width: 36, height: 36, borderRadius: 12, background: '#12010f', border: '2px solid #1c0118', color: '#6b7280', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.3s' }}
+              onMouseEnter={e => { e.currentTarget.style.transform = 'rotate(180deg)'; e.currentTarget.style.color = '#fff' }}
+              onMouseLeave={e => { e.currentTarget.style.transform = 'rotate(0deg)'; e.currentTarget.style.color = '#6b7280' }}
+            >↓</button>
+          </div>
+
+          {/* RECEIVE */}
+          <div style={C.box2}>
+            <div style={{ ...C.row, marginBottom: 8 }}>
+              <span style={C.muted}>Receive</span>
+              <span style={{ ...C.mono, fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 20, background: 'rgba(255,0,122,0.12)', color: '#ff9dc8', border: '1px solid rgba(255,0,122,0.2)' }}>
+                Auto · 0.5% fee
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <span style={{ ...C.bigNum, flex: 1, color: split ? '#fff' : '#3f4451', transition: 'color 0.3s' }}>
+                {split ? fmtU(split.main, dec) : '0'}
+              </span>
+              <TokenPill pink />
+            </div>
+            <div style={{ ...C.mono, fontSize: 13, color: '#6b7280', marginTop: 6 }}>
+              {split ? 'Fee: ' + fmtU(split.fee, dec) + ' ' + sym + ' (0.5%)' : 'Inserisci un importo'}
             </div>
           </div>
 
           {/* Recipient */}
-          <div>
-            <span style={S.label}>Indirizzo Destinatario</span>
+          <div style={{ margin: '8px 0', padding: '14px 16px', borderRadius: 16, background: '#1c0118', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <div style={{ ...C.row, marginBottom: 8 }}>
+              <span style={{ ...C.mono, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.1em', color: '#555' }}>Destinatario</span>
+              {recipient && !addrError && <span style={{ ...C.mono, fontSize: 11, color: '#00d26a' }}>✓ Valido</span>}
+              {addrError && <span style={{ ...C.mono, fontSize: 11, color: '#ef4444' }}>⚠ {addrError}</span>}
+            </div>
             <input
-              type="text"
-              placeholder="0x..."
+              type="text" placeholder="0x..."
               value={recipient}
-              onChange={e => { setRecipient(e.target.value); validateRecipient(e.target.value) }}
-              onFocus={() => setFocused('recipient')}
-              onBlur={() => setFocused(null)}
+              onChange={e => { setRecipient(e.target.value); validateAddr(e.target.value) }}
               disabled={busy}
-              style={{ ...S.input(focused === 'recipient'), borderColor: addrError ? '#ef444444' : focused === 'recipient' ? '#ff007a44' : '#222' }}
+              style={{ ...C.input, borderColor: addrError ? 'rgba(239,68,68,0.4)' : recipient && !addrError ? 'rgba(0,210,106,0.25)' : 'rgba(255,255,255,0.08)' }}
             />
-            {addrError && <div style={{ ...S.mono, fontSize: 11, color: '#ef4444', marginTop: 4 }}>{addrError}</div>}
           </div>
 
-          {/* Amount */}
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-              <span style={{ ...S.label, margin: 0 }}>Importo</span>
-              <button onClick={handleMax} style={{ ...S.mono, fontSize: 11, color: '#ff007a', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                MAX: {selected ? fmtBal(selected) : '—'} {sym}
-              </button>
+          {/* Extras collassabile */}
+          {showExtras && (
+            <div style={{ margin: '0 0 8px', padding: '14px 16px', borderRadius: 16, background: '#1c0118', border: '1px solid rgba(255,255,255,0.05)', animation: 'fadeSlideIn 0.25s ease' }}>
+              <div style={{ ...C.mono, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.1em', color: '#555', marginBottom: 10 }}>
+                payment_ref & fiscal_ref
+              </div>
+              <input type="text" placeholder="Rif. pagamento (es. INV-001)"
+                value={paymentRef} onChange={e => setPaymentRef(e.target.value)}
+                disabled={busy} style={{ ...C.input, marginBottom: 8 }} />
+              <input type="text" placeholder="ID Fiscale / Rif. Fattura (DAC8)"
+                value={fiscalRef} onChange={e => setFiscalRef(e.target.value)}
+                disabled={busy} style={C.input} />
+              <div style={{ ...C.mono, fontSize: 10, color: '#333', marginTop: 6 }}>
+                Salvati in rp_tx_history · DAC8/XML payload ready
+              </div>
             </div>
-            <div style={{ position: 'relative' }}>
-              <input
-                ref={inputRef}
-                type="number" placeholder="0.00" min="0" step="any"
-                value={amount} onChange={e => setAmount(e.target.value)}
-                onFocus={() => setFocused('amount')} onBlur={() => setFocused(null)}
-                disabled={busy}
-                style={{ ...S.input(focused === 'amount'), fontSize: 22, fontWeight: 600, paddingRight: 80 }}
-              />
-              <span style={{ position: 'absolute', right: 14, top: '50%', transform: 'translateY(-50%)', ...S.mono, fontSize: 13, color: '#444', fontWeight: 700 }}>{sym}</span>
-            </div>
-          </div>
+          )}
 
-          {/* Payment Reference */}
-          <div>
-            <span style={S.label}>Riferimento Pagamento <span style={{ color: '#333' }}>(opzionale)</span></span>
-            <input
-              type="text"
-              placeholder="es. INV-2024-001, ordine #XYZ"
-              value={paymentRef}
-              onChange={e => setPaymentRef(e.target.value)}
-              onFocus={() => setFocused('ref')} onBlur={() => setFocused(null)}
-              disabled={busy}
-              style={S.input(focused === 'ref')}
-            />
-            <div style={{ ...S.mono, fontSize: 10, color: '#444', marginTop: 4 }}>
-              Verrà registrato on-chain come keccak256 hash sull'evento PaymentSent
-            </div>
-          </div>
-
-          {/* Split preview */}
-          {split && (
-            <div style={{ borderRadius: 10, border: '1px solid #1a1a1a', background: '#0a0a0a', overflow: 'hidden' }}>
+          {/* Split preview (green block mini) */}
+          {split && !hasInsufficientFunds && (
+            <div style={{ margin: '0 0 8px', borderRadius: 14, overflow: 'hidden', border: '1px solid rgba(100,183,0,0.2)', animation: 'fadeSlideIn 0.3s ease' }}>
+              <div style={{ ...C.mono, padding: '7px 14px', background: 'rgba(100,183,0,0.07)', fontSize: 10, color: '#86efac', fontWeight: 600, borderBottom: '1px solid rgba(100,183,0,0.12)', letterSpacing: '0.05em' }}>
+                200 · Preview split
+              </div>
               {[
-                { l: 'Importo lordo',  v: fmtU(raw!, dec) + ' ' + sym, c: '#fff'    },
-                { l: 'Al destinatario (99.5%)', v: fmtU(split.main, dec) + ' ' + sym, c: '#00d26a' },
-                { l: 'Commissione (0.5%)',       v: fmtU(split.fee,  dec) + ' ' + sym, c: '#ff9dc8' },
-                { l: 'Contratto',      v: FEE_ROUTER_ADDRESS.slice(0,10) + '…', c: '#555'   },
-              ].map((r, i) => (
-                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 14px', borderBottom: i < 3 ? '1px solid #111' : 'none', fontSize: 12, ...S.mono }}>
-                  <span style={{ color: '#444' }}>{r.l}</span>
-                  <span style={{ color: r.c, fontWeight: 600 }}>{r.v}</span>
+                { l: 'net_amount (99.5%)', v: fmtU(split.main, dec) + ' ' + sym, h: true  },
+                { l: 'fee_amount (0.5%)',  v: fmtU(split.fee,  dec) + ' ' + sym, h: false },
+                ...(eurVal ? [{ l: 'fiat_amount', v: '≈ ' + eurVal + ' EUR', h: false }] : []),
+              ].map((r, i, arr) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', borderLeft: '1px dashed #2a2a2a' }}>
+                  <div style={{ width: '40%', padding: '8px 0 8px 14px', ...C.mono, fontSize: 11, color: '#555', borderBottom: i < arr.length - 1 ? '1px solid #111' : 'none' }}>{r.l}</div>
+                  <div style={{ width: '60%', padding: '8px 14px', ...C.mono, fontSize: 11, fontWeight: r.h ? 700 : 500, color: r.h ? '#86efac' : '#888', borderBottom: i < arr.length - 1 ? '1px solid #111' : 'none' }}>{r.v}</div>
                 </div>
               ))}
             </div>
           )}
 
-          {/* TX Status */}
-          {phase === 'approving'    && <StatusRow icon="🔐" text="Approvazione token in corso — firma nel wallet…" color="#f59e0b" />}
-          {phase === 'wait_approve' && <StatusRow icon="⏳" text="Attesa conferma approvazione on-chain…" color="#f59e0b" />}
-          {phase === 'sending'      && <StatusRow icon="📤" text="Invio pagamento — firma nel wallet…" color="#ff9dc8" />}
-          {phase === 'wait_send'    && <StatusRow icon="⏳" text="Attesa conferma transazione on-chain…" color="#aaa" />}
-          {phase === 'error' && (
-            <div style={{ borderRadius: 8, background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.15)', padding: '12px 14px', ...S.mono, fontSize: 13, color: '#f87171' }}>
-              ❌ {txError}
+          {/* TX Status (in-progress / error) */}
+          {(busy || phase === 'error') && (
+            <div style={{ marginBottom: 8 }}>
+              <TransactionStatusUI
+                phase={phase}
+                error={phase === 'error' ? 'Errore transazione. Riprova.' : undefined}
+                isTestnet={IS_TESTNET}
+                onReset={reset}
+              />
             </div>
           )}
 
-          {/* Step indicator per ERC20 */}
-          {selected && selected.symbol !== 'ETH' && !busy && !split && (
-            <div style={{ borderRadius: 8, background: '#0f0f0f', border: '1px solid #1a1a1a', padding: '10px 14px', ...S.mono, fontSize: 11, color: '#444' }}>
-              ℹ Token ERC20: potrà essere richiesta 1 firma (approve) + 1 firma (invio)
-            </div>
-          )}
+          {/* Smart CTA */}
+          <div style={{ padding: '2px 0 4px' }}>
+            {ctaState === 'disconnected' ? (
+              // RainbowKit ConnectButton custom
+              <ConnectButton.Custom>
+                {({ openConnectModal }) => (
+                  <button onClick={openConnectModal} style={{
+                    width: '100%', padding: '17px', borderRadius: 22, border: 'none',
+                    fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 700, letterSpacing: '-0.01em',
+                    background: 'linear-gradient(135deg, #ff007a, #ff6b9d)',
+                    color: '#fff', cursor: 'pointer',
+                    boxShadow: '0 4px 28px rgba(255,0,122,0.4)', transition: 'all 0.2s',
+                  }}>
+                    Connetti wallet
+                  </button>
+                )}
+              </ConnectButton.Custom>
+            ) : (
+              <button
+                onClick={cta.action ?? undefined}
+                disabled={cta.disabled}
+                style={{
+                  width: '100%', padding: '17px', borderRadius: 22, border: 'none',
+                  fontFamily: 'var(--font-display)', fontSize: 17, fontWeight: 700, letterSpacing: '-0.01em',
+                  cursor: cta.disabled ? 'not-allowed' : 'pointer',
+                  background: cta.disabled
+                    ? 'rgba(255,0,122,0.12)'
+                    : ctaState === 'wrong_network'
+                    ? 'linear-gradient(135deg, #f59e0b, #fbbf24)'
+                    : ctaState === 'insufficient'
+                    ? 'rgba(239,68,68,0.12)'
+                    : 'linear-gradient(135deg, #ff007a, #ff6b9d)',
+                  color: cta.disabled ? 'rgba(255,150,190,0.3)' : '#fff',
+                  boxShadow: cta.disabled ? 'none'
+                    : ctaState === 'wrong_network' ? '0 4px 24px rgba(245,158,11,0.4)'
+                    : '0 4px 28px rgba(255,0,122,0.4)',
+                  transition: 'all 0.2s',
+                }}
+              >
+                {busy ? (
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                    <span className="spinner" style={{ borderColor: 'rgba(255,150,190,0.4)', borderTopColor: 'transparent' }} />
+                    {phase === 'approving' || phase === 'wait_approve' ? 'Approvazione…' : 'finalizing_on_base…'}
+                  </span>
+                ) : cta.label}
+              </button>
+            )}
+          </div>
 
-          {/* CTA */}
-          <button
-            onClick={handleTransfer}
-            disabled={busy || !raw || !recipient || !!addrError}
-            style={{
-              width: '100%', padding: '15px', borderRadius: 12, border: 'none',
-              fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em',
-              cursor: busy || !raw || !recipient || !!addrError ? 'not-allowed' : 'pointer',
-              background: busy || !raw || !recipient || !!addrError
-                ? 'rgba(255,0,122,0.08)'
-                : 'linear-gradient(135deg, #ff007a, #ff6b9d)',
-              color: busy || !raw || !recipient || !!addrError ? 'rgba(255,150,190,0.25)' : '#fff',
-              boxShadow: busy || !raw || !recipient || !!addrError ? 'none' : '0 4px 24px rgba(255,0,122,0.35)',
-              transition: 'all 0.2s',
-            }}
-          >
-            {busy ? (
-              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                <span className="spinner" style={{ borderColor: 'rgba(255,150,190,0.3)', borderTopColor: 'transparent' }} />
-                {phase === 'approving' || phase === 'wait_approve' ? 'Approvazione in corso…' : 'Invio in corso…'}
-              </span>
-            ) : !recipient
-              ? 'Inserisci destinatario'
-              : !raw
-              ? 'Inserisci importo'
-              : 'Invia pagamento'}
-          </button>
-
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 20, ...S.mono, fontSize: 10, color: '#333' }}>
-            <span>🔒 Smart Contract</span>
-            <span>⚡ Base Mainnet</span>
-            <span>🧮 SafeERC20</span>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 20, padding: '10px 0 14px', ...C.mono, fontSize: 10, color: '#2a2a2a' }}>
+            <span>🔒 FeeRouter v2</span><span>⚡ Base L2</span><span>📋 DAC8</span>
+            {isConnected && <span style={{ color: '#333' }}>rp_tx_history ✓</span>}
           </div>
         </div>
       </div>
-    </div>
+
+      {/* Toast EIP-1193 */}
+      {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
+
+      <style>{`
+        @keyframes fadeSlideIn { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes fadeUp { from { opacity:0; transform:translate(-50%,12px); } to { opacity:1; transform:translate(-50%,0); } }
+        @keyframes spin { to { transform:rotate(360deg); } }
+      `}</style>
+    </>
   )
 }
