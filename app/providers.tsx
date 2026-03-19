@@ -1,24 +1,75 @@
 'use client'
 
+/**
+ * providers.tsx v3 — Multi-Wallet
+ *
+ * Connettori: MetaMask, Coinbase, Rainbow, WalletConnect (include Exodus),
+ *             Trust, Ledger, Browser Wallet
+ *
+ * Exodus si connette tramite WalletConnect — funziona nativamente
+ * aprendo Exodus → Settings → WalletConnect → Scan QR
+ *
+ * Chain: Base Mainnet + Base Sepolia
+ */
+
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { WagmiProvider } from 'wagmi'
-import { base, baseSepolia } from 'wagmi/chains'
+import { WagmiProvider, createConfig, http } from 'wagmi'
+import { base, baseSepolia }                 from 'wagmi/chains'
 import {
-  getDefaultConfig,
-  RainbowKitProvider,
-  darkTheme,
+  RainbowKitProvider, darkTheme,
+  connectorsForWallets,
 } from '@rainbow-me/rainbowkit'
+import {
+  metaMaskWallet,
+  coinbaseWallet,
+  rainbowWallet,
+  walletConnectWallet,
+  injectedWallet,
+  trustWallet,
+  ledgerWallet,
+} from '@rainbow-me/rainbowkit/wallets'
 import '@rainbow-me/rainbowkit/styles.css'
 import { useState, useEffect, createContext, useContext } from 'react'
 import { useChainId, useSwitchChain } from 'wagmi'
 
-const config = getDefaultConfig({
-  appName:   'FeeRouter B2B',
-  projectId: process.env.NEXT_PUBLIC_WC_PROJECT_ID!,
-  chains:    [base, baseSepolia],
-  ssr:       false,
+const WC_PROJECT_ID = process.env.NEXT_PUBLIC_WC_PROJECT_ID!
+
+// ── Connectors ─────────────────────────────────────────────────────────────
+const connectors = connectorsForWallets(
+  [
+    {
+      groupName: 'Raccomandati',
+      wallets:   [
+        metaMaskWallet,
+        coinbaseWallet,
+        rainbowWallet,
+      ],
+    },
+    {
+      groupName: 'Altri wallet',
+      wallets:   [
+        walletConnectWallet,  // ← Exodus, Phantom, e tutti i wallet WC
+        trustWallet,
+        ledgerWallet,
+        injectedWallet,
+      ],
+    },
+  ],
+  { appName: 'RPagos — Base Gateway', projectId: WC_PROJECT_ID }
+)
+
+// ── Wagmi config ───────────────────────────────────────────────────────────
+const config = createConfig({
+  chains:     [base, baseSepolia],
+  connectors,
+  transports: {
+    [base.id]:        http(),
+    [baseSepolia.id]: http(),
+  },
+  ssr: false,
 })
 
+// ── Query client ───────────────────────────────────────────────────────────
 function makeQueryClient() {
   return new QueryClient({
     defaultOptions: {
@@ -31,6 +82,7 @@ function makeQueryClient() {
   })
 }
 
+// ── Chain Guard ────────────────────────────────────────────────────────────
 const TARGET_CHAIN_ID = process.env.NEXT_PUBLIC_TARGET_CHAIN_ID
   ? parseInt(process.env.NEXT_PUBLIC_TARGET_CHAIN_ID)
   : base.id
@@ -57,7 +109,7 @@ function ChainGuardProvider({ children }: { children: React.ReactNode }): React.
   const chainId = useChainId()
   const { switchChain } = useSwitchChain()
 
-const isCorrectChain = chainId === base.id || chainId === baseSepolia.id
+  const isCorrectChain = chainId === base.id || chainId === baseSepolia.id
 
   const switchToTarget = () => {
     if (TARGET_CHAIN_ID === base.id) {
@@ -84,37 +136,36 @@ export function useChainGuard() {
   return useContext(ChainGuardContext)
 }
 
+// ── Error decoder ──────────────────────────────────────────────────────────
 export function decodeWalletError(error: unknown): {
-  message: string
-  type: 'rejected' | 'funds' | 'gas' | 'network' | 'contract' | 'unknown'
+  message:      string
+  type:         'rejected' | 'funds' | 'gas' | 'network' | 'contract' | 'oracle' | 'unknown'
   isUserAction: boolean
 } {
   const raw  = error instanceof Error ? error.message : String(error)
   const code = (error as { code?: number })?.code
 
-  if (code === 4001 || raw.includes('rejected') || raw.includes('denied') || raw.includes('cancel')) {
-    return { message: "Firma negata: l'operazione è stata annullata senza costi.", type: 'rejected', isUserAction: true }
-  }
-  if (raw.includes('insufficient funds') || raw.includes('insufficient balance')) {
+  if (code === 4001 || raw.includes('rejected') || raw.includes('denied') || raw.includes('cancel'))
+    return { message: "Firma negata: operazione annullata senza costi.", type: 'rejected', isUserAction: true }
+  if (raw.includes('insufficient funds') || raw.includes('insufficient balance'))
     return { message: 'Fondi insufficienti. Verifica il saldo ETH per il gas.', type: 'funds', isUserAction: false }
-  }
-  if (raw.includes('gas') || raw.includes('intrinsic')) {
+  if (raw.includes('OracleSignatureInvalid') || raw.includes('ComplianceSignatureInvalid'))
+    return { message: 'Transazione negata per policy di conformità AML.', type: 'oracle', isUserAction: false }
+  if (raw.includes('gas') || raw.includes('intrinsic'))
     return { message: 'Errore nella stima del gas. Riprova.', type: 'gas', isUserAction: false }
-  }
-  if (raw.includes('chain') || raw.includes('network') || raw.includes('chainId')) {
-    return { message: 'Rete non corretta. Passa a ' + TARGET_CHAIN_NAME + ' in MetaMask.', type: 'network', isUserAction: false }
-  }
+  if (raw.includes('chain') || raw.includes('network'))
+    return { message: `Rete non corretta. Passa a ${TARGET_CHAIN_NAME}.`, type: 'network', isUserAction: false }
   if (raw.includes('revert') || raw.includes('execution reverted')) {
     if (raw.includes('ZeroAddress')) return { message: 'Indirizzo non valido.', type: 'contract', isUserAction: false }
     if (raw.includes('ZeroAmount'))  return { message: 'Importo non può essere zero.', type: 'contract', isUserAction: false }
-    return { message: 'Transazione rifiutata dal contratto. Verifica i parametri.', type: 'contract', isUserAction: false }
+    return { message: 'Transazione rifiutata dal contratto.', type: 'contract', isUserAction: false }
   }
   return { message: 'Errore imprevisto: ' + raw.slice(0, 100), type: 'unknown', isUserAction: false }
 }
 
+// ── Chain Warning Banner ───────────────────────────────────────────────────
 function ChainWarningBanner(): React.JSX.Element | null {
-  const { isCorrectChain, switchToTarget, targetName, currentChainId } = useChainGuard()
-
+  const { isCorrectChain, switchToTarget, currentChainId } = useChainGuard()
   if (isCorrectChain) return null
 
   return (
@@ -125,7 +176,11 @@ function ChainWarningBanner(): React.JSX.Element | null {
       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
       fontFamily: 'var(--font-mono)', fontSize: 13,
     }}>
-      <span>⚠ Rete non supportata (Chain ID: {currentChainId}). Usa <strong>Base Mainnet</strong> o <strong>Base Sepolia</strong>.</span>      <button
+      <span>
+        ⚠ Rete non supportata (Chain ID: {currentChainId}).
+        Usa <strong>Base Mainnet</strong> o <strong>Base Sepolia</strong>.
+      </span>
+      <button
         onClick={switchToTarget}
         style={{
           padding: '4px 14px', borderRadius: 6, border: 'none',
@@ -139,6 +194,7 @@ function ChainWarningBanner(): React.JSX.Element | null {
   )
 }
 
+// ── Root provider ──────────────────────────────────────────────────────────
 export function Providers({ children }: { children: React.ReactNode }): React.JSX.Element {
   const [queryClient] = useState(makeQueryClient)
   const [mounted, setMounted] = useState(false)
@@ -149,12 +205,17 @@ export function Providers({ children }: { children: React.ReactNode }): React.JS
       <QueryClientProvider client={queryClient}>
         <RainbowKitProvider
           theme={darkTheme({
-            accentColor:           '#ff007a',
-            accentColorForeground: 'white',
+            accentColor:           '#00ffa3',
+            accentColorForeground: '#000',
             borderRadius:          'medium',
             fontStack:             'system',
+            overlayBlur:           'small',
           })}
           modalSize="compact"
+          appInfo={{
+            appName:      'RPagos',
+            learnMoreUrl: 'https://rpagos.com',
+          }}
         >
           {mounted && (
             <ChainGuardProvider>

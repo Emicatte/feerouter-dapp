@@ -1,17 +1,20 @@
 /**
- * usePdfReceipt.ts — Generatore ricevute PDF B2B
+ * lib/usePdfReceipt.ts v2 — EURC-First Accounting
  *
- * Libreria: jspdf (npm install jspdf)
- * Genera ricevuta professionale post-transazione con:
- *   - Header aziendale, timestamp, TX hash cliccabile
- *   - Mittente, destinatario, importo lordo, fee, netto
- *   - Riferimento fattura / ID fiscale (DAC8)
- *   - QR code link BaseScan opzionale
+ * Se il token è EURC:
+ *   - Nessuna conversione USD/EUR
+ *   - Importi direttamente in EUR con simbolo €
+ *   - Header "Ricevuta Fiscale Europea — ERC-20 Euro"
+ *   - Conforme standard contabili UE (direttiva 2013/34/UE)
+ *   - Campo "Valuta di Riferimento: EUR (EURC on Base)"
+ *
+ * Per tutti gli altri token:
+ *   - Comportamento invariato dal v1
  */
 
-import { jsPDF } from 'jspdf'
+import jsPDF from 'jspdf'
 
-export interface ReceiptData {
+export interface PdfReceiptParams {
   txHash:      string
   timestamp:   string
   sender:      string
@@ -23,171 +26,259 @@ export interface ReceiptData {
   paymentRef:  string
   fiscalRef:   string
   eurValue?:   string
-  network:     'Base Mainnet' | 'Base Sepolia'
+  network:     string
 }
 
-export function generatePdfReceipt(data: ReceiptData): void {
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+export function generatePdfReceipt(p: PdfReceiptParams): void {
+  const doc  = new jsPDF({ unit: 'mm', format: 'a4' })
+  const isEurc = p.symbol.toUpperCase() === 'EURC'
 
-  const W  = 210
-  const PINK    = [255, 0, 122]   as [number,number,number]
-  const DARK    = [15,  15,  15]  as [number,number,number]
-  const GRAY    = [80,  80,  80]  as [number,number,number]
-  const LGRAY   = [200, 200, 200] as [number,number,number]
-  const WHITE   = [255, 255, 255] as [number,number,number]
-  const GREEN   = [0,   210, 106] as [number,number,number]
+  // ── Colori ────────────────────────────────────────────────────────────
+  const C = {
+    bg:     [8,   8,   16]  as [number,number,number],
+    card:   [17,  17,  32]  as [number,number,number],
+    em:     [0,   255, 163] as [number,number,number],
+    emDark: [0,   180, 120] as [number,number,number],
+    text:   [226, 226, 240] as [number,number,number],
+    muted:  [74,  74,  106] as [number,number,number],
+    border: [40,  40,  60]  as [number,number,number],
+    euBlue: [0,   51,  153] as [number,number,number],
+    euGold: [255, 204, 0]   as [number,number,number],
+  }
 
-  // ── Background dark ────────────────────────────────────────────────────
-  doc.setFillColor(...DARK)
-  doc.rect(0, 0, W, 297, 'F')
+  const W = 210, H = 297
+  const margin = 15
 
-  // ── Header bar ─────────────────────────────────────────────────────────
-  doc.setFillColor(...PINK)
-  doc.rect(0, 0, W, 32, 'F')
+  // ── Background ─────────────────────────────────────────────────────────
+  doc.setFillColor(...C.bg)
+  doc.rect(0, 0, W, H, 'F')
 
-  doc.setTextColor(...WHITE)
+  // ── Header band ────────────────────────────────────────────────────────
+  doc.setFillColor(...C.card)
+  doc.rect(0, 0, W, 45, 'F')
+
+  // Accent line
+  doc.setFillColor(...C.em)
+  doc.rect(0, 0, W, 1.5, 'F')
+
+  // ── Logo / Brand ───────────────────────────────────────────────────────
+  doc.setTextColor(...C.em)
   doc.setFontSize(22)
   doc.setFont('helvetica', 'bold')
-  doc.text('FeeRouter', 20, 15)
+  doc.text('RPagos', margin, 20)
 
+  doc.setTextColor(...C.muted)
   doc.setFontSize(9)
   doc.setFont('helvetica', 'normal')
-  doc.text('B2B Payment Gateway', 20, 22)
-  doc.text('base.feerouter.io', 20, 28)
+  doc.text('Gateway di Pagamento B2B su Base Network', margin, 27)
 
-  // Receipt badge
-  doc.setFillColor(0, 0, 0, 0.3)
-  doc.setFillColor(40, 40, 40)
-  doc.roundedRect(W - 65, 8, 52, 16, 3, 3, 'F')
-  doc.setTextColor(...WHITE)
-  doc.setFontSize(11)
-  doc.setFont('helvetica', 'bold')
-  doc.text('RICEVUTA', W - 56, 18)
-
-  // ── Status badge ───────────────────────────────────────────────────────
-  doc.setFillColor(...GREEN)
-  doc.roundedRect(20, 40, 45, 8, 2, 2, 'F')
-  doc.setTextColor(...DARK)
-  doc.setFontSize(8)
-  doc.setFont('helvetica', 'bold')
-  doc.text('✓ PAGAMENTO CONFERMATO', 23, 45.5)
-
-  // Timestamp + Network
-  doc.setTextColor(...GRAY)
-  doc.setFontSize(8)
-  doc.setFont('helvetica', 'normal')
-  doc.text(data.timestamp, W - 20, 44, { align: 'right' })
-  doc.text(data.network, W - 20, 49, { align: 'right' })
-
-  // ── Section: Parti ─────────────────────────────────────────────────────
-  let y = 62
-
-  const sectionTitle = (title: string, yPos: number) => {
-    doc.setTextColor(...PINK)
-    doc.setFontSize(8)
-    doc.setFont('helvetica', 'bold')
-    doc.text(title.toUpperCase(), 20, yPos)
-    doc.setDrawColor(...PINK)
-    doc.setLineWidth(0.3)
-    doc.line(20, yPos + 1.5, W - 20, yPos + 1.5)
-  }
-
-  const dataRow = (label: string, value: string, yPos: number, valueColor = WHITE) => {
-    doc.setTextColor(...GRAY)
-    doc.setFontSize(8)
-    doc.setFont('helvetica', 'normal')
-    doc.text(label, 20, yPos)
-    doc.setTextColor(...valueColor)
-    doc.setFont('helvetica', 'bold')
-    doc.text(value, W - 20, yPos, { align: 'right' })
-  }
-
-  sectionTitle('Parti Coinvolte', y)
-  y += 8
-  dataRow('Mittente', data.sender.slice(0,12) + '…' + data.sender.slice(-8), y)
-  y += 7
-  dataRow('Destinatario', data.recipient.slice(0,12) + '…' + data.recipient.slice(-8), y)
-  y += 14
-
-  // ── Section: Importi ───────────────────────────────────────────────────
-  sectionTitle('Riepilogo Importi', y)
-  y += 8
-
-  dataRow('Importo Lordo', data.grossAmount + ' ' + data.symbol, y)
-  if (data.eurValue) {
-    doc.setTextColor(...GRAY)
+  // EURC badge nell'header se applicabile
+  if (isEurc) {
+    doc.setFillColor(...C.euBlue)
+    doc.roundedRect(W - margin - 52, 10, 52, 14, 3, 3, 'F')
+    doc.setFillColor(...C.euGold)
     doc.setFontSize(7)
-    doc.setFont('helvetica', 'normal')
-    doc.text('≈ ' + data.eurValue + ' EUR', W - 20, y + 4, { align: 'right' })
-    y += 4
+    doc.setFont('helvetica', 'bold')
+    doc.text('★ EURC · Euro Stablecoin', W - margin - 49, 19)
   }
-  y += 8
 
-  // Box importo netto (evidenziato)
-  doc.setFillColor(0, 50, 25)
-  doc.roundedRect(18, y - 3, W - 36, 12, 2, 2, 'F')
-  doc.setDrawColor(...GREEN)
-  doc.setLineWidth(0.5)
-  doc.roundedRect(18, y - 3, W - 36, 12, 2, 2, 'S')
-  doc.setTextColor(...GRAY)
+  // Titolo ricevuta
+  doc.setTextColor(...C.text)
+  doc.setFontSize(14)
+  doc.setFont('helvetica', 'bold')
+  const receiptTitle = isEurc
+    ? 'Ricevuta Fiscale Europea — ERC-20 Euro'
+    : 'Ricevuta di Pagamento On-Chain'
+  doc.text(receiptTitle, margin, 38)
+
+  // ── Metadata row ───────────────────────────────────────────────────────
+  let y = 56
   doc.setFontSize(8)
-  doc.setFont('helvetica', 'normal')
-  doc.text('Importo Netto (99.5%)', 24, y + 3.5)
-  doc.setTextColor(...GREEN)
-  doc.setFontSize(11)
-  doc.setFont('helvetica', 'bold')
-  doc.text(data.netAmount + ' ' + data.symbol, W - 24, y + 4, { align: 'right' })
-  y += 17
+  doc.setTextColor(...C.muted)
+  doc.setFont('courier', 'normal')
 
-  dataRow('Fee di Servizio (0.5%)', data.feeAmount + ' ' + data.symbol, y, [255, 157, 200])
+  const meta = [
+    ['DATA',    new Date(p.timestamp).toLocaleString('it-IT')],
+    ['NETWORK', p.network],
+    ['TX HASH', p.txHash.slice(0, 24) + '…' + p.txHash.slice(-8)],
+  ]
+  meta.forEach(([label, val], i) => {
+    const x = margin + i * 62
+    doc.setTextColor(...C.muted)
+    doc.text(label, x, y)
+    doc.setTextColor(...C.text)
+    doc.text(val, x, y + 5)
+  })
+
+  // ── Divider ────────────────────────────────────────────────────────────
   y += 14
-
-  // ── Section: Riferimenti ───────────────────────────────────────────────
-  sectionTitle('Riferimenti', y)
+  doc.setDrawColor(...C.border)
+  doc.setLineWidth(0.3)
+  doc.line(margin, y, W - margin, y)
   y += 8
-  if (data.paymentRef && data.paymentRef !== '—') {
-    dataRow('Rif. Pagamento', data.paymentRef, y)
-    y += 7
-  }
-  if (data.fiscalRef) {
-    dataRow('ID Fiscale / Rif. Fattura', data.fiscalRef, y)
-    y += 7
-  }
-  y += 7
 
-  // ── TX Hash ────────────────────────────────────────────────────────────
-  sectionTitle('Transazione On-Chain', y)
-  y += 8
-  doc.setTextColor(...GRAY)
-  doc.setFontSize(7)
-  doc.setFont('helvetica', 'normal')
-  doc.text('TX Hash:', 20, y)
-  doc.setTextColor(100, 150, 255)
+  // ── Importi principali ─────────────────────────────────────────────────
+  doc.setFillColor(...C.card)
+  doc.roundedRect(margin, y, W - margin * 2, 36, 4, 4, 'F')
+  doc.setDrawColor(...C.em)
+  doc.setLineWidth(0.4)
+  doc.roundedRect(margin, y, W - margin * 2, 36, 4, 4, 'S')
+
+  // Label importo
+  const amtLabel = isEurc ? 'IMPORTO LORDO (EUR)' : `IMPORTO LORDO (${p.symbol})`
+  doc.setFontSize(8)
+  doc.setTextColor(...C.muted)
+  doc.setFont('courier', 'normal')
+  doc.text(amtLabel, margin + 6, y + 8)
+
+  // Valore lordo
+  const grossDisplay = isEurc
+    ? `€ ${p.grossAmount}`
+    : `${p.grossAmount} ${p.symbol}`
+  doc.setFontSize(24)
+  doc.setTextColor(...C.em)
   doc.setFont('helvetica', 'bold')
-  const txUrl = (data.network === 'Base Mainnet' ? 'https://basescan.org/tx/' : 'https://sepolia.basescan.org/tx/') + data.txHash
-  doc.textWithLink(data.txHash.slice(0,32) + '…', 20, y + 6, { url: txUrl })
-  doc.setTextColor(...GRAY)
-  doc.setFont('helvetica', 'normal')
+  doc.text(grossDisplay, margin + 6, y + 22)
+
+  // EUR controvalore (solo se non EURC)
+  if (!isEurc && p.eurValue) {
+    doc.setFontSize(11)
+    doc.setTextColor(...C.muted)
+    doc.setFont('helvetica', 'normal')
+    doc.text(`≈ ${p.eurValue}`, W - margin - 6, y + 22, { align: 'right' })
+  }
+
+  // Nota EURC standard UE
+  if (isEurc) {
+    doc.setFontSize(7)
+    doc.setTextColor(...C.muted)
+    doc.setFont('courier', 'normal')
+    doc.text('Valuta di Riferimento: EUR (EURC on Base) — Dir. 2013/34/UE', margin + 6, y + 30)
+  }
+
+  y += 44
+
+  // ── Split breakdown ────────────────────────────────────────────────────
+  doc.setFontSize(9)
+  doc.setFont('courier', 'normal')
+
+  const splitRows = [
+    { label: isEurc ? 'Importo Netto (99.5%)' : `Importo Netto (99.5%)`, value: isEurc ? `€ ${p.netAmount}` : `${p.netAmount} ${p.symbol}`, highlight: true  },
+    { label: 'Commissione Gateway (0.5%)',                                value: isEurc ? `€ ${p.feeAmount}` : `${p.feeAmount} ${p.symbol}`, highlight: false },
+    { label: 'Tipo',                                                      value: isEurc ? 'Euro Stablecoin (ERC-20 su Base)' : `Cripto Asset (${p.symbol} su Base)`, highlight: false },
+  ]
+
+  splitRows.forEach((row, i) => {
+    const rowY = y + i * 12
+    doc.setFillColor(...C.card)
+    doc.rect(margin, rowY, W - margin * 2, 10, 'F')
+
+    doc.setTextColor(...C.muted)
+    doc.setFontSize(8)
+    doc.text(row.label, margin + 4, rowY + 6.5)
+
+    doc.setTextColor(row.highlight ? C.em[0] : C.text[0], row.highlight ? C.em[1] : C.text[1], row.highlight ? C.em[2] : C.text[2])
+    doc.setFont(row.highlight ? 'helvetica' : 'courier', row.highlight ? 'bold' : 'normal')
+    doc.setFontSize(row.highlight ? 9 : 8)
+    doc.text(row.value, W - margin - 4, rowY + 6.5, { align: 'right' })
+  })
+
+  y += splitRows.length * 12 + 8
+
+  // ── Indirizzi ──────────────────────────────────────────────────────────
+  doc.setDrawColor(...C.border)
+  doc.line(margin, y, W - margin, y)
+  y += 6
+
+  const addrRows = [
+    ['MITTENTE (SENDER)',     p.sender],
+    ['DESTINATARIO (RECIPIENT)', p.recipient],
+  ]
+  addrRows.forEach(([label, addr]) => {
+    doc.setTextColor(...C.muted)
+    doc.setFontSize(7)
+    doc.setFont('courier', 'normal')
+    doc.text(label, margin, y)
+    doc.setTextColor(...C.text)
+    doc.setFontSize(8)
+    doc.text(addr, margin, y + 5)
+    y += 13
+  })
+
+  // ── Riferimenti DAC8 ───────────────────────────────────────────────────
+  doc.setDrawColor(...C.border)
+  doc.line(margin, y, W - margin, y)
+  y += 6
+
+  doc.setFillColor(...C.card)
+  doc.roundedRect(margin, y, W - margin * 2, 30, 3, 3, 'F')
+
+  doc.setFontSize(8)
+  doc.setFont('courier', 'bold')
+  doc.setTextColor(...C.em)
+  doc.text('DATI FISCALI (DAC8 / MiCA)', margin + 4, y + 7)
+
+  const dac8Rows = [
+    ['payment_ref', p.paymentRef],
+    ['fiscal_ref',  p.fiscalRef ],
+  ]
+  dac8Rows.forEach(([k, v], i) => {
+    doc.setFont('courier', 'normal')
+    doc.setTextColor(...C.muted)
+    doc.setFontSize(7)
+    doc.text(k, margin + 4, y + 14 + i * 8)
+    doc.setTextColor(...C.text)
+    doc.text(v.slice(0, 60), margin + 34, y + 14 + i * 8)
+  })
+
+  y += 38
+
+  // ── EURC European Standards Note ──────────────────────────────────────
+  if (isEurc) {
+    doc.setFillColor(0, 51, 153)
+    doc.roundedRect(margin, y, W - margin * 2, 22, 3, 3, 'F')
+
+    doc.setFontSize(7)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(255, 204, 0)
+    doc.text('★  RICEVUTA CONFORME AGLI STANDARD CONTABILI UE', margin + 4, y + 7)
+
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(200, 210, 255)
+    doc.text('Emessa ai sensi della Dir. 2013/34/UE (Contabilità) · Reg. UE 2023/1114 (MiCA) · Dir. 2011/16/UE (DAC8)', margin + 4, y + 13)
+    doc.text(`Valuta ufficiale: EUR · Token: EURC (Circle) su Base Network · Nessuna conversione FX applicata`, margin + 4, y + 19)
+
+    y += 28
+  }
+
+  // ── QR placeholder (URL BaseScan) ─────────────────────────────────────
+  const basescanUrl = p.network.includes('Sepolia')
+    ? `https://sepolia.basescan.org/tx/${p.txHash}`
+    : `https://basescan.org/tx/${p.txHash}`
+
   doc.setFontSize(7)
-  doc.text(data.txHash.slice(32), 20, y + 11)
-  y += 20
+  doc.setFont('courier', 'normal')
+  doc.setTextColor(...C.muted)
+  doc.text('Verifica on-chain:', margin, y + 6)
+  doc.setTextColor(...C.em)
+  doc.text(basescanUrl, margin, y + 12)
 
   // ── Footer ─────────────────────────────────────────────────────────────
-  doc.setFillColor(20, 20, 20)
-  doc.rect(0, 265, W, 32, 'F')
+  doc.setFillColor(...C.card)
+  doc.rect(0, H - 18, W, 18, 'F')
+  doc.setFillColor(...C.em)
+  doc.rect(0, H - 18, W, 0.5, 'F')
 
-  doc.setTextColor(60, 60, 60)
   doc.setFontSize(7)
-  doc.setFont('helvetica', 'normal')
-  doc.text('Documento generato automaticamente da FeeRouter B2B Gateway', W / 2, 272, { align: 'center' })
-  doc.text('Smart Contract verificato su Base Network · Non costituisce fattura fiscale', W / 2, 278, { align: 'center' })
-  doc.text('Per supporto: support@feerouter.io', W / 2, 284, { align: 'center' })
-
-  doc.setTextColor(...GRAY)
-  doc.setFontSize(8)
-  doc.text('DAC8 / MiCA Ready', W / 2, 290, { align: 'center' })
+  doc.setFont('courier', 'normal')
+  doc.setTextColor(...C.muted)
+  doc.text('RPagos · Gateway VASP su Base Network · rpagos.com', margin, H - 10)
+  doc.text(`Generata: ${new Date().toLocaleString('it-IT')}`, W - margin, H - 10, { align: 'right' })
 
   // ── Salva ──────────────────────────────────────────────────────────────
-  const filename = 'ricevuta_' + (data.paymentRef || data.txHash.slice(0,8)) + '_' + Date.now() + '.pdf'
+  const filename = isEurc
+    ? `RPagos_EURC_${p.txHash.slice(2, 10)}.pdf`
+    : `RPagos_${p.symbol}_${p.txHash.slice(2, 10)}.pdf`
+
   doc.save(filename)
 }
