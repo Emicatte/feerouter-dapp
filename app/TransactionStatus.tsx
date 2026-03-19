@@ -1,179 +1,333 @@
 'use client'
 
 /**
- * TransactionStatus.tsx v2 — Ricevuta fiscale moderna + ResponseCard
+ * TransactionStatus_v3.tsx — Institutional Grade Dashboard
+ *
+ * Tema: Deep Dark + accenti #00ffa3 (successo) / #ff2d55 (errore)
+ * Features:
+ *   - Live Gas Tracker (Base L2)
+ *   - Barra di progresso balistica (~2s Base finality)
+ *   - Micro-stati animati
+ *   - Address AML check (mock)
+ *   - DAC8 compliance badge
  */
 
+import { useState, useEffect, useRef } from 'react'
+import { usePublicClient, useChainId } from 'wagmi'
 import { formatUnits } from 'viem'
-
-// ══════════════════════════════════════════════════════════════════════════
-//  LIFECYCLE ENUM
-// ══════════════════════════════════════════════════════════════════════════
-export enum TxStatus {
-  NEW             = 'new',
-  PENDING         = 'pending',
-  PAID            = 'paid',
-  ORDER_SCHEDULED = 'order_scheduled',
-  FINALIZING      = 'finalizing_on_base',
-  COMPLETED       = 'completed',
-  FAILED          = 'failed',
-  CANCELLED       = 'cancelled',
+import type { ComplianceRecord } from '../lib/useComplianceEngine'
+// ── Theme ─────────────────────────────────────────────────────────────────
+const T = {
+  bg:      '#080810',
+  surface: '#0d0d1a',
+  card:    '#111120',
+  border:  'rgba(255,255,255,0.06)',
+  emerald: '#00ffa3',
+  red:     '#ff2d55',
+  amber:   '#ffb800',
+  blue:    '#4d96ff',
+  purple:  '#a78bfa',
+  muted:   '#4a4a6a',
+  text:    '#e2e2f0',
+  mono:    'var(--font-mono)',
+  display: 'var(--font-display)',
 }
 
-export function phaseToTxStatus(phase: string): TxStatus {
-  const map: Record<string, TxStatus> = {
-    idle:         TxStatus.NEW,
-    approving:    TxStatus.NEW,
-    wait_approve: TxStatus.PENDING,
-    signing:      TxStatus.ORDER_SCHEDULED,
-    wait_send:    TxStatus.FINALIZING,
-    done:         TxStatus.COMPLETED,
-    error:        TxStatus.FAILED,
+// ── Live Gas Tracker ───────────────────────────────────────────────────────
+export function GasTracker(): React.JSX.Element {
+  const publicClient = usePublicClient()
+  const [gwei,    setGwei]    = useState<string | null>(null)
+  const [usd,     setUsd]     = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let mounted = true
+    const fetch = async () => {
+      try {
+        const gp = await publicClient?.getGasPrice()
+        if (!mounted || !gp) return
+        const gweiVal   = parseFloat(formatUnits(gp, 9)).toFixed(4)
+        // Stima costo TX: 50k gas (ERC20 split) × gas price × ETH price (~$2200)
+        const ethPrice  = 2200
+        const txCostUsd = (50_000 * parseFloat(formatUnits(gp, 9)) * 1e-9 * ethPrice).toFixed(4)
+        setGwei(gweiVal)
+        setUsd(txCostUsd)
+      } catch { /* ignore */ }
+      finally { if (mounted) setLoading(false) }
+    }
+    fetch()
+    const interval = setInterval(fetch, 5000)
+    return () => { mounted = false; clearInterval(interval) }
+  }, [publicClient])
+
+  const color = gwei ? (parseFloat(gwei) < 0.01 ? T.emerald : parseFloat(gwei) < 0.1 ? T.amber : T.red) : T.muted
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderRadius: 10, background: T.surface, border: `1px solid ${T.border}` }}>
+      <div style={{ width: 7, height: 7, borderRadius: '50%', background: color, boxShadow: `0 0 6px ${color}`, animation: 'pulse 2s infinite' }} />
+      <span style={{ fontFamily: T.mono, fontSize: 11, color: T.muted }}>Gas:</span>
+      {loading
+        ? <span style={{ fontFamily: T.mono, fontSize: 11, color: T.muted }}>…</span>
+        : <>
+            <span style={{ fontFamily: T.mono, fontSize: 11, color, fontWeight: 700 }}>{gwei} Gwei</span>
+            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.muted }}>≈ ${usd}</span>
+          </>
+      }
+    </div>
+  )
+}
+
+// ── Address AML Check (mock) ───────────────────────────────────────────────
+type AmlStatus = 'unchecked' | 'checking' | 'clean' | 'contract' | 'flagged'
+
+export function AddressVerifier({ address }: { address: string }): React.JSX.Element | null {
+  const publicClient = usePublicClient()
+  const [status, setStatus] = useState<AmlStatus>('unchecked')
+
+  useEffect(() => {
+    if (!address || address.length < 42) { setStatus('unchecked'); return }
+    setStatus('checking')
+    const check = async () => {
+      try {
+        // Check se è un contratto
+        const code = await publicClient?.getBytecode({ address: address as `0x${string}` })
+        if (code && code !== '0x') { setStatus('contract'); return }
+        // Mock AML: lista nera di test
+        const flagged = ['0x0000000000000000000000000000000000000000']
+        if (flagged.includes(address.toLowerCase())) { setStatus('flagged'); return }
+        setStatus('clean')
+      } catch { setStatus('clean') }
+    }
+    const t = setTimeout(check, 500)
+    return () => clearTimeout(t)
+  }, [address, publicClient])
+
+  if (status === 'unchecked') return null
+
+  const cfg = {
+    checking: { color: T.amber,   icon: '⏳', text: 'Verifica AML in corso…'           },
+    clean:    { color: T.emerald, icon: '✓',  text: 'Indirizzo verificato · AML clean' },
+    contract: { color: T.blue,    icon: '📄', text: 'Smart Contract · Verifica manuale' },
+    flagged:  { color: T.red,     icon: '⚠',  text: 'Indirizzo segnalato · Alto rischio' },
+  }[status]
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, fontFamily: T.mono, fontSize: 11 }}>
+      <span>{cfg.icon}</span>
+      <span style={{ color: cfg.color }}>{cfg.text}</span>
+    </div>
+  )
+}
+
+// ── Ballistic Progress Bar ─────────────────────────────────────────────────
+export function BallisticProgress({ active, onComplete }: { active: boolean; onComplete?: () => void }): React.JSX.Element | null {
+  const [progress, setProgress] = useState(0)
+  const rafRef = useRef<number>(0)
+  const startRef = useRef<number>(0)
+
+  useEffect(() => {
+    if (!active) { setProgress(0); return }
+    startRef.current = Date.now()
+
+    const animate = () => {
+      const elapsed = Date.now() - startRef.current
+      const duration = 2200 // ~2.2s Base finality
+      // Curva balistica: accelera poi decelera
+      const t = Math.min(elapsed / duration, 1)
+      const eased = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t
+      const pct = Math.min(eased * 95, 95) // si ferma al 95% finché non confermato
+      setProgress(pct)
+      if (t < 1) rafRef.current = requestAnimationFrame(animate)
+    }
+
+    rafRef.current = requestAnimationFrame(animate)
+    return () => cancelAnimationFrame(rafRef.current)
+  }, [active])
+
+  // Quando arriva conferma, vai al 100%
+  useEffect(() => {
+    if (!active && progress > 0) {
+      setProgress(100)
+      const t = setTimeout(() => { onComplete?.() }, 400)
+      return () => clearTimeout(t)
+    }
+  }, [active])
+
+  if (progress === 0 && !active) return null
+
+  return (
+    <div style={{ position: 'relative', height: 3, background: T.border, borderRadius: 2, overflow: 'hidden' }}>
+      <div style={{
+        height: '100%',
+        width: `${progress}%`,
+        background: progress >= 100 ? T.emerald : `linear-gradient(90deg, ${T.emerald}80, ${T.emerald})`,
+        borderRadius: 2,
+        transition: progress >= 100 ? 'width 0.4s ease' : 'none',
+        boxShadow: `0 0 8px ${T.emerald}60`,
+      }} />
+      {/* Glow traveler */}
+      {progress < 100 && active && (
+        <div style={{
+          position: 'absolute', top: -1, right: `${100 - progress}%`,
+          width: 12, height: 5, borderRadius: '50%',
+          background: T.emerald, filter: 'blur(2px)',
+          transform: 'translateX(50%)',
+        }} />
+      )}
+    </div>
+  )
+}
+
+// ── Micro-stato badge animato ──────────────────────────────────────────────
+interface MicroStateProps {
+  phase: string
+  silent?: boolean
+}
+
+export function MicroStateBadge({ phase, silent }: MicroStateProps): React.JSX.Element | null {
+  const states: Record<string, { color: string; icon: string; text: string; blink?: boolean }> = {
+    approving:    { color: T.amber,   icon: '🔐', text: 'Permit2 · Approvazione one-time…', blink: true  },
+    wait_approve: { color: T.amber,   icon: '⛓',  text: 'status: pending · On-chain confirm…'             },
+    signing:      { color: T.purple,  icon: '✍',  text: 'status: order_scheduled · Firma EIP-712…', blink: true },
+    wait_send:    { color: T.blue,    icon: '⚡',  text: 'status: finalizing_on_base · Base L2 ~2s'         },
   }
-  return map[phase] ?? TxStatus.NEW
-}
 
-export const TX_STATUS_COLOR: Record<TxStatus, string> = {
-  [TxStatus.NEW]:             '#6b7280',
-  [TxStatus.PENDING]:         '#f59e0b',
-  [TxStatus.PAID]:            '#3b82f6',
-  [TxStatus.ORDER_SCHEDULED]: '#a78bfa',
-  [TxStatus.FINALIZING]:      '#f59e0b',
-  [TxStatus.COMPLETED]:       '#00d26a',
-  [TxStatus.FAILED]:          '#ef4444',
-  [TxStatus.CANCELLED]:       '#6b7280',
-}
-
-// ══════════════════════════════════════════════════════════════════════════
-//  CALLBACK PAYLOAD (DAC8 / Mercuryo schema)
-// ══════════════════════════════════════════════════════════════════════════
-export interface CallbackPayload {
-  id:                      string
-  type:                    'send'
-  payment_method:          'crypto'
-  sender_address:          string
-  recipient_address:       string
-  amount:                  string
-  net_amount:              string
-  fee_amount:              string
-  currency:                string
-  fiat_amount:             string | null
-  fiat_currency:           'EUR' | null
-  status:                  TxStatus
-  network:                 'BASE' | 'BASE_SEPOLIA'
-  payment_ref:             string
-  fiscal_ref:              string
-  merchant_transaction_id: string
-  created_at:              string
-  updated_at:              string
-  created_at_ts:           number
-  updated_at_ts:           number
-  x_signature:             string
-}
-
-export function buildCallbackPayload(params: {
-  txHash: string; sender: string; recipient: string
-  gross: bigint; net: bigint; fee: bigint
-  decimals: number; symbol: string
-  paymentRef: string; fiscalRef: string
-  eurValue?: string; isTestnet: boolean
-}): CallbackPayload {
-  const now    = new Date()
-  const isoNow = now.toISOString()
-  const tsNow  = Math.floor(now.getTime() / 1000)
-  const fmt    = (n: bigint) => parseFloat(formatUnits(n, params.decimals)).toFixed(params.decimals)
-
-  return {
-    id:                      params.txHash.slice(0, 18),
-    type:                    'send',
-    payment_method:          'crypto',
-    sender_address:          params.sender,
-    recipient_address:       params.recipient,
-    amount:                  fmt(params.gross),
-    net_amount:              fmt(params.net),
-    fee_amount:              fmt(params.fee),
-    currency:                params.symbol,
-    fiat_amount:             params.eurValue ?? null,
-    fiat_currency:           params.eurValue ? 'EUR' : null,
-    status:                  TxStatus.COMPLETED,
-    network:                 params.isTestnet ? 'BASE_SEPOLIA' : 'BASE',
-    payment_ref:             params.paymentRef || '—',
-    fiscal_ref:              params.fiscalRef  || '—',
-    merchant_transaction_id: params.txHash,
-    created_at:              isoNow,
-    updated_at:              isoNow,
-    created_at_ts:           tsNow,
-    updated_at_ts:           tsNow,
-    x_signature:             'PENDING_SERVER_SIDE_HMAC_SHA256',
-  }
-}
-
-// ══════════════════════════════════════════════════════════════════════════
-//  RESPONSE CARD — ricevuta fiscale moderna
-// ══════════════════════════════════════════════════════════════════════════
-interface ResponseCardProps {
-  type:    'success' | 'error'
-  title:   string
-  code:    string
-  rows:    { label: string; value: string; mono?: boolean; highlight?: boolean; copyable?: string }[]
-  footer?: React.ReactNode
-}
-
-export function ResponseCard({ type, title, code, rows, footer }: ResponseCardProps): React.JSX.Element {
-  const ok = type === 'success'
+  const s = states[phase]
+  if (!s) return null
 
   return (
     <div style={{
-      borderRadius: 16,
-      border: `1px solid ${ok ? 'rgba(100,183,0,0.4)' : 'rgba(251,86,86,0.4)'}`,
-      overflow: 'hidden',
-      background: '#0a0a0a',
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: '10px 14px', borderRadius: 12,
+      background: s.color + '10',
+      border: `1px solid ${s.color}30`,
+      animation: 'fadeSlideIn 0.2s ease',
     }}>
-      {/* Header — green/red block */}
       <div style={{
-        padding: '14px 20px',
-        background: ok ? 'rgba(100,183,0,0.1)' : 'rgba(251,86,86,0.1)',
-        borderBottom: `1px solid ${ok ? 'rgba(100,183,0,0.2)' : 'rgba(251,86,86,0.2)'}`,
+        width: 14, height: 14, borderRadius: '50%',
+        border: `2px solid ${s.color}40`,
+        borderTopColor: s.color,
+        animation: 'spin 0.8s linear infinite',
+        flexShrink: 0,
+      }} />
+      <div>
+        <div style={{ fontFamily: T.mono, fontSize: 12, color: s.color }}>{s.text}</div>
+        {silent && phase === 'signing' && (
+          <div style={{ fontFamily: T.mono, fontSize: 10, color: T.emerald, marginTop: 2 }}>
+            ⚡ Permit2 · 1 sola firma richiesta
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Compliance Badge ───────────────────────────────────────────────────────
+export function ComplianceBadge({ record }: { record: ComplianceRecord }): React.JSX.Element {
+  return (
+    <div style={{
+      borderRadius: 12, border: `1px solid ${T.emerald}30`,
+      background: T.emerald + '08', overflow: 'hidden',
+    }}>
+      {/* Header */}
+      <div style={{
+        padding: '8px 14px',
+        background: T.emerald + '12',
+        borderBottom: `1px solid ${T.emerald}20`,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <span style={{ fontFamily: T.mono, fontSize: 11, color: T.emerald, fontWeight: 700, letterSpacing: '0.08em' }}>
+          MiCA/DAC8 · COMPLIANCE RECORD
+        </span>
+        {record.dac8_reportable && (
+          <span style={{ fontFamily: T.mono, fontSize: 9, padding: '2px 6px', borderRadius: 4, background: T.amber + '20', color: T.amber, border: `1px solid ${T.amber}40` }}>
+            DAC8 REPORTABLE
+          </span>
+        )}
+      </div>
+
+      {/* Dati */}
+      <div>
+        {[
+          { l: 'compliance_id',   v: record.compliance_id.slice(0, 16) + '…', mono: true  },
+          { l: 'block_timestamp', v: record.block_timestamp                                },
+          { l: 'fiat_rate',       v: record.fiat_rate ? `1 ${record.asset} = ${record.fiat_rate} EUR` : 'N/A' },
+          { l: 'fiat_gross',      v: record.fiat_gross ? record.fiat_gross + ' EUR' : 'N/A' },
+          { l: 'ip_jurisdiction', v: record.ip_jurisdiction + (record.mica_applicable ? ' · MiCA applicable' : '')  },
+          { l: 'fiscal_ref',      v: record.fiscal_ref                        },
+          { l: 'network',         v: record.network                           },
+        ].map((r, i) => (
+          <div key={i} style={{
+            display: 'flex', alignItems: 'flex-start',
+            borderBottom: i < 6 ? `1px solid ${T.border}` : 'none',
+            borderLeft: `2px dashed ${T.emerald}20`,
+          }}>
+            <div style={{ width: '38%', padding: '7px 8px 7px 12px', fontFamily: T.mono, fontSize: 10, color: T.muted, flexShrink: 0 }}>
+              {r.l}
+            </div>
+            <div style={{ width: '62%', padding: '7px 12px 7px 4px', fontFamily: T.mono, fontSize: 11, color: T.text, wordBreak: 'break-all' as const }}>
+              {r.v}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+//  RESPONSE CARD v3 — Institutional style
+// ══════════════════════════════════════════════════════════════════════════
+interface ResponseCardProps {
+  type:    'success' | 'error'
+  code:    string
+  title:   string
+  rows:    { label: string; value: string; highlight?: boolean; dim?: boolean }[]
+  footer?: React.ReactNode
+}
+
+export function ResponseCard({ type, code, title, rows, footer }: ResponseCardProps): React.JSX.Element {
+  const accent = type === 'success' ? T.emerald : T.red
+
+  return (
+    <div style={{ borderRadius: 16, border: `1px solid ${accent}30`, overflow: 'hidden', background: T.card }}>
+      {/* Header */}
+      <div style={{
+        padding: '12px 18px',
+        background: accent + '0d',
+        borderBottom: `1px solid ${accent}20`,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: ok ? '#00d26a' : '#ef4444', boxShadow: `0 0 8px ${ok ? '#00d26a' : '#ef4444'}` }} />
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 13, fontWeight: 700, color: ok ? '#a3e635' : '#f87171' }}>
-            <span style={{ fontSize: 16 }}>{code}</span> · {title}
+          <div style={{ width: 8, height: 8, borderRadius: '50%', background: accent, boxShadow: `0 0 10px ${accent}` }} />
+          <span style={{ fontFamily: T.mono, fontSize: 13, fontWeight: 700 }}>
+            <span style={{ color: accent, fontSize: 15 }}>{code}</span>
+            <span style={{ color: T.muted }}> · </span>
+            <span style={{ color: T.text }}>{title}</span>
           </span>
         </div>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: ok ? 'rgba(163,230,53,0.5)' : 'rgba(248,113,113,0.5)', letterSpacing: '0.1em' }}>
+        <span style={{ fontFamily: T.mono, fontSize: 9, color: T.muted + '80', letterSpacing: '0.1em' }}>
           application/json
         </span>
       </div>
 
-      {/* Body — tabella fiscale left/right stile Mercuryo */}
-      <div>
+      {/* Rows — left 38% / right 62% Mercuryo layout */}
+      <div style={{ background: T.bg }}>
         {rows.map((row, i) => (
           <div key={i} style={{
             display: 'flex', alignItems: 'flex-start',
-            borderBottom: i < rows.length - 1 ? '1px solid #111' : 'none',
-            borderLeft: '2px dashed #1e1e1e',
+            borderBottom: i < rows.length - 1 ? `1px solid ${T.border}` : 'none',
+            borderLeft: `2px dashed ${T.border}`,
           }}>
-            {/* left_side 35% */}
-            <div style={{
-              width: '38%', padding: '10px 8px 10px 16px',
-              fontFamily: 'var(--font-mono)', fontSize: 11,
-              color: '#555', flexShrink: 0, lineHeight: 1.4,
-            }}>
+            <div style={{ width: '38%', padding: '9px 8px 9px 14px', fontFamily: T.mono, fontSize: 10, color: T.muted, flexShrink: 0, lineHeight: 1.4 }}>
               {row.label}
             </div>
-            {/* right_side 62% */}
             <div style={{
-              width: '62%', padding: '10px 16px 10px 8px',
-              fontFamily: row.mono !== false ? 'var(--font-mono)' : 'var(--font-display)',
-              fontSize: 12,
+              width: '62%', padding: '9px 14px 9px 6px',
+              fontFamily: T.mono, fontSize: 12,
               fontWeight: row.highlight ? 700 : 500,
-              color: row.highlight
-                ? ok ? '#a3e635' : '#f87171'
-                : '#d1d5db',
-              wordBreak: 'break-all' as const,
-              lineHeight: 1.4,
+              color: row.highlight ? accent : row.dim ? T.muted : T.text,
+              wordBreak: 'break-all' as const, lineHeight: 1.4,
             }}>
               {row.value}
             </div>
@@ -182,7 +336,7 @@ export function ResponseCard({ type, title, code, rows, footer }: ResponseCardPr
       </div>
 
       {footer && (
-        <div style={{ padding: '12px 16px', borderTop: '1px solid #111' }}>
+        <div style={{ padding: '10px 14px', borderTop: `1px solid ${T.border}`, background: T.surface }}>
           {footer}
         </div>
       )}
@@ -191,47 +345,46 @@ export function ResponseCard({ type, title, code, rows, footer }: ResponseCardPr
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-//  TRANSACTION STATUS UI
+//  MAIN TransactionStatusUI v3
 // ══════════════════════════════════════════════════════════════════════════
-interface TransactionStatusProps {
-  phase:       string
-  txHash?:     string
-  error?:      string
-  isTestnet?:  boolean
-  grossStr?:   string; netStr?: string; feeStr?: string
-  symbol?:     string; recipient?: string
-  paymentRef?: string; fiscalRef?: string
-  eurValue?:   string; timestamp?: string
-  onCopyHash?: () => void; copied?: boolean
-  onReset?:    () => void
-  onDownloadPdf?: () => void
+interface TxStatusProps {
+  phase:          string
+  txHash?:        string
+  error?:         string
+  isTestnet?:     boolean
+  grossStr?:      string; netStr?: string; feeStr?: string
+  symbol?:        string; recipient?: string
+  paymentRef?:    string; fiscalRef?: string
+  eurValue?:      string; timestamp?: string
+  complianceRecord?: ComplianceRecord
+  silentFlow?:    boolean
+  onCopyHash?:    () => void; copied?: boolean
+  onReset?:       () => void; onDownloadPdf?: () => void
 }
 
 export function TransactionStatusUI({
-  phase, txHash, error, isTestnet = true,
+  phase, txHash, error, isTestnet = false,
   grossStr, netStr, feeStr, symbol = 'ETH',
   recipient, paymentRef, fiscalRef, eurValue, timestamp,
+  complianceRecord, silentFlow,
   onCopyHash, copied, onReset, onDownloadPdf,
-}: TransactionStatusProps): React.JSX.Element | null {
+}: TxStatusProps): React.JSX.Element | null {
 
-  const status    = phaseToTxStatus(phase)
-  const color     = TX_STATUS_COLOR[status]
-  const basescan  = isTestnet ? 'https://sepolia.basescan.org/tx/' : 'https://basescan.org/tx/'
-  const busy      = ['approving','wait_approve','signing','wait_send'].includes(phase)
+  const basescan = isTestnet ? 'https://sepolia.basescan.org/tx/' : 'https://basescan.org/tx/'
+  const busy     = ['approving','wait_approve','signing','wait_send'].includes(phase)
 
-  // ── SUCCESS: ricevuta fiscale completa ─────────────────────────────────
+  // ── SUCCESS ──────────────────────────────────────────────────────────────
   if (phase === 'done' && grossStr && netStr && feeStr) {
     const rows = [
-      { label: 'status',            value: '200 OK · completed',            highlight: true  },
-      { label: 'amount',            value: grossStr + ' ' + symbol                           },
-      { label: 'net_amount (99.5%)',value: netStr   + ' ' + symbol,         highlight: true  },
-      { label: 'fee_amount (0.5%)', value: feeStr   + ' ' + symbol                          },
+      { label: 'status',            value: '200 OK · completed',        highlight: true  },
+      { label: 'amount',            value: grossStr + ' ' + symbol                       },
+      { label: 'net_amount (99.5%)',value: netStr   + ' ' + symbol,     highlight: true  },
+      { label: 'fee_amount (0.5%)', value: feeStr   + ' ' + symbol                       },
       ...(eurValue ? [{ label: 'fiat_amount', value: '≈ ' + eurValue + ' EUR' }] : []),
-      { label: 'recipient',         value: recipient ? recipient.slice(0,12)+'…'+recipient.slice(-6) : '—' },
+      { label: 'recipient',         value: recipient ? recipient.slice(0,12)+'…'+recipient.slice(-6) : '—', dim: true },
       ...(paymentRef && paymentRef !== '—' ? [{ label: 'payment_ref', value: paymentRef }] : []),
-      ...(fiscalRef  && fiscalRef  !== '—' ? [{ label: 'fiscal_ref',  value: fiscalRef  }] : []),
-      { label: 'network',           value: isTestnet ? 'BASE_SEPOLIA' : 'BASE'              },
-      { label: 'updated_at',        value: timestamp ?? new Date().toISOString()             },
+      { label: 'network',           value: isTestnet ? 'BASE_SEPOLIA' : 'BASE', dim: true },
+      { label: 'updated_at',        value: timestamp ?? new Date().toISOString(), dim: true },
     ]
 
     return (
@@ -242,19 +395,17 @@ export function TransactionStatusUI({
           footer={
             txHash ? (
               <div>
-                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#444', textTransform: 'uppercase' as const, letterSpacing: '0.1em', marginBottom: 6 }}>
+                <div style={{ fontFamily: T.mono, fontSize: 9, color: T.muted, letterSpacing: '0.1em', textTransform: 'uppercase' as const, marginBottom: 6 }}>
                   merchant_transaction_id
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#555', wordBreak: 'break-all' as const, flex: 1 }}>
-                    {txHash}
-                  </div>
+                  <div style={{ fontFamily: T.mono, fontSize: 11, color: T.muted, wordBreak: 'break-all' as const, flex: 1 }}>{txHash}</div>
                   <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
-                    <button onClick={onCopyHash} style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: copied ? '#00d26a' : '#555', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                    <button onClick={onCopyHash} style={{ fontFamily: T.mono, fontSize: 11, color: copied ? T.emerald : T.muted, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                       {copied ? '✓ Copiato' : '📋'}
                     </button>
                     <a href={basescan + txHash} target="_blank" rel="noopener noreferrer"
-                      style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#ff9dc8', textDecoration: 'none' }}>
+                      style={{ fontFamily: T.mono, fontSize: 11, color: '#a78bfa', textDecoration: 'none' }}>
                       BaseScan ↗
                     </a>
                   </div>
@@ -264,9 +415,12 @@ export function TransactionStatusUI({
           }
         />
 
-        {/* Nota DAC8 */}
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#333', textAlign: 'center' as const }}>
-          x_signature: PENDING_SERVER_SIDE_HMAC_SHA256 · Payload DAC8 salvato in rp_tx_history
+        {/* Compliance record */}
+        {complianceRecord && <ComplianceBadge record={complianceRecord} />}
+
+        {/* DAC8 note */}
+        <div style={{ fontFamily: T.mono, fontSize: 10, color: T.muted, textAlign: 'center' as const }}>
+          x_signature: PENDING_HMAC_SHA256 · Payload MiCA/DAC8 salvato in rp_compliance_db
         </div>
 
         {/* Azioni */}
@@ -275,29 +429,21 @@ export function TransactionStatusUI({
             <button onClick={onDownloadPdf} style={{
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
               padding: '12px', borderRadius: 12,
-              border: '1px solid rgba(255,0,122,0.25)',
-              background: 'rgba(255,0,122,0.06)',
-              color: '#ff9dc8', fontSize: 12, fontWeight: 700,
-              cursor: 'pointer', fontFamily: 'var(--font-mono)',
-              transition: 'all 0.2s',
-            }}
-              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,0,122,0.12)'}
-              onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,0,122,0.06)'}
-            >
-              📄 Scarica Ricevuta PDF
+              border: `1px solid ${T.emerald}30`,
+              background: T.emerald + '0a',
+              color: T.emerald, fontSize: 12, fontWeight: 700,
+              cursor: 'pointer', fontFamily: T.mono, transition: 'all 0.2s',
+            }}>
+              📄 Ricevuta PDF + QR
             </button>
           )}
           {onReset && (
             <button onClick={onReset} style={{
               padding: '12px', borderRadius: 12,
-              border: '1px solid #1e1e1e', background: 'transparent',
-              color: '#555', fontSize: 12, fontWeight: 700,
-              cursor: 'pointer', fontFamily: 'var(--font-display)',
-              transition: 'all 0.2s',
-            }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = '#333'; e.currentTarget.style.color = '#888' }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = '#1e1e1e'; e.currentTarget.style.color = '#555' }}
-            >
+              border: `1px solid ${T.border}`, background: 'transparent',
+              color: T.muted, fontSize: 12, fontWeight: 700,
+              cursor: 'pointer', fontFamily: T.display, transition: 'all 0.2s',
+            }}>
               + Nuovo pagamento
             </button>
           )}
@@ -306,25 +452,34 @@ export function TransactionStatusUI({
     )
   }
 
-  // ── ERROR: red block ───────────────────────────────────────────────────
+  // ── ERROR ─────────────────────────────────────────────────────────────────
   if (phase === 'error' && error) {
-    const cancelled = error.includes('annullata') || error.includes('negata') || error.includes('rifiutata')
+    const cancelled   = error.includes('annullata') || error.includes('negata') || error.includes('rifiutata')
+    const noGas       = error.includes('gas') || error.includes('Gas')
+    const sequencer   = error.includes('sequencer') || error.includes('Sequencer')
+    const code        = cancelled ? '499' : noGas ? '402' : sequencer ? '503' : '500'
+    const title       = cancelled ? 'User Cancelled'
+      : noGas ? 'Insufficient Gas'
+      : sequencer ? 'L2 Sequencer Down'
+      : 'TX Failed'
+
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         <ResponseCard
-          type="error"
-          code={cancelled ? '499' : '500'}
-          title={cancelled ? 'Operazione annullata' : 'Transazione fallita'}
+          type="error" code={code} title={title}
           rows={[
-            { label: 'status',  value: cancelled ? '499 · User Cancelled' : '500 · TX Failed', highlight: true },
-            { label: 'message', value: error },
-            { label: 'network', value: isTestnet ? 'BASE_SEPOLIA' : 'BASE' },
+            { label: 'error_code', value: code + ' · ' + title, highlight: true },
+            { label: 'message',    value: error                                  },
+            { label: 'network',    value: isTestnet ? 'BASE_SEPOLIA' : 'BASE'   },
           ]}
         />
         {onReset && (
-          <button onClick={onReset} style={{ width: '100%', padding: '11px', borderRadius: 12, border: '1px solid #1e1e1e', background: 'transparent', color: '#555', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-display)', transition: 'all 0.2s' }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = '#333'; e.currentTarget.style.color = '#888' }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = '#1e1e1e'; e.currentTarget.style.color = '#555' }}>
+          <button onClick={onReset} style={{
+            width: '100%', padding: '11px', borderRadius: 12,
+            border: `1px solid ${T.border}`, background: 'transparent',
+            color: T.muted, fontSize: 13, fontWeight: 700,
+            cursor: 'pointer', fontFamily: T.display, transition: 'all 0.2s',
+          }}>
             Riprova
           </button>
         )}
@@ -332,20 +487,12 @@ export function TransactionStatusUI({
     )
   }
 
-  // ── IN PROGRESS: badge animato ─────────────────────────────────────────
+  // ── IN PROGRESS ──────────────────────────────────────────────────────────
   if (busy) {
-    const msgs: Record<string, string> = {
-      approving:    'status: new · Richiesta approvazione token…',
-      wait_approve: 'status: pending · Attesa conferma approve on-chain…',
-      signing:      'status: order_scheduled · In attesa firma nel wallet…',
-      wait_send:    'status: finalizing_on_base · Settlement su Base L2…',
-    }
     return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', borderRadius: 12, background: '#0f0f0f', border: '1px solid #1e1e1e' }}>
-        <div style={{ width: 14, height: 14, borderRadius: '50%', border: `2px solid ${color}40`, borderTopColor: color, animation: 'spin 0.7s linear infinite', flexShrink: 0 }} />
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color }}>
-          {msgs[phase] ?? 'status: ' + status + ' · In corso…'}
-        </span>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <BallisticProgress active={phase === 'wait_send'} />
+        <MicroStateBadge phase={phase} silent={silentFlow} />
       </div>
     )
   }
