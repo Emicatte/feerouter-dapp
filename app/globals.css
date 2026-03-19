@@ -1,0 +1,629 @@
+/* ============================================================
+   globals.css — GPU-Accelerated Background System
+   RPagos · Institutional Deep Dark
+   ============================================================
+
+   Architettura rendering:
+   - Tutti gli orbs usano SOLO transform: translate3d + scale3d
+   - Zero proprietà layout (no top/left/width/height animati)
+   - will-change pre-alloca layer GPU separati
+   - contain: strict isola il repaint
+   - CSS custom properties per posizionamento statico
+   - 60fps garantito anche su resize finestra
+   ============================================================ */
+
+/* ── Reset & base ─────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  /* Forza GPU rasterization su tutto il documento */
+  -webkit-font-smoothing:  antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeSpeed;
+}
+
+body {
+  background-color: #080810;
+  color: #e2e2f0;
+  overflow-x: hidden;
+}
+
+/* ── Font variables ───────────────────────────────────────── */
+:root {
+  --font-display: 'Syne', system-ui, sans-serif;
+  --font-display-weight: 700;
+  --font-mono:    'DM Mono', 'Fira Code', monospace;
+
+  /* Colori tema */
+  --c-bg:      #080810;
+  --c-surface: #0d0d1a;
+  --c-card:    #111120;
+  --c-emerald: #00ffa3;
+  --c-red:     #ff2d55;
+  --c-amber:   #ffb800;
+  --c-pink:    #ff007a;
+  --c-muted:   #4a4a6a;
+  --c-text:    #e2e2f0;
+  --c-border:  rgba(255,255,255,0.06);
+
+  /* Easing curves */
+  --ease-spring:  cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out:     cubic-bezier(0.0, 0.0, 0.2, 1);
+  --ease-in-out:  cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ============================================================
+   BACKGROUND SYSTEM — Full GPU
+   ============================================================ */
+
+/* Wrapper fisso che non partecipa al layout */
+.rp-bg {
+  position: fixed;
+  inset: 0;                    /* top:0 right:0 bottom:0 left:0 — static */
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+
+  /* Isola completamente il layer dal resto del documento */
+  contain: strict;
+
+  /* Layer GPU dedicato per il wrapper */
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+/* Gradient di base — nessuna animazione, solo GPU layer */
+.rp-bg__base {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    ellipse 80% 60% at 50% 0%,
+    rgba(100, 0, 80, 0.25) 0%,
+    transparent 60%
+  ),
+  radial-gradient(
+    ellipse 60% 40% at 80% 100%,
+    rgba(0, 20, 80, 0.2) 0%,
+    transparent 60%
+  ),
+  #080810;
+}
+
+/* ── Orb base — proprietà statiche ───────────────────────── */
+.rp-orb {
+  position: absolute;
+
+  /*
+   * DIMENSIONI statiche in vw/vh — MAI animate
+   * Il resize CSS non causa layout thrashing
+   */
+  border-radius: 50%;
+
+  /* Pre-alloca layer GPU separato per ogni orb */
+  will-change: transform, opacity;
+
+  /*
+   * backface-visibility: hidden forza la creazione del
+   * compositing layer in tutti i browser
+   */
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+
+  /* Isola il repaint dell'orb */
+  contain: layout style;
+
+  /*
+   * SOLO transform per animazioni — zero top/left
+   * Il browser non ricalcola mai il layout
+   */
+}
+
+/* ── Orb 1 — viola grande, in alto a sinistra ─────────────── */
+.rp-orb--1 {
+  width: 45vw;
+  height: 45vw;
+  max-width: 700px;
+  max-height: 700px;
+
+  /*
+   * Posizione via translate3d dal centro dell'elemento.
+   * top/left STATICI (mai animati) + transform per movimento.
+   */
+  top: -10vh;
+  left: -5vw;
+
+  background: radial-gradient(
+    circle at 40% 40%,
+    rgba(180, 60, 255, 0.72),
+    rgba(120, 0, 200, 0.45) 40%,
+    transparent 70%
+  );
+  filter: blur(40px);
+
+  animation: orbFloat1 18s ease-in-out infinite;
+}
+
+/* ── Orb 2 — verde/teal, in basso a destra ────────────────── */
+.rp-orb--2 {
+  width: 40vw;
+  height: 40vw;
+  max-width: 600px;
+  max-height: 600px;
+
+  bottom: -8vh;
+  right: -8vw;
+
+  background: radial-gradient(
+    circle at 60% 60%,
+    rgba(0, 200, 160, 0.58),
+    rgba(0, 100, 120, 0.38) 50%,
+    transparent 70%
+  );
+  filter: blur(50px);
+
+  animation: orbFloat2 22s ease-in-out infinite;
+}
+
+/* ── Orb 3 — rosa/rosso, centro destra ───────────────────── */
+.rp-orb--3 {
+  width: 30vw;
+  height: 30vw;
+  max-width: 480px;
+  max-height: 480px;
+
+  top: 30vh;
+  right: 5vw;
+
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(255, 0, 122, 0.52),
+    rgba(200, 0, 80, 0.32) 50%,
+    transparent 70%
+  );
+  filter: blur(45px);
+
+  animation: orbFloat3 25s ease-in-out infinite;
+  animation-delay: -8s;
+}
+
+/* ── Orb 4 — ambra, in alto a destra ─────────────────────── */
+.rp-orb--4 {
+  width: 25vw;
+  height: 25vw;
+  max-width: 380px;
+  max-height: 380px;
+
+  top: 5vh;
+  right: 15vw;
+
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(255, 180, 0, 0.38),
+    rgba(255, 100, 0, 0.25) 50%,
+    transparent 70%
+  );
+  filter: blur(40px);
+
+  animation: orbFloat4 20s ease-in-out infinite;
+  animation-delay: -12s;
+}
+
+/* ── Orb 5 — blu, centro sinistra ────────────────────────── */
+.rp-orb--5 {
+  width: 28vw;
+  height: 28vw;
+  max-width: 420px;
+  max-height: 420px;
+
+  top: 50vh;
+  left: 5vw;
+
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(50, 100, 255, 0.45),
+    rgba(0, 50, 200, 0.28) 50%,
+    transparent 70%
+  );
+  filter: blur(45px);
+
+  animation: orbFloat5 28s ease-in-out infinite;
+  animation-delay: -5s;
+}
+
+/* ============================================================
+   KEYFRAMES — SOLO transform (GPU compositor thread)
+   Nessuna proprietà che causa layout o paint
+   ============================================================ */
+
+@keyframes orbFloat1 {
+  0%   { transform: translate3d(0,    0,   0) scale3d(1,    1,    1); }
+  25%  { transform: translate3d(7vw,  5vh,  0) scale3d(1.08, 1.08, 1); }
+  50%  { transform: translate3d(3vw,  12vh, 0) scale3d(0.92, 0.92, 1); }
+  75%  { transform: translate3d(-4vw, 7vh,  0) scale3d(1.04, 1.04, 1); }
+  100% { transform: translate3d(0,    0,   0) scale3d(1,    1,    1); }
+}
+
+@keyframes orbFloat2 {
+  0%   { transform: translate3d(0,    0,   0) scale3d(1,    1,    1); }
+  30%  { transform: translate3d(-8vw, -6vh, 0) scale3d(1.1,  1.1,  1); }
+  60%  { transform: translate3d(-3vw, -12vh,0) scale3d(0.9,  0.9,  1); }
+  80%  { transform: translate3d(5vw,  -4vh, 0) scale3d(1.06, 1.06, 1); }
+  100% { transform: translate3d(0,    0,   0) scale3d(1,    1,    1); }
+}
+
+@keyframes orbFloat3 {
+  0%   { transform: translate3d(0,    0,   0) scale3d(1,    1,    1); }
+  20%  { transform: translate3d(-6vw, 8vh,  0) scale3d(1.1,  1.1,  1); }
+  50%  { transform: translate3d(7vw,  5vh,  0) scale3d(0.9,  0.9,  1); }
+  75%  { transform: translate3d(3vw,  -6vh, 0) scale3d(1.05, 1.05, 1); }
+  100% { transform: translate3d(0,    0,   0) scale3d(1,    1,    1); }
+}
+
+@keyframes orbFloat4 {
+  0%   { transform: translate3d(0,    0,   0) scale3d(1,    1,    1); }
+  35%  { transform: translate3d(3vw,  6vh,  0) scale3d(0.9,  0.9,  1); }
+  65%  { transform: translate3d(-4vw, 2vh,  0) scale3d(1.1,  1.1,  1); }
+  100% { transform: translate3d(0,    0,   0) scale3d(1,    1,    1); }
+}
+
+@keyframes orbFloat5 {
+  0%   { transform: translate3d(0,    0,   0) scale3d(1,    1,    1); }
+  40%  { transform: translate3d(5vw,  -6vh, 0) scale3d(1.07, 1.07, 1); }
+  70%  { transform: translate3d(2vw,  -2vh, 0) scale3d(0.93, 0.93, 1); }
+  100% { transform: translate3d(0,    0,   0) scale3d(1,    1,    1); }
+}
+
+/* ── Noise overlay — vetro smerigliato leggero ────────────── */
+.rp-bg__noise {
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+  opacity: 0.04;
+  pointer-events: none;
+  contain: strict;
+}
+
+/* ============================================================
+   STAGGERED FADE-IN — Componenti UI
+   cubic-bezier(0.16, 1, 0.3, 1) = spring morbida Apple-like
+   ============================================================ */
+
+@keyframes rpFadeUp {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 20px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes rpFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes rpScaleIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0) scale3d(0.97, 0.97, 1);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
+  }
+}
+
+/* Classi applicabili ai blocchi del TransferForm */
+.rp-anim-0 {
+  animation: rpFadeUp 0.6s var(--ease-spring) both;
+  animation-delay: 0ms;
+}
+.rp-anim-1 {
+  animation: rpFadeUp 0.6s var(--ease-spring) both;
+  animation-delay: 80ms;
+}
+.rp-anim-2 {
+  animation: rpFadeUp 0.6s var(--ease-spring) both;
+  animation-delay: 160ms;
+}
+.rp-anim-3 {
+  animation: rpFadeUp 0.6s var(--ease-spring) both;
+  animation-delay: 240ms;
+}
+.rp-anim-4 {
+  animation: rpFadeUp 0.6s var(--ease-spring) both;
+  animation-delay: 320ms;
+}
+.rp-anim-5 {
+  animation: rpFadeUp 0.6s var(--ease-spring) both;
+  animation-delay: 400ms;
+}
+
+/* ============================================================
+   MICRO-INTERACTIONS — Bottone CTA
+   ============================================================ */
+
+/* Bottone principale — classe helper */
+.rp-btn-primary {
+  position: relative;
+  border: none;
+  cursor: pointer;
+  transition:
+    transform     0.18s var(--ease-spring),
+    box-shadow    0.18s var(--ease-out),
+    background    0.2s  var(--ease-in-out),
+    opacity       0.15s linear;
+
+  will-change: transform, box-shadow;
+  backface-visibility: hidden;
+}
+
+.rp-btn-primary:not(:disabled):hover {
+  transform: translate3d(0, -1px, 0) scale3d(1.02, 1.02, 1);
+}
+
+.rp-btn-primary:not(:disabled):active {
+  transform: translate3d(0, 0, 0) scale3d(0.98, 0.98, 1);
+  transition-duration: 0.08s;
+}
+
+.rp-btn-primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+/* ── Glow dinamico emerald ────────────────────────────────── */
+.rp-btn-glow {
+  box-shadow:
+    0 4px 20px rgba(0, 255, 163, 0.3),
+    0 0 0 0 rgba(0, 255, 163, 0);
+  transition:
+    transform  0.18s var(--ease-spring),
+    box-shadow 0.25s var(--ease-out);
+}
+
+.rp-btn-glow:not(:disabled):hover {
+  box-shadow:
+    0 6px 32px rgba(0, 255, 163, 0.45),
+    0 0 60px  rgba(0, 255, 163, 0.12);
+  transform: translate3d(0, -2px, 0) scale3d(1.02, 1.02, 1);
+}
+
+/* ── Glow rosa per "Connetti wallet" ──────────────────────── */
+.rp-btn-glow-pink {
+  box-shadow: 0 4px 28px rgba(255, 0, 122, 0.4);
+  transition:
+    transform  0.18s var(--ease-spring),
+    box-shadow 0.25s var(--ease-out);
+}
+
+.rp-btn-glow-pink:not(:disabled):hover {
+  box-shadow:
+    0 6px 36px rgba(255, 0, 122, 0.55),
+    0 0 60px  rgba(255, 0, 122, 0.15);
+  transform: translate3d(0, -2px, 0) scale3d(1.02, 1.02, 1);
+}
+
+/* ============================================================
+   FORM CONTAINER — Height transition fluida
+   ============================================================ */
+
+.rp-form-card {
+  /* Height si adatta al contenuto */
+  transition: box-shadow 0.3s var(--ease-out);
+
+  /*
+   * Usa grid per le transizioni di altezza senza JS.
+   * grid-template-rows: 0fr → 1fr anima l'altezza via GPU
+   */
+  will-change: box-shadow;
+  backface-visibility: hidden;
+}
+
+/* Wrapper interno degli slot collassabili */
+.rp-collapsible {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s var(--ease-out);
+  overflow: hidden;
+}
+
+.rp-collapsible.is-open {
+  grid-template-rows: 1fr;
+}
+
+.rp-collapsible__inner {
+  min-height: 0; /* Necessario per grid collapse */
+}
+
+/* ============================================================
+   INPUT FOCUS — Micro-interaction
+   ============================================================ */
+
+.rp-input-box {
+  transition:
+    background    0.2s var(--ease-out),
+    border-color  0.2s var(--ease-out),
+    box-shadow    0.2s var(--ease-out);
+}
+
+.rp-input-box:focus-within {
+  box-shadow: 0 0 0 1px rgba(0, 255, 163, 0.25), inset 0 0 20px rgba(0, 255, 163, 0.03);
+}
+
+/* ============================================================
+   TOKEN DROPDOWN — Depth & Glassmorphism leggero
+   Blur adattivo: ridotto su macchine con prefers-reduced-motion
+   ============================================================ */
+
+.rp-dropdown {
+  /* Glassmorphism leggero — 12px max per performance */
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+
+  will-change: transform, opacity;
+  transform-origin: top right;
+}
+
+/* Riduce il blur su macchine più lente / preferenza utente */
+@media (prefers-reduced-motion: reduce) {
+  .rp-dropdown {
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+}
+
+/* ============================================================
+   SPINNER — GPU puro
+   ============================================================ */
+
+@keyframes rpSpin {
+  to { transform: rotate(360deg); }
+}
+
+.rp-spinner {
+  animation: rpSpin 0.7s linear infinite;
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+/* ============================================================
+   PROGRESS BAR BALISTICA
+   ============================================================ */
+
+@keyframes rpBallisticGlow {
+  0%, 100% { opacity: 0.6; }
+  50%       { opacity: 1;   }
+}
+
+.rp-progress-glow {
+  animation: rpBallisticGlow 1s ease-in-out infinite;
+  will-change: opacity;
+}
+
+/* ============================================================
+   TOAST — Fade-up dal basso
+   ============================================================ */
+
+@keyframes rpToastIn {
+  from {
+    opacity: 0;
+    transform: translate3d(-50%, 12px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.rp-toast {
+  animation: rpToastIn 0.3s var(--ease-spring) both;
+  will-change: transform, opacity;
+}
+
+/* ============================================================
+   RISK BADGE — Pulse
+   ============================================================ */
+
+@keyframes rpPulse {
+  0%, 100% { opacity: 1;   transform: scale3d(1,    1, 1); }
+  50%       { opacity: 0.6; transform: scale3d(0.95, 0.95, 1); }
+}
+
+.rp-pulse {
+  animation: rpPulse 2s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+/* ============================================================
+   UTILITY — Performance helpers
+   ============================================================ */
+
+/* Forza GPU layer su qualsiasi elemento */
+.rp-gpu {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+/* Contenuto non interattivo al di sopra del background */
+.rp-content {
+  position: relative;
+  z-index: 1;
+}
+
+/* ============================================================
+   RESPONSIVE — Media queries senza JS
+   ============================================================ */
+
+@media (max-width: 640px) {
+  .rp-orb--1 { width: 80vw; height: 80vw; filter: blur(30px); }
+  .rp-orb--2 { width: 70vw; height: 70vw; filter: blur(35px); }
+  .rp-orb--3 { width: 55vw; height: 55vw; filter: blur(30px); }
+  .rp-orb--4 { display: none; }
+  .rp-orb--5 { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rp-orb--1,
+  .rp-orb--2,
+  .rp-orb--3,
+  .rp-orb--4,
+  .rp-orb--5 {
+    animation: none;
+  }
+
+  .rp-anim-0, .rp-anim-1, .rp-anim-2,
+  .rp-anim-3, .rp-anim-4, .rp-anim-5 {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+/* ============================================================
+   FORM LABELS — Bold display font per Sell / Receive / Invia
+   ============================================================ */
+
+/* Override per le label Sell/Receive nel TransferForm */
+.rp-label {
+  font-family: var(--font-display) !important;
+  font-weight: 700 !important;
+  font-size:   13px;
+  letter-spacing: -0.01em;
+  color: var(--c-muted);
+}
+
+/* Header "Invia" */
+.rp-title {
+  font-family:    var(--font-display) !important;
+  font-weight:    800 !important;
+  font-size:      15px;
+  letter-spacing: -0.02em;
+  color: var(--c-text);
+}
+
+/* Big number input */
+.rp-big-num {
+  font-family:    var(--font-display) !important;
+  font-weight:    300;
+  font-size:      2.5rem;
+  letter-spacing: -0.03em;
+  line-height:    1;
+}
+
+/* Section title uppercase (DESTINATARIO, DAC8...) */
+.rp-section-title {
+  font-family:    var(--font-mono) !important;
+  font-weight:    700 !important;
+  font-size:      11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--c-muted);
+}
