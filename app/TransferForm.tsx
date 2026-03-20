@@ -556,6 +556,18 @@ export default function TransferForm(): React.JSX.Element {
       // DEBUG
       console.log('[rp_tx] execDirect →', { contract: registry.feeRouter, fn: tokenIn.isNative ? 'transferETHWithOracle' : 'transferWithOracle', token: tokenIn.address, amount: r?.toString(), recipient, nonce: oracle.oracleNonce, deadline: oracle.oracleDeadline, sig: oracle.oracleSignature?.slice(0,10) })
       if (tokenIn.isNative) {
+        // Debug: logga tutto prima di inviare per confrontare con il contratto
+        console.log('[rp_tx] transferETHWithOracle args:', {
+          feeRouter:      registry.feeRouter,
+          recipient:      getAddress(recipient),
+          nonce:          oracle.oracleNonce,
+          nonceLen:       oracle.oracleNonce?.length,
+          deadline:       oracle.oracleDeadline,
+          sigSlice:       oracle.oracleSignature?.slice(0, 20),
+          value:          r?.toString(),
+          chainId,
+          contractSigner: (oracle as OracleResponse & { _debug?: { signer?: string } })._debug?.signer,
+        })
         hash = await writeContractAsync({
           address: registry.feeRouter, abi: FEE_ROUTER_ABI,
           functionName: 'transferETHWithOracle',
@@ -622,6 +634,16 @@ export default function TransferForm(): React.JSX.Element {
 
   const handleTransfer = async () => {
     const r = parseAmtIn(); if (!r || !tokenIn || !validateAddr(recipient) || !registry) return
+
+    // ── GUARD: contratto non deployato su questa chain ─────────────────────
+    const ZERO_ADDR = '0x0000000000000000000000000000000000000000'
+    if (!registry.feeRouter || registry.feeRouter === ZERO_ADDR) {
+      setToast({
+        msg: `⚠ Contratto non configurato su ${registry.chainName}. Passa a Base Sepolia o aggiungi NEXT_PUBLIC_FEE_ROUTER_V4_BASE_SEPOLIA su Vercel.`,
+        color: T.red,
+      })
+      return
+    }
     if (!tokenIn.isNative) {
       const tokenChains = findChainForToken(tokenIn.symbol)
       if (!tokenChains.includes(chainId)) {
@@ -1039,7 +1061,7 @@ export default function TransferForm(): React.JSX.Element {
             ) : (
               <button
                 onClick={
-                  ctaState === 'wrong_network' ? () => switchChain({ chainId: 8453 })
+                  ctaState === 'wrong_network' ? () => switchChain({ chainId: 84532 })
                   : ctaState === 'ready' ? handleTransfer
                   : undefined
                 }

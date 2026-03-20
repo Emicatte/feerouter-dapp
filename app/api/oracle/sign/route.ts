@@ -1,49 +1,50 @@
-/**
- * app/api/oracle/sign/route.ts — Oracle EIP-712 interno
- *
- * FIX CRITICO: signMessage() aggiunge il prefisso Ethereum (\x19Ethereum Signed Message\n32)
- * sopra al digest EIP-712 che ha già \x19\x01 → doppio prefisso → firma sbagliata
- * → contratto recupera address(0) → MetaMask dice "burn address"
- *
- * SOLUZIONE: account.sign({ hash: digest }) firma il raw hash senza prefissi aggiuntivi,
- * esattamente come ECDSA.recover(digest, sig) nel contratto Solidity.
- */
-
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse }  from 'next/server'
 import {
-  keccak256,
-  encodePacked,
-  encodeAbiParameters,
-  parseAbiParameters,
-  parseUnits,
-  parseEther,
-  toHex,
-  type Hex,
+  keccak256, toHex, type Hex,
+  recoverTypedDataAddress,           // ← self-verifica firma
 } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
-import { randomBytes } from 'crypto'
+import { randomBytes }         from 'crypto'
 
 // ── Config ─────────────────────────────────────────────────────────────────
 const ORACLE_PRIVATE_KEY = process.env.ORACLE_PRIVATE_KEY as Hex | undefined
 
-const ROUTER_BY_CHAIN: Record<number, `0x${string}`> = {
-  8453:  (process.env.NEXT_PUBLIC_FEE_ROUTER_V4_BASE
-       ?? process.env.NEXT_PUBLIC_FEE_ROUTER_V3_ADDRESS
-       ?? process.env.NEXT_PUBLIC_FEE_ROUTER_ADDRESS
-       ?? '0x0000000000000000000000000000000000000000') as `0x${string}`,
-  84532: (process.env.NEXT_PUBLIC_FEE_ROUTER_V3_ADDRESS
-       ?? process.env.NEXT_PUBLIC_FEE_ROUTER_ADDRESS
-       ?? '0x0000000000000000000000000000000000000000') as `0x${string}`,
-  1:     (process.env.NEXT_PUBLIC_FEE_ROUTER_V4_ETH
-       ?? '0x0000000000000000000000000000000000000000') as `0x${string}`,
+// Legge l'indirizzo del contratto per chain al momento della richiesta
+// (NON a module-load time — evita il problema "env var non letta nel build")
+// ⚠️  Aggiunto NEXT_PUBLIC_FEE_ROUTER_V4_ADDRESS come fallback — è il nome
+//     usato su Vercel quando non si specifica la chain nel nome della var
+function routerForChain(chainId: number): `0x${string}` {
+  const e = (k: string) => process.env[k]
+  switch (chainId) {
+    case 8453:
+      return (
+        e('NEXT_PUBLIC_FEE_ROUTER_V4_BASE') ??
+        e('NEXT_PUBLIC_FEE_ROUTER_V4_ADDRESS') ??
+        e('NEXT_PUBLIC_FEE_ROUTER_V3_ADDRESS') ??
+        e('NEXT_PUBLIC_FEE_ROUTER_ADDRESS') ??
+        '0x0000000000000000000000000000000000000000'
+      ) as `0x${string}`
+    case 84532:
+      return (
+        e('NEXT_PUBLIC_FEE_ROUTER_V4_BASE_SEPOLIA') ??
+        e('NEXT_PUBLIC_FEE_ROUTER_V4_ADDRESS') ??
+        e('NEXT_PUBLIC_FEE_ROUTER_V3_ADDRESS') ??
+        e('NEXT_PUBLIC_FEE_ROUTER_ADDRESS') ??
+        '0x0000000000000000000000000000000000000000'
+      ) as `0x${string}`
+    case 1:
+      return (
+        e('NEXT_PUBLIC_FEE_ROUTER_V4_ETH') ??
+        '0x0000000000000000000000000000000000000000'
+      ) as `0x${string}`
+    default:
+      return '0x0000000000000000000000000000000000000000'
+  }
 }
 
 const EUR_RATES: Record<string, number> = {
-  ETH: 2200, USDC: 0.92, USDT: 0.92, EURC: 1.0, cbBTC: 88000, WBTC: 88000, DEGEN: 0.003,
-}
-
-const DECIMALS_MAP: Record<string, number> = {
-  ETH: 18, USDC: 6, USDT: 6, EURC: 6, CBBTC: 8, WBTC: 8, DEGEN: 18,
+  ETH: 2200, USDC: 0.92, USDT: 0.92, EURC: 1.0,
+  CBBTC: 88000, WBTC: 88000, DEGEN: 0.003,
 }
 
 const BLACKLIST = new Set([
@@ -53,58 +54,18 @@ const BLACKLIST = new Set([
   '0x4736dcf1b7a3d580672cce6e7c65cd5cc9cfba9d',
 ])
 
-// ── EIP-712 — identico al contratto Solidity ────────────────────────────────
-//
-// Solidity:
-//   keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")
-//   keccak256(bytes("FeeRouterV4"))
-//   keccak256(bytes("4"))
-//
-// keccak256(abi.encode(domainTypeHash, nameHash, versionHash, chainId, address(this)))
-
-function domainSeparator(contractAddress: `0x${string}`, chainId: number): Hex {
-  const domainTypeHash = keccak256(toHex(
-    'EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)'
-  ))
-  const nameHash    = keccak256(toHex('FeeRouterV4'))
-  const versionHash = keccak256(toHex('4'))
-
-  return keccak256(encodeAbiParameters(
-    parseAbiParameters('bytes32, bytes32, bytes32, uint256, address'),
-    [domainTypeHash, nameHash, versionHash, BigInt(chainId), contractAddress]
-  ))
-}
-
-// Solidity:
-//   keccak256("OracleApproval(address sender,address recipient,address tokenIn,address tokenOut,uint256 amountIn,bytes32 nonce,uint256 deadline)")
-//   keccak256(abi.encode(TYPEHASH, sender, recipient, tokenIn, tokenOut, amountIn, nonce, deadline))
-
-function structHash(
-  sender:    `0x${string}`,
-  recipient: `0x${string}`,
-  tokenIn:   `0x${string}`,
-  tokenOut:  `0x${string}`,
-  amountIn:  bigint,
-  nonce:     Hex,
-  deadline:  bigint,
-): Hex {
-  const typeHash = keccak256(toHex(
-    'OracleApproval(address sender,address recipient,address tokenIn,address tokenOut,uint256 amountIn,bytes32 nonce,uint256 deadline)'
-  ))
-
-  return keccak256(encodeAbiParameters(
-    parseAbiParameters('bytes32, address, address, address, address, uint256, bytes32, uint256'),
-    [typeHash, sender, recipient, tokenIn, tokenOut, amountIn, nonce, deadline]
-  ))
-}
-
-// Solidity: keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash))
-function eip712Digest(ds: Hex, sh: Hex): Hex {
-  return keccak256(encodePacked(
-    ['bytes2', 'bytes32', 'bytes32'],
-    ['0x1901', ds, sh]
-  ))
-}
+// ── EIP-712 types — identici al contratto FeeRouterV4.sol ─────────────────
+const ORACLE_TYPES = {
+  OracleApproval: [
+    { name: 'sender',    type: 'address' },
+    { name: 'recipient', type: 'address' },
+    { name: 'tokenIn',   type: 'address' },
+    { name: 'tokenOut',  type: 'address' },
+    { name: 'amountIn',  type: 'uint256' },
+    { name: 'nonce',     type: 'bytes32' },
+    { name: 'deadline',  type: 'uint256' },
+  ],
+} as const
 
 // ── POST ────────────────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
@@ -117,8 +78,8 @@ export async function POST(req: NextRequest) {
       recipient,
       tokenIn     = '0x0000000000000000000000000000000000000000',
       tokenOut    = '0x0000000000000000000000000000000000000000',
-      amountIn    = '0',    // formatted string es. "0.001"
-      amountInWei,          // wei string — priorità su amountIn
+      amountInWei,        // ← WEI ESATTI dal frontend — r.toString()
+      amountIn    = '0',  // solo per calcolo EUR
       symbol      = 'ETH',
       chainId     = 84532,
     } = body
@@ -126,12 +87,14 @@ export async function POST(req: NextRequest) {
     if (!sender || !recipient) {
       return NextResponse.json({ error: 'sender e recipient obbligatori' }, { status: 400 })
     }
-
+    if (!amountInWei || amountInWei === '0') {
+      return NextResponse.json({ error: 'amountInWei obbligatorio e > 0' }, { status: 400 })
+    }
     if (!ORACLE_PRIVATE_KEY) {
       return NextResponse.json({
         approved:        false,
         riskLevel:       'BLOCKED',
-        rejectionReason: 'Servizio Oracle non configurato. Aggiungi ORACLE_PRIVATE_KEY.',
+        rejectionReason: 'Servizio Oracle non configurato. Aggiungi ORACLE_PRIVATE_KEY su Vercel.',
       }, { status: 503 })
     }
 
@@ -153,69 +116,101 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Risk score
+    // Risk score (float OK — non entra nella firma)
     const eurRate  = EUR_RATES[symUpper] ?? 1
     const eurValue = parseFloat(amountIn) * eurRate
     let riskScore  = 5
     if (eurValue > 50_000) riskScore = 35
     else if (eurValue > 10_000) riskScore = 20
     else if (eurValue > 5_000)  riskScore = 10
-    const riskLevel   = riskScore >= 80 ? 'BLOCKED' : riskScore >= 60 ? 'HIGH' : riskScore >= 30 ? 'MEDIUM' : 'LOW'
-    const dac8        = eurValue > 1000
+    const riskLevel = riskScore >= 80 ? 'BLOCKED' : riskScore >= 60 ? 'HIGH' : riskScore >= 30 ? 'MEDIUM' : 'LOW'
 
-    // Nonce: bytes32 casuale
-    const nonce = ('0x' + randomBytes(32).toString('hex')) as Hex
+    // amountWei — SOLO BigInt(amountInWei), zero float
+    let amountWei: bigint
+    try { amountWei = BigInt(amountInWei) }
+    catch { return NextResponse.json({ error: `amountInWei non valido: ${amountInWei}` }, { status: 400 }) }
 
-    // Deadline: ora + 20 minuti (1200 secondi)
+    // Nonce: bytes32 (0x + 64 hex = 66 chars totali)
+    const nonce    = ('0x' + randomBytes(32).toString('hex')) as Hex
     const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200)
 
-    // paymentRef + fiscalRef
     const paymentRef = keccak256(toHex(`PAY-${Date.now()}-${randomBytes(4).toString('hex')}`))
     const fiscalRef  = keccak256(toHex(`FISCAL-${symUpper}-${Date.now()}`))
 
-    // amountIn in wei — usa amountInWei dal frontend se disponibile (già in wei esatti)
-    let amountWei: bigint
-    if (amountInWei && amountInWei !== '0') {
-      amountWei = BigInt(amountInWei)
-    } else {
-      const dec = DECIMALS_MAP[symUpper] ?? 18
-      try {
-        amountWei = dec === 18
-          ? parseEther(amountIn || '0')
-          : parseUnits(amountIn || '0', dec)
-      } catch {
-        amountWei = 0n
-      }
+    // Contratto — letto ORA (non a build time)
+    const contractAddr = routerForChain(Number(chainId))
+
+    // ── GUARD: contratto non configurato ──────────────────────────────────
+    const ZERO = '0x0000000000000000000000000000000000000000'
+    if (contractAddr === ZERO) {
+      return NextResponse.json({
+        approved:        false,
+        riskLevel:       'BLOCKED',
+        rejectionReason: `Contratto FeeRouter non deployato su chainId=${chainId}. Aggiungi la env var corretta su Vercel.`,
+        _debug: { chainId, contractAddr, note: 'env var mancante o zero address' },
+      }, { status: 503 })
     }
 
-    // Indirizzo contratto per chain
-    const contractAddr = ROUTER_BY_CHAIN[chainId as number]
-      ?? '0x0000000000000000000000000000000000000000' as `0x${string}`
+    const account = privateKeyToAccount(ORACLE_PRIVATE_KEY)
 
-    console.log('[oracle/sign] →', {
-      chainId, contractAddr,
-      sender: senderN, recipient: recipientN,
-      tokenIn: tokenInN, tokenOut: tokenOutN,
-      amountWei: amountWei.toString(), nonce, deadline: deadline.toString(),
+    // ── Dominio EIP-712 ───────────────────────────────────────────────────
+    const domain = {
+      name:              'FeeRouterV4' as const,
+      version:           '4'           as const,
+      chainId:           Number(chainId),
+      verifyingContract: contractAddr,
+    }
+
+    const message = {
+      sender:    senderN,
+      recipient: recipientN,
+      tokenIn:   tokenInN,
+      tokenOut:  tokenOutN,
+      amountIn:  amountWei,
+      nonce,
+      deadline,
+    }
+
+    console.log('\n[oracle/sign] ═══ FIRMA ═══')
+    console.log('  domain:     ', JSON.stringify({ ...domain, chainId: domain.chainId }))
+    console.log('  sender:     ', senderN)
+    console.log('  recipient:  ', recipientN)
+    console.log('  tokenIn:    ', tokenInN)
+    console.log('  tokenOut:   ', tokenOutN)
+    console.log('  amountWei:  ', amountWei.toString())
+    console.log('  nonce:      ', nonce)
+    console.log('  deadline:   ', deadline.toString())
+    console.log('  signerAddr: ', account.address)
+    console.log('[oracle/sign] ════════════\n')
+
+    // ── Firma EIP-712 ─────────────────────────────────────────────────────
+    const signature = await account.signTypedData({
+      domain, types: ORACLE_TYPES, primaryType: 'OracleApproval', message,
     })
 
-    // EIP-712
-    const ds = domainSeparator(contractAddr, chainId as number)
-    const sh = structHash(senderN, recipientN, tokenInN, tokenOutN, amountWei, nonce, deadline)
-    const digest = eip712Digest(ds, sh)
+    // ── SELF-VERIFICA ─────────────────────────────────────────────────────
+    const recovered = await recoverTypedDataAddress({
+      domain, types: ORACLE_TYPES, primaryType: 'OracleApproval',
+      message, signature,
+    })
 
-    // ── FIRMA RAW — senza prefisso Ethereum ──────────────────────────────
-    // account.sign({ hash }) è equivalente a secp256k1.sign(digest)
-    // → ECDSA.recover(digest, sig) nel contratto recupera l'indirizzo corretto
-    // ❌ NON usare signMessage() → aggiunge \x19Ethereum Signed Message\n32
-    const account   = privateKeyToAccount(ORACLE_PRIVATE_KEY)
-    const sigResult = await account.sign({ hash: digest })
+    if (recovered.toLowerCase() !== account.address.toLowerCase()) {
+      console.error('[oracle/sign] ❌ SELF-VERIFICA FALLITA')
+      console.error('  recovered: ', recovered)
+      console.error('  expected:  ', account.address)
+      return NextResponse.json({
+        approved:        false,
+        riskLevel:       'BLOCKED',
+        rejectionReason: 'Errore interno: firma non verificabile. Contatta il supporto.',
+        _debug: { recovered, expected: account.address },
+      }, { status: 500 })
+    }
 
-    console.log('[oracle/sign] ✅ signed:', { signer: account.address, sig: sigResult.slice(0,20)+'...' })
+    console.log('[oracle/sign] ✅ self-verifica OK — recovered:', recovered)
 
     return NextResponse.json({
       approved:        true,
-      oracleSignature: sigResult,
+      oracleSignature: signature,
       oracleNonce:     nonce,
       oracleDeadline:  Number(deadline),
       paymentRef,
@@ -223,16 +218,18 @@ export async function POST(req: NextRequest) {
       riskScore,
       riskLevel,
       jurisdiction:    'EU_UNKNOWN',
-      dac8Reportable:  dac8,
+      dac8Reportable:  eurValue > 1000,
       eurValue:        Math.round(eurValue * 100) / 100,
       isEurc:          symUpper === 'EURC',
       isSwap:          tokenInN !== tokenOutN,
-      sourceChain:     chainId === 8453 ? 'BASE' : chainId === 1 ? 'ETHEREUM' : 'BASE_SEPOLIA',
-      gasless:         chainId !== 1,
-      debug: {
+      sourceChain:     Number(chainId) === 8453 ? 'BASE' : Number(chainId) === 1 ? 'ETHEREUM' : 'BASE_SEPOLIA',
+      gasless:         Number(chainId) !== 1,
+      _debug: {
         contractAddr,
         amountWei: amountWei.toString(),
-        signer: account.address,
+        signer:    account.address,
+        recovered,
+        chainId:   Number(chainId),
       },
     })
 
@@ -243,23 +240,83 @@ export async function POST(req: NextRequest) {
       approved:        false,
       error:           message,
       riskLevel:       'BLOCKED',
-      rejectionReason: 'Errore interno Oracle: ' + message.slice(0, 80),
+      rejectionReason: 'Errore interno Oracle: ' + message.slice(0, 100),
     }, { status: 500 })
   }
 }
 
-// GET — health check + debug
+// ── GET — health check ──────────────────────────────────────────────────────
 export async function GET() {
   const account = ORACLE_PRIVATE_KEY
     ? privateKeyToAccount(ORACLE_PRIVATE_KEY as Hex)
     : null
 
+  // Mostra i router letti NOW (non da build cache)
+  const routers = {
+    8453:     routerForChain(8453),
+    84532:    routerForChain(84532),
+    1:        routerForChain(1),
+  }
+
+  // ── Debug: verifica dominio EIP-712 ────────────────────────────────────
+  const { keccak256: k256, encodeAbiParameters, parseAbiParameters } = await import('viem')
+  function computeDomainHash(name: string, version: string, chainId: number, verifyingContract: string): string {
+    try {
+      const encoded = encodeAbiParameters(
+        parseAbiParameters('bytes32, bytes32, bytes32, uint256, address'),
+        [
+          k256(new TextEncoder().encode('EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)')),
+          k256(new TextEncoder().encode(name)),
+          k256(new TextEncoder().encode(version)),
+          BigInt(chainId),
+          verifyingContract as `0x${string}`,
+        ]
+      )
+      return k256(encoded)
+    } catch { return 'errore calcolo' }
+  }
+
+  const domainDebug = {
+    84532: routers[84532] !== '0x0000000000000000000000000000000000000000'
+      ? computeDomainHash('FeeRouterV4', '4', 84532, routers[84532])
+      : 'N/A — contratto non configurato',
+    8453: routers[8453] !== '0x0000000000000000000000000000000000000000'
+      ? computeDomainHash('FeeRouterV4', '4', 8453, routers[8453])
+      : 'N/A — contratto non configurato',
+  }
+
   return NextResponse.json({
     status:        'online',
-    version:       '4.1.0',
-    signerAddress: account?.address ?? 'NOT_CONFIGURED',
+    version:       '4.6.0',
     configured:    !!ORACLE_PRIVATE_KEY,
-    routers:       ROUTER_BY_CHAIN,
-    note:          'Usa account.sign({hash}) per firma EIP-712 raw (no prefisso Ethereum)',
+    signerAddress: account?.address ?? 'NOT_CONFIGURED — aggiungi ORACLE_PRIVATE_KEY',
+    routers,
+    domainSeparatorHash: domainDebug,
+    checklist: {
+      '1_signer_match': {
+        istruzione: 'signerAddress sopra deve essere IDENTICO a oracleSigner() sul contratto deployato',
+        comeVerificare: 'Basescan Sepolia → indirizzo contratto → Read Contract → oracleSigner()',
+        seDiseguali: 'Correggi ORACLE_PRIVATE_KEY su Vercel — usa la chiave privata del wallet impostato come oracleSigner nel costruttore',
+      },
+      '2_router_address': {
+        istruzione: 'routers[84532] sopra deve = indirizzo contratto FeeRouterV4 su Base Sepolia',
+        seZeroAddress: 'Aggiungi NEXT_PUBLIC_FEE_ROUTER_V4_BASE_SEPOLIA su Vercel con l\'indirizzo del contratto e RIDEPLOYA',
+        nota: 'La env var NEXT_PUBLIC_* è baked-in al build — serve rebuild dopo ogni modifica',
+      },
+      '3_domain_separator': {
+        istruzione: 'domainSeparatorHash[84532] sopra deve = domainSeparator() sul contratto',
+        comeVerificare: 'Basescan Sepolia → contratto → Read Contract → domainSeparator()',
+        seDiseguali: 'Verifica che name="FeeRouterV4" e version="4" nel costruttore del contratto deployato',
+      },
+    },
+    // ── Debug env vars (valori mascherati per sicurezza) ────────────────
+    envDebug: {
+      NEXT_PUBLIC_FEE_ROUTER_V4_BASE_SEPOLIA: process.env.NEXT_PUBLIC_FEE_ROUTER_V4_BASE_SEPOLIA ? '✅ SET' : '❌ MISSING',
+      NEXT_PUBLIC_FEE_ROUTER_V4_BASE:         process.env.NEXT_PUBLIC_FEE_ROUTER_V4_BASE         ? '✅ SET' : '❌ MISSING',
+      NEXT_PUBLIC_FEE_ROUTER_V4_ADDRESS:      process.env.NEXT_PUBLIC_FEE_ROUTER_V4_ADDRESS      ? '✅ SET' : '❌ MISSING',
+      NEXT_PUBLIC_FEE_ROUTER_V3_ADDRESS:      process.env.NEXT_PUBLIC_FEE_ROUTER_V3_ADDRESS      ? '✅ SET' : '❌ MISSING',
+      NEXT_PUBLIC_FEE_ROUTER_ADDRESS:         process.env.NEXT_PUBLIC_FEE_ROUTER_ADDRESS         ? '✅ SET' : '❌ MISSING',
+      ORACLE_PRIVATE_KEY:                     process.env.ORACLE_PRIVATE_KEY                     ? '✅ SET' : '❌ MISSING',
+    },
   })
 }

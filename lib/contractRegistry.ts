@@ -7,13 +7,13 @@
  *   84532  — Base Sepolia    ✅
  *   11155111 — Sepolia       (solo ETH)
  *
- * feeRouter per chain:
- *   Base Mainnet  → NEXT_PUBLIC_FEE_ROUTER_V4_BASE
- *                   || NEXT_PUBLIC_FEE_ROUTER_V3_ADDRESS  (fallback)
- *                   || NEXT_PUBLIC_FEE_ROUTER_ADDRESS     (fallback legacy)
- *   Base Sepolia  → NEXT_PUBLIC_FEE_ROUTER_V3_ADDRESS
- *                   || NEXT_PUBLIC_FEE_ROUTER_ADDRESS
- *   Ethereum      → NEXT_PUBLIC_FEE_ROUTER_V4_ETH
+ * ⚠️  IMPORTANTE — NEXT_PUBLIC_* e Next.js:
+ *   Next.js sostituisce process.env.NEXT_PUBLIC_* SOLO quando la chiave
+ *   è scritta come stringa letterale nel codice sorgente.
+ *   NON funziona con accesso dinamico tipo process.env[variabile].
+ *   Ogni riferimento deve essere esplicito:
+ *     ✅  process.env.NEXT_PUBLIC_FEE_ROUTER_V4_BASE_SEPOLIA
+ *     ❌  const k = 'NEXT_PUBLIC_FEE_ROUTER_V4_BASE_SEPOLIA'; process.env[k]
  */
 
 export type ChainId = number
@@ -140,30 +140,45 @@ const ETH_MAINNET_TOKENS: Record<string, TokenConfig> = {
   },
 }
 
-// ── Helper: legge feeRouter con cascata di fallback ────────────────────────
-// Cerca in ordine: V4-specific → V3 generico → legacy
-const env = (key: string) => process.env[key]
+// ══════════════════════════════════════════════════════════════════════════
+//  FIX CRITICO — Accesso LETTERALE a process.env.NEXT_PUBLIC_*
+//
+//  Next.js sostituisce process.env.NEXT_PUBLIC_XYZ con il valore reale
+//  SOLO se la stringa completa "process.env.NEXT_PUBLIC_XYZ" appare nel
+//  codice sorgente. L'accesso dinamico process.env[key] NON viene
+//  sostituito → restituisce sempre undefined lato client.
+//
+//  Prima (BROKEN):
+//    const env = (key: string) => process.env[key]   // ❌ sempre undefined
+//    env('NEXT_PUBLIC_FEE_ROUTER_V4_BASE_SEPOLIA')
+//
+//  Dopo (FIXED):
+//    process.env.NEXT_PUBLIC_FEE_ROUTER_V4_BASE_SEPOLIA   // ✅ inlined
+// ══════════════════════════════════════════════════════════════════════════
 
 function baseFeeRouter(): `0x${string}` {
   return (
-    env('NEXT_PUBLIC_FEE_ROUTER_V4_BASE') ??
-    env('NEXT_PUBLIC_FEE_ROUTER_V3_ADDRESS') ??
-    env('NEXT_PUBLIC_FEE_ROUTER_ADDRESS') ??
+    process.env.NEXT_PUBLIC_FEE_ROUTER_V4_BASE ??
+    process.env.NEXT_PUBLIC_FEE_ROUTER_V4_ADDRESS ??
+    process.env.NEXT_PUBLIC_FEE_ROUTER_V3_ADDRESS ??
+    process.env.NEXT_PUBLIC_FEE_ROUTER_ADDRESS ??
     '0x0000000000000000000000000000000000000000'
   ) as `0x${string}`
 }
 
 function sepoliaFeeRouter(): `0x${string}` {
   return (
-    env('NEXT_PUBLIC_FEE_ROUTER_V3_ADDRESS') ??
-    env('NEXT_PUBLIC_FEE_ROUTER_ADDRESS') ??
+    process.env.NEXT_PUBLIC_FEE_ROUTER_V4_BASE_SEPOLIA ??
+    process.env.NEXT_PUBLIC_FEE_ROUTER_V4_ADDRESS ??
+    process.env.NEXT_PUBLIC_FEE_ROUTER_V3_ADDRESS ??
+    process.env.NEXT_PUBLIC_FEE_ROUTER_ADDRESS ??
     '0x0000000000000000000000000000000000000000'
   ) as `0x${string}`
 }
 
 function ethFeeRouter(): `0x${string}` {
   return (
-    env('NEXT_PUBLIC_FEE_ROUTER_V4_ETH') ??
+    process.env.NEXT_PUBLIC_FEE_ROUTER_V4_ETH ??
     '0x0000000000000000000000000000000000000000'
   ) as `0x${string}`
 }
