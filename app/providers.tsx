@@ -15,24 +15,45 @@ import '@rainbow-me/rainbowkit/styles.css'
 import { useState, useEffect, createContext, useContext } from 'react'
 import { useChainId, useSwitchChain } from 'wagmi'
 
+// ── Valori letterali — necessari per Wagmi v2 type safety ──────────────────
+// NON usare base.id / mainnet.id nelle chiamate switchChain o confronti:
+// quei campi sono tipizzati come `number`, non come `8453 | 1 | ...`
+const CHAIN = {
+  BASE:         8453   as const,
+  MAINNET:      1      as const,
+  BASE_SEPOLIA: 84532  as const,
+  SEPOLIA:      11155111 as const,
+} as const
+
+type SupportedChainId = typeof CHAIN[keyof typeof CHAIN]
+
 const WC_PROJECT_ID = process.env.NEXT_PUBLIC_WC_PROJECT_ID!
 
 const connectors = connectorsForWallets(
   [
-    { groupName: 'Raccomandati', wallets: [metaMaskWallet, coinbaseWallet, rainbowWallet] },
-    { groupName: 'Altri', wallets: [walletConnectWallet, trustWallet, ledgerWallet, injectedWallet] },
+    {
+      groupName: 'Raccomandati',
+      wallets:   [metaMaskWallet, coinbaseWallet, rainbowWallet],
+    },
+    {
+      groupName: 'Altri',
+      wallets:   [walletConnectWallet, trustWallet, ledgerWallet, injectedWallet],
+    },
   ],
   { appName: 'RPagos — Omni-chain Gateway', projectId: WC_PROJECT_ID }
 )
 
+// ── Wagmi config ───────────────────────────────────────────────────────────
+// Usiamo le chain objects per createConfig (necessario per metadata)
+// ma i chainId numerici per tutto il resto
 const config = createConfig({
-  chains:     [base, mainnet, baseSepolia, sepolia],
+  chains:     [base, mainnet, baseSepolia, sepolia] as const,
   connectors,
   transports: {
-    [base.id]:        http(),
-    [mainnet.id]:     http(),
-    [baseSepolia.id]: http(),
-    [sepolia.id]:     http(),
+    [CHAIN.BASE]:         http(),
+    [CHAIN.MAINNET]:      http(),
+    [CHAIN.BASE_SEPOLIA]: http(),
+    [CHAIN.SEPOLIA]:      http(),
   },
   ssr: false,
 })
@@ -43,8 +64,7 @@ function makeQueryClient() {
   })
 }
 
-const SUPPORTED_IDS = [1, 8453, 84532, 11155111]
-
+// ── Chain Guard ────────────────────────────────────────────────────────────
 interface ChainGuardCtx {
   isCorrectChain:  boolean
   isL2:            boolean
@@ -57,18 +77,20 @@ interface ChainGuardCtx {
 const ChainGuardContext = createContext<ChainGuardCtx>({
   isCorrectChain:  true,
   isL2:            true,
-  currentChainId:  8453,
+  currentChainId:  CHAIN.BASE,
   switchToBase:    () => {},
   switchToMainnet: () => {},
   gasWarning:      null,
 })
 
 function ChainGuardProvider({ children }: { children: React.ReactNode }) {
-  const chainId            = useChainId()
-  const { switchChain }    = useSwitchChain()
-  const isCorrectChain     = SUPPORTED_IDS.includes(chainId)
-  const isL2               = chainId === 8453 || chainId === 84532
-  const gasWarning         = !isL2 && isCorrectChain
+  const chainId         = useChainId()
+  const { switchChain } = useSwitchChain()
+
+  const supported: readonly number[] = [CHAIN.BASE, CHAIN.MAINNET, CHAIN.BASE_SEPOLIA, CHAIN.SEPOLIA]
+  const isCorrectChain = supported.includes(chainId)
+  const isL2           = chainId === CHAIN.BASE || chainId === CHAIN.BASE_SEPOLIA
+  const gasWarning     = !isL2 && isCorrectChain
     ? 'Gas su Ethereum L1 è più costoso. Usa Base per transazioni minori.'
     : null
 
@@ -77,8 +99,9 @@ function ChainGuardProvider({ children }: { children: React.ReactNode }) {
       isCorrectChain,
       isL2,
       currentChainId:  chainId,
-      switchToBase:    () => switchChain({ chainId: 8453 }),
-      switchToMainnet: () => switchChain({ chainId: 1 }),
+      // Valori letterali → TypeScript soddisfatto
+      switchToBase:    () => switchChain({ chainId: CHAIN.BASE }),
+      switchToMainnet: () => switchChain({ chainId: CHAIN.MAINNET }),
       gasWarning,
     }}>
       {children}
@@ -102,7 +125,14 @@ function GasWarningBanner() {
       fontFamily: 'var(--font-display)', fontSize: 13,
     }}>
       <span>⚠ {gasWarning}</span>
-      <button onClick={switchToBase} style={{ padding: '3px 12px', borderRadius: 6, border: 'none', background: 'rgba(0,0,0,0.2)', color: '#fff', fontWeight: 700, cursor: 'pointer', fontSize: 12 }}>
+      <button
+        onClick={switchToBase}
+        style={{
+          padding: '3px 12px', borderRadius: 6, border: 'none',
+          background: 'rgba(0,0,0,0.2)', color: '#fff',
+          fontWeight: 700, cursor: 'pointer', fontSize: 12,
+        }}
+      >
         Passa a Base →
       </button>
     </div>
@@ -139,6 +169,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   )
 }
 
+// ── Export chain constants per uso nel resto dell'app ──────────────────────
+export { CHAIN, type SupportedChainId }
+
 export function decodeWalletError(error: unknown): {
   message: string; type: string; isUserAction: boolean
 } {
@@ -151,7 +184,7 @@ export function decodeWalletError(error: unknown): {
   if (raw.includes('MEVGuard'))
     return { message: 'Slippage non configurato.', type: 'mev', isUserAction: false }
   if (raw.includes('InsufficientLiquidity'))
-    return { message: 'Liquidità insufficiente. Riduci l\'importo o cambia token.', type: 'liquidity', isUserAction: false }
+    return { message: "Liquidità insufficiente. Riduci l'importo o cambia token.", type: 'liquidity', isUserAction: false }
   if (raw.includes('SlippageExceeded'))
     return { message: 'Slippage superato. Riprova.', type: 'slippage', isUserAction: false }
   if (raw.includes('insufficient funds'))
