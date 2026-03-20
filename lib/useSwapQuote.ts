@@ -1,23 +1,19 @@
 /**
  * lib/useSwapQuote.ts — Real-Time Uniswap V3 Quote Engine
  *
- * Usa il Quoter V2 di Uniswap per ottenere quote on-chain tramite staticCall.
- * Debounce 600ms — si attiva mentre l'utente digita.
- *
- * Output: "Il destinatario riceverà circa 2.985 USDC (Slippage 0.5%)"
- *
- * Quoter V2 (deterministico su tutte le chain):
- *   Mainnet + Base: 0x61fFE014bA17989E743c5F6cB21bF9697530B21e
+ * Upgrade: pool fee discovery dinamica
+ *   - Prova in sequenza: 500 → 3000 → 100 → 10000
+ *   - ETH nativo → WETH automatico dal registry
+ *   - error_liquidity solo se TUTTI i tier falliscono
  */
 
 import { useState, useEffect, useRef } from 'react'
 import { usePublicClient } from 'wagmi'
 import { formatUnits, parseUnits, parseEther, type Abi } from 'viem'
-import { getRegistry, POOL_FEE, type TokenConfig } from './contractRegistry'
+import { getRegistry, type TokenConfig } from './contractRegistry'
 
 const QUOTER_V2_ADDRESS = '0x61fFE014bA17989E743c5F6cB21bF9697530B21e' as `0x${string}`
 
-// QuoterV2 ABI — solo quoteExactInputSingle
 const QUOTER_V2_ABI: Abi = [
   {
     name: 'quoteExactInputSingle',
@@ -28,51 +24,52 @@ const QUOTER_V2_ABI: Abi = [
         name: 'params',
         type: 'tuple',
         components: [
-          { name: 'tokenIn',            type: 'address' },
-          { name: 'tokenOut',           type: 'address' },
-          { name: 'amountIn',           type: 'uint256' },
-          { name: 'fee',                type: 'uint24'  },
-          { name: 'sqrtPriceLimitX96',  type: 'uint160' },
+          { name: 'tokenIn',           type: 'address' },
+          { name: 'tokenOut',          type: 'address' },
+          { name: 'amountIn',          type: 'uint256' },
+          { name: 'fee',               type: 'uint24'  },
+          { name: 'sqrtPriceLimitX96', type: 'uint160' },
         ],
       },
     ],
     outputs: [
-      { name: 'amountOut',                type: 'uint256' },
-      { name: 'sqrtPriceX96After',        type: 'uint160' },
-      { name: 'initializedTicksCrossed',  type: 'uint32'  },
-      { name: 'gasEstimate',              type: 'uint256' },
+      { name: 'amountOut',               type: 'uint256' },
+      { name: 'sqrtPriceX96After',       type: 'uint160' },
+      { name: 'initializedTicksCrossed', type: 'uint32'  },
+      { name: 'gasEstimate',             type: 'uint256' },
     ],
   },
 ]
+
+// Tier da provare in ordine — le pool più liquide sono solitamente 500 e 3000
+const FEE_TIERS = [500, 3000, 100, 10000] as const
 
 export type QuoteStatus =
   | 'idle'
   | 'loading'
   | 'success'
-  | 'error_liquidity'   // pool non ha abbastanza liquidità
-  | 'error_network'     // RPC error
-  | 'error_same_token'  // tokenIn === tokenOut
-  | 'error_amount'      // amount non valido
+  | 'error_liquidity'
+  | 'error_network'
+  | 'error_same_token'
+  | 'error_amount'
 
 export interface SwapQuote {
-  status:         QuoteStatus
-  amountOut:      bigint        // raw wei
-  amountOutFmt:   string        // formatted (es. "2985.123456")
-  netAmountOut:   bigint        // dopo fee 0.5%
-  netAmountFmt:   string        // formatted
-  feeAmount:      bigint
-  feeFmt:         string
-  minAmountOut:   bigint        // amountOut * (1 - slippage)
-  priceImpact?:   number        // % stimato
-  poolFee:        number        // 100 | 500 | 3000 | 10000
-  gasEstimate?:   bigint
-  errorMessage?:  string
+  status:        QuoteStatus
+  amountOut:     bigint
+  amountOutFmt:  string
+  netAmountOut:  bigint
+  netAmountFmt:  string
+  feeAmount:     bigint
+  feeFmt:        string
+  minAmountOut:  bigint
+  poolFee:       number    // tier che ha risposto con successo
+  gasEstimate?:  bigint
+  errorMessage?: string
 }
 
-// Slippage default 0.5% — configurabile
-const DEFAULT_SLIPPAGE_BPS = 50  // 0.5%
+const DEFAULT_SLIPPAGE_BPS = 50
 
-function calcSplitBigInt(amount: bigint, feeBps: number) {
+function calcSplit(amount: bigint, feeBps: number) {
   const fee = (amount * BigInt(feeBps)) / 10_000n
   return { net: amount - fee, fee }
 }
@@ -81,141 +78,150 @@ function applySlippage(amount: bigint, slippageBps: number): bigint {
   return (amount * BigInt(10_000 - slippageBps)) / 10_000n
 }
 
+// Risolve ETH nativo → indirizzo WETH della chain corrente
+function resolveAddr(token: TokenConfig, weth: `0x${string}`): `0x${string}` {
+  if (token.isNative || token.address === '0x0000000000000000000000000000000000000000') {
+    return weth
+  }
+  return token.address
+}
+
 export function useSwapQuote({
   chainId,
   tokenIn,
   tokenOut,
-  amountIn,    // stringa formattata, es. "1.5"
-  feeBps = 50, // fee gateway
+  amountIn,
+  feeBps = 50,
   slippageBps = DEFAULT_SLIPPAGE_BPS,
   debounceMs = 600,
 }: {
-  chainId:     number
-  tokenIn:     TokenConfig | null
-  tokenOut:    TokenConfig | null
-  amountIn:    string
-  feeBps?:     number
+  chainId:      number
+  tokenIn:      TokenConfig | null
+  tokenOut:     TokenConfig | null
+  amountIn:     string
+  feeBps?:      number
   slippageBps?: number
-  debounceMs?: number
+  debounceMs?:  number
 }) {
   const publicClient = usePublicClient({ chainId })
   const [quote, setQuote] = useState<SwapQuote | null>(null)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const abortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
-    // Reset se dati insufficienti
+    // Reset se dati mancanti
     if (!tokenIn || !tokenOut || !amountIn || Number(amountIn) <= 0) {
       setQuote(null); return
     }
 
-    if (tokenIn.symbol === tokenOut.symbol) {
-      setQuote({ status: 'error_same_token', amountOut: 0n, amountOutFmt: '0', netAmountOut: 0n, netAmountFmt: '0', feeAmount: 0n, feeFmt: '0', minAmountOut: 0n, poolFee: 500, errorMessage: 'Token di input e output uguali.' })
+    // Stesso token → nessuno swap necessario
+    if (tokenIn.address === tokenOut.address) {
+      setQuote({
+        status: 'error_same_token', amountOut: 0n, amountOutFmt: '0',
+        netAmountOut: 0n, netAmountFmt: '0', feeAmount: 0n, feeFmt: '0',
+        minAmountOut: 0n, poolFee: 500,
+        errorMessage: 'Token di input e output uguali.',
+      })
       return
     }
 
-    // Debounce
     if (timerRef.current) clearTimeout(timerRef.current)
 
     timerRef.current = setTimeout(async () => {
-      // Stato loading
-      setQuote(prev => prev ? { ...prev, status: 'loading' } : {
-        status: 'loading', amountOut: 0n, amountOutFmt: '...', netAmountOut: 0n, netAmountFmt: '...', feeAmount: 0n, feeFmt: '0', minAmountOut: 0n, poolFee: 500
-      })
+      setQuote(prev => prev
+        ? { ...prev, status: 'loading' }
+        : { status: 'loading', amountOut: 0n, amountOutFmt: '…', netAmountOut: 0n, netAmountFmt: '…', feeAmount: 0n, feeFmt: '0', minAmountOut: 0n, poolFee: 500 }
+      )
 
       const registry = getRegistry(chainId)
-      if (!registry) return
+      if (!registry || !publicClient) {
+        setQuote({ status: 'error_network', amountOut: 0n, amountOutFmt: '0', netAmountOut: 0n, netAmountFmt: '0', feeAmount: 0n, feeFmt: '0', minAmountOut: 0n, poolFee: 500, errorMessage: 'Rete non supportata.' })
+        return
+      }
 
-      // Converti amountIn in wei
+      // Converti amount → wei
       let amountInWei: bigint
       try {
-        amountInWei = tokenIn.isNative
-          ? parseEther(amountIn)
-          : parseUnits(amountIn, tokenIn.decimals)
+        amountInWei = tokenIn.isNative ? parseEther(amountIn) : parseUnits(amountIn, tokenIn.decimals)
       } catch {
         setQuote({ status: 'error_amount', amountOut: 0n, amountOutFmt: '0', netAmountOut: 0n, netAmountFmt: '0', feeAmount: 0n, feeFmt: '0', minAmountOut: 0n, poolFee: 500, errorMessage: 'Importo non valido.' })
         return
       }
 
-      // tokenIn address per Uniswap (ETH nativo → WETH)
-      const tokenInAddr = tokenIn.isNative
-        ? registry.weth
-        : tokenIn.address
+      // Risolvi ETH → WETH usando il registry della chain corrente
+      const addrIn  = resolveAddr(tokenIn,  registry.weth)
+      const addrOut = resolveAddr(tokenOut, registry.weth)
 
-      const tokenOutAddr = tokenOut.address
+      // ── Prova tutti i fee tier in sequenza ─────────────────────────────
+      let lastError = ''
 
-      // Pool fee — usa override se configurato, altrimenti poolFeeToWETH
-      const poolFee = tokenIn.poolFeeToWETH || tokenOut.poolFeeToWETH || POOL_FEE.LOW
+      for (const fee of FEE_TIERS) {
+        try {
+          const result = await publicClient.simulateContract({
+            address:      QUOTER_V2_ADDRESS,
+            abi:          QUOTER_V2_ABI,
+            functionName: 'quoteExactInputSingle',
+            args: [{
+              tokenIn:           addrIn,
+              tokenOut:          addrOut,
+              amountIn:          amountInWei,
+              fee,
+              sqrtPriceLimitX96: 0n,
+            }],
+          })
 
-      try {
-        // staticCall al Quoter V2
-        if (!publicClient) throw new Error('No public client')
+          const [amountOut, , , gasEstimate] = result.result as [bigint, bigint, number, bigint]
 
-        const result = await publicClient.simulateContract({
-          address:      QUOTER_V2_ADDRESS,
-          abi:          QUOTER_V2_ABI,
-          functionName: 'quoteExactInputSingle',
-          args: [{
-            tokenIn:            tokenInAddr,
-            tokenOut:           tokenOutAddr,
-            amountIn:           amountInWei,
-            fee:                poolFee,
-            sqrtPriceLimitX96:  0n,
-          }],
-        })
+          // Risposta valida — amountOut > 0
+          if (amountOut > 0n) {
+            const { net, fee: gatewayFee } = calcSplit(amountOut, feeBps)
+            const minAmountOut = applySlippage(net, slippageBps)
+            const dec = tokenOut.decimals
 
-        const [amountOut, , , gasEstimate] = result.result as [bigint, bigint, number, bigint]
+            setQuote({
+              status:       'success',
+              amountOut,
+              amountOutFmt: parseFloat(formatUnits(amountOut, dec)).toFixed(dec > 8 ? 6 : dec),
+              netAmountOut: net,
+              netAmountFmt: parseFloat(formatUnits(net, dec)).toFixed(dec > 8 ? 6 : dec),
+              feeAmount:    gatewayFee,
+              feeFmt:       parseFloat(formatUnits(gatewayFee, dec)).toFixed(dec > 8 ? 8 : dec),
+              minAmountOut,
+              poolFee:      fee,      // tier che ha risposto
+              gasEstimate,
+            })
+            return  // successo → esci dal loop
+          }
+          // amountOut === 0 → pool esiste ma senza liquidità, prova il prossimo tier
+          lastError = `Pool ${fee} senza liquidità.`
 
-        if (amountOut === 0n) {
-          setQuote({ status: 'error_liquidity', amountOut: 0n, amountOutFmt: '0', netAmountOut: 0n, netAmountFmt: '0', feeAmount: 0n, feeFmt: '0', minAmountOut: 0n, poolFee, errorMessage: 'Liquidità insufficiente in questa pool.' })
-          return
+        } catch (e) {
+          // Pool non esiste su questo tier → prova il successivo
+          lastError = e instanceof Error ? e.message : String(e)
+          continue
         }
-
-        // Calcola split (fee 0.5% gateway)
-        const { net, fee } = calcSplitBigInt(amountOut, feeBps)
-
-        // Slippage su netAmount
-        const minAmountOut = applySlippage(net, slippageBps)
-
-        const dec = tokenOut.decimals
-        setQuote({
-          status:        'success',
-          amountOut,
-          amountOutFmt:  parseFloat(formatUnits(amountOut, dec)).toFixed(dec > 8 ? 6 : dec),
-          netAmountOut:  net,
-          netAmountFmt:  parseFloat(formatUnits(net, dec)).toFixed(dec > 8 ? 6 : dec),
-          feeAmount:     fee,
-          feeFmt:        parseFloat(formatUnits(fee, dec)).toFixed(dec > 8 ? 8 : dec),
-          minAmountOut,
-          poolFee,
-          gasEstimate,
-        })
-
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : ''
-        const isLiquidity = msg.includes('liquidity') || msg.includes('SPL') || msg.includes('revert')
-        setQuote({
-          status: isLiquidity ? 'error_liquidity' : 'error_network',
-          amountOut: 0n, amountOutFmt: '0',
-          netAmountOut: 0n, netAmountFmt: '0',
-          feeAmount: 0n, feeFmt: '0',
-          minAmountOut: 0n, poolFee,
-          errorMessage: isLiquidity
-            ? 'Pool con liquidità insufficiente per questo importo.'
-            : 'Impossibile ottenere la quotazione. Riprova.',
-        })
       }
+
+      // Tutti i tier falliti → error_liquidity
+      setQuote({
+        status: 'error_liquidity',
+        amountOut: 0n, amountOutFmt: '0',
+        netAmountOut: 0n, netAmountFmt: '0',
+        feeAmount: 0n, feeFmt: '0',
+        minAmountOut: 0n,
+        poolFee: 500,
+        errorMessage: 'Nessuna pool disponibile per questa coppia. Prova un importo diverso.',
+      })
+
     }, debounceMs)
 
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current)
-    }
-  }, [chainId, tokenIn?.symbol, tokenOut?.symbol, amountIn, feeBps, slippageBps])
+    return () => { if (timerRef.current) clearTimeout(timerRef.current) }
+
+  }, [chainId, tokenIn?.address, tokenOut?.address, amountIn, feeBps, slippageBps])
 
   return quote
 }
 
-// ── Hook semplificato — solo per direct transfer (no swap) ────────────────
+// ── Direct transfer quote (nessuno swap) ──────────────────────────────────
 export function useDirectQuote(amount: string, decimals: number, feeBps = 50) {
   if (!amount || Number(amount) <= 0) return null
   try {
