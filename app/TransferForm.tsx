@@ -52,8 +52,6 @@ const T = {
   M:       'var(--font-mono)',
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
-
 // ── ABI FeeRouterV4 ────────────────────────────────────────────────────────
 const FEE_ROUTER_ABI: Abi = [
   {
@@ -481,15 +479,17 @@ export default function TransferForm(): React.JSX.Element {
       const r = parseAmtIn(); if (!r) return
       setOracleChecking(true); setOracleData(null); setOracleDenied(false)
       try {
-        const res = await fetch(`${API_BASE}/api/v1/compliance/verify`, {
+        const res = await fetch('/api/oracle/sign', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            sender:   address, recipient,
+            sender: address,
+            recipient,
             tokenIn:  tokenIn.isNative ? '0x0000000000000000000000000000000000000000' : tokenIn.address,
             tokenOut: isSwapMode && tokenOut
               ? tokenOut.address
               : (tokenIn.isNative ? '0x0000000000000000000000000000000000000000' : tokenIn.address),
             amountIn: formatUnits(r, tokenIn.decimals),
+            symbol:   tokenIn.symbol,
             chainId,
           }),
           signal: AbortSignal.timeout(8000),
@@ -629,15 +629,18 @@ export default function TransferForm(): React.JSX.Element {
     if (!oracle || !oracle.approved) {
       setPhase('preflight')
       try {
-        const res = await fetch(`${API_BASE}/api/v1/compliance/verify`, {
+        const res = await fetch('/api/oracle/sign', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            sender: address, recipient,
+            sender: address,
+            recipient,
             tokenIn:  tokenIn.isNative ? '0x0000000000000000000000000000000000000000' : tokenIn.address,
             tokenOut: isSwapMode && tokenOut
               ? tokenOut.address
               : (tokenIn.isNative ? '0x0000000000000000000000000000000000000000' : tokenIn.address),
-            amountIn: formatUnits(r, tokenIn.decimals), chainId,
+            amountIn: formatUnits(r, tokenIn.decimals),
+            symbol:   tokenIn.symbol,
+            chainId,
           }),
           signal: AbortSignal.timeout(10_000),
         })
