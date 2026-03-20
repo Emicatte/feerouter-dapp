@@ -403,6 +403,7 @@ export default function TransferForm(): React.JSX.Element {
   const [oracleData,     setOracleData]     = useState<OracleResponse | null>(null)
   const [oracleDenied,   setOracleDenied]   = useState(false)
   const [oracleChecking, setOracleChecking] = useState(false)
+  const [needsApproval,  setNeedsApproval]  = useState(false)
 
   // ── TX ─────────────────────────────────────────────────────────────────
   const [phase,      setPhase]      = useState<Phase>('idle')
@@ -488,8 +489,9 @@ export default function TransferForm(): React.JSX.Element {
             tokenOut: isSwapMode && tokenOut
               ? tokenOut.address
               : (tokenIn.isNative ? '0x0000000000000000000000000000000000000000' : tokenIn.address),
-            amountIn: formatUnits(r, tokenIn.decimals),
-            symbol:   tokenIn.symbol,
+            amountIn:    formatUnits(r, tokenIn.decimals),
+            amountInWei: r.toString(),
+            symbol:      tokenIn.symbol,
             chainId,
           }),
           signal: AbortSignal.timeout(8000),
@@ -532,6 +534,8 @@ export default function TransferForm(): React.JSX.Element {
       const args = tokenIn.isNative
         ? [tokenOut.address!, minOut, getAddress(recipient) as `0x${string}`, oracle.oracleNonce as `0x${string}`, BigInt(oracle.oracleDeadline), oracle.oracleSignature as `0x${string}`]
         : [tokenIn.address!, tokenOut.address!, r, minOut, getAddress(recipient) as `0x${string}`, oracle.oracleNonce as `0x${string}`, BigInt(oracle.oracleDeadline), oracle.oracleSignature as `0x${string}`]
+      console.log('[rp_tx] execSwap args:', JSON.stringify(args, (_, v) => typeof v === 'bigint' ? v.toString() : v))
+      console.log('[rp_tx] oracle:', { nonce: oracle.oracleNonce, deadline: oracle.oracleDeadline, sig: oracle.oracleSignature?.slice(0,20)+'...' })
       const hash = await writeContractAsync({
         address: registry.feeRouter, abi: FEE_ROUTER_ABI,
         functionName: tokenIn.isNative ? 'swapETHAndSend' : 'swapAndSend',
@@ -546,7 +550,11 @@ export default function TransferForm(): React.JSX.Element {
     const r = parseAmtIn(); if (!r || !tokenIn || !registry) return
     setPhase('signing')
     try {
+      console.log('[rp_tx] execDirect oracle:', { nonce: oracle.oracleNonce, deadline: oracle.oracleDeadline, sig: oracle.oracleSignature?.slice(0,20)+'...' })
+      console.log('[rp_tx] execDirect token:', tokenIn.symbol, 'isNative:', tokenIn.isNative, 'registry.feeRouter:', registry.feeRouter)
       let hash: `0x${string}`
+      // DEBUG
+      console.log('[rp_tx] execDirect →', { contract: registry.feeRouter, fn: tokenIn.isNative ? 'transferETHWithOracle' : 'transferWithOracle', token: tokenIn.address, amount: r?.toString(), recipient, nonce: oracle.oracleNonce, deadline: oracle.oracleDeadline, sig: oracle.oracleSignature?.slice(0,10) })
       if (tokenIn.isNative) {
         hash = await writeContractAsync({
           address: registry.feeRouter, abi: FEE_ROUTER_ABI,
@@ -638,8 +646,9 @@ export default function TransferForm(): React.JSX.Element {
             tokenOut: isSwapMode && tokenOut
               ? tokenOut.address
               : (tokenIn.isNative ? '0x0000000000000000000000000000000000000000' : tokenIn.address),
-            amountIn: formatUnits(r, tokenIn.decimals),
-            symbol:   tokenIn.symbol,
+            amountIn:    formatUnits(r, tokenIn.decimals),
+            amountInWei: r.toString(),   // wei esatti — evita errori di arrotondamento
+            symbol:      tokenIn.symbol,
             chainId,
           }),
           signal: AbortSignal.timeout(10_000),
@@ -1074,6 +1083,7 @@ export default function TransferForm(): React.JSX.Element {
                   : ctaState==='insufficient'   ? 'Saldo insufficiente'
                   : ctaState==='no_recipient'   ? 'Inserisci destinatario'
                   : ctaState==='no_amount'      ? 'Inserisci importo'
+                  : needsApproval && !tokenIn?.isNative ? `Approva ${sym}`
                   : isSwapMode                  ? `⚡ Swap & Invia ${sym} → ${symOut}`
                   :                               `Invia ${sym}`}
               </button>
