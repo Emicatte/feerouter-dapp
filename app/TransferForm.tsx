@@ -1,18 +1,14 @@
 'use client'
 
 /**
- * TransferForm.tsx — v5 Multi-Asset + Oracle
+ * TransferForm.tsx V4 — Omni-chain Swap-and-Forward
  *
- * Base: TransferForm_v4.tsx (struttura identica, zero modifiche al design)
- *
- * Upgrade chirurgici aggiunti:
- *   1. TokenSelector custom con loghi ufficiali (no emoji, no <select> nativo)
- *   2. TOKENS aggiornati: ETH, USDC, USDT, cbBTC, DEGEN
- *   3. ABI aggiornata: transferWithOracle + transferETHWithOracle
- *   4. Oracle pre-flight auto (debounce 800ms su recipient+amount)
- *   5. OracleDenialBanner: Zero-Trust se Oracle nega
- *   6. CTA stato oracle_denied: "🚫 Transazione Bloccata"
- *   7. Badge ⛽ Gasless per USDC/USDT
+ * Refactoring:
+ *   - Rimosso mode state ('direct'|'swap') → auto-detection
+ *   - isSwapMode = tokenIn.symbol !== tokenOut.symbol
+ *   - Token Selector Modal con background solido opaco
+ *   - selectingToken ('in'|'out'|null) per aprire la modale
+ *   - chainId fix: valori letterali numerici
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
@@ -24,276 +20,354 @@ import {
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import {
   parseEther, parseUnits, formatEther, formatUnits,
-  erc20Abi, isAddress, getAddress,
-  type Abi,
+  erc20Abi, isAddress, getAddress, type Abi,
 } from 'viem'
-import { base, baseSepolia } from 'wagmi/chains'
+import { baseSepolia } from 'wagmi/chains'
 import {
-  TransactionStatusUI, GasTracker, AddressVerifier,
-  BallisticProgress, MicroStateBadge,
+  TransactionStatusUI, GasTracker, AddressVerifier, BallisticProgress, MicroStateBadge,
 } from './TransactionStatus'
 import { useComplianceEngine, type ComplianceRecord } from '../lib/useComplianceEngine'
-import { usePermit2 }          from '../lib/usePermit2'
-import { useGaslessPaymaster } from '../lib/useGaslessPaymaster'
-import { useComplianceAPI }    from '../lib/useComplianceAPI'
-import { generatePdfReceipt }  from '../lib/usePdfReceipt'
+import { useComplianceAPI }   from '../lib/useComplianceAPI'
+import { generatePdfReceipt } from '../lib/usePdfReceipt'
+import {
+  getRegistry, findChainForToken, EUR_RATES,
+  type TokenConfig, type NetworkRegistry,
+} from '../lib/contractRegistry'
+import { useSwapQuote, useDirectQuote } from '../lib/useSwapQuote'
 
-// ── Theme — identico a v4 ──────────────────────────────────────────────────
+// ── Theme ──────────────────────────────────────────────────────────────────
 const T = {
   bg:      '#080810',
   surface: '#0d0d1a',
-  card:    '#111120',
+  card:    '#0c0c1e',
   border:  'rgba(255,255,255,0.06)',
   emerald: '#00ffa3',
   red:     '#ff2d55',
   amber:   '#ffb800',
   pink:    '#ff007a',
+  purple:  '#a78bfa',
   muted:   '#4a4a6a',
   text:    '#e2e2f0',
-  mono:    'var(--font-mono)',
-  display: 'var(--font-display)',
+  D:       'var(--font-display)',
+  M:       'var(--font-mono)',
 }
 
-// ── Config ─────────────────────────────────────────────────────────────────
-const FEE_ROUTER_ADDRESS = (
-  process.env.NEXT_PUBLIC_FEE_ROUTER_V3_ADDRESS
-  ?? process.env.NEXT_PUBLIC_FEE_ROUTER_ADDRESS
-  ?? '0xC090e7c163F286e333468777FC8810D23E7acEF3'
-) as `0x${string}`
-const IS_TESTNET = process.env.NEXT_PUBLIC_TARGET_CHAIN_ID === '84532'
-const API_BASE   = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
-// ── ABI FeeRouterV3 — transferWithOracle + transferETHWithOracle ──────────
+// ── ABI FeeRouterV4 ────────────────────────────────────────────────────────
 const FEE_ROUTER_ABI: Abi = [
   {
     name: 'transferWithOracle', type: 'function', stateMutability: 'nonpayable',
     inputs: [
-      { name: '_token',           type: 'address' },
-      { name: '_amount',          type: 'uint256' },
-      { name: '_recipient',       type: 'address' },
-      { name: '_nonce',           type: 'bytes32' },
-      { name: '_deadline',        type: 'uint256' },
-      { name: '_oracleSignature', type: 'bytes'   },
-    ],
-    outputs: [],
+      { name: '_token', type: 'address' }, { name: '_amount', type: 'uint256' },
+      { name: '_recipient', type: 'address' }, { name: '_nonce', type: 'bytes32' },
+      { name: '_deadline', type: 'uint256' }, { name: '_oracleSignature', type: 'bytes' },
+    ], outputs: [],
   },
   {
     name: 'transferETHWithOracle', type: 'function', stateMutability: 'payable',
     inputs: [
-      { name: '_recipient',       type: 'address' },
-      { name: '_nonce',           type: 'bytes32' },
-      { name: '_deadline',        type: 'uint256' },
-      { name: '_oracleSignature', type: 'bytes'   },
-    ],
-    outputs: [],
+      { name: '_recipient', type: 'address' }, { name: '_nonce', type: 'bytes32' },
+      { name: '_deadline', type: 'uint256' }, { name: '_oracleSignature', type: 'bytes' },
+    ], outputs: [],
+  },
+  {
+    name: 'swapAndSend', type: 'function', stateMutability: 'nonpayable',
+    inputs: [
+      { name: 'tokenIn', type: 'address' }, { name: 'tokenOut', type: 'address' },
+      { name: 'amountIn', type: 'uint256' }, { name: 'minAmountOut', type: 'uint256' },
+      { name: 'recipient', type: 'address' }, { name: 'nonce', type: 'bytes32' },
+      { name: 'deadline', type: 'uint256' }, { name: 'oracleSignature', type: 'bytes' },
+    ], outputs: [],
+  },
+  {
+    name: 'swapETHAndSend', type: 'function', stateMutability: 'payable',
+    inputs: [
+      { name: 'tokenOut', type: 'address' }, { name: 'minAmountOut', type: 'uint256' },
+      { name: 'recipient', type: 'address' }, { name: 'nonce', type: 'bytes32' },
+      { name: 'deadline', type: 'uint256' }, { name: 'oracleSignature', type: 'bytes' },
+    ], outputs: [],
   },
 ]
 
-// ── Token list aggiornata — loghi TrustWallet CDN ─────────────────────────
-const TOKENS = [
-  {
-    symbol:   'ETH',
-    name:     'Ethereum',
-    address:  undefined as `0x${string}` | undefined,
-    decimals: 18,
-    color:    '#627EEA',
-    gasless:  false,
-    isNative: true,
-    logoURI:  'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png',
-  },
-  {
-    symbol:   'USDC',
-    name:     'USD Coin',
-    address:  '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913' as `0x${string}`,
-    decimals: 6,
-    color:    '#2775CA',
-    gasless:  true,
-    isNative: false,
-    logoURI:  'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png',
-  },
-  {
-    symbol:   'USDT',
-    name:     'Tether USD',
-    address:  '0xfde4C96256153236af98292015BA958c14714C22' as `0x${string}`,
-    decimals: 6,
-    color:    '#26A17B',
-    gasless:  true,
-    isNative: false,
-    logoURI:  'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xdAC17F958D2ee523a2206206994597C13D831ec7/logo.png',
-  },
-  {
-    symbol:   'cbBTC',
-    name:     'Coinbase Wrapped BTC',
-    address:  '0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf' as `0x${string}`,
-    decimals: 8,
-    color:    '#F7931A',
-    gasless:  false,
-    isNative: false,
-    logoURI:  'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/bitcoin/info/logo.png',
-  },
-  {
-    symbol:   'DEGEN',
-    name:     'Degen',
-    address:  '0x4eDBc9320305298056041910220E3663A92540B6' as `0x${string}`,
-    decimals: 18,
-    color:    '#845ef7',
-    gasless:  false,
-    isNative: false,
-    logoURI:  'https://assets.coingecko.com/coins/images/34515/small/android-chrome-512x512.png',
-  },
-] as const
-
 type Phase    = 'idle' | 'preflight' | 'approving' | 'wait_approve' | 'signing' | 'wait_send' | 'done' | 'error'
-type CtaState = 'disconnected' | 'wrong_network' | 'insufficient' | 'no_recipient' | 'no_amount' | 'oracle_denied' | 'ready' | 'busy'
-
-interface TokenOption {
-  symbol: string; name: string; color: string; gasless: boolean; isNative: boolean
-  decimals: number; balance: bigint; address?: `0x${string}`; logoURI: string
-}
+type CtaState = 'disconnected' | 'wrong_network' | 'insufficient' | 'no_recipient' | 'no_amount' | 'oracle_denied' | 'no_liquidity' | 'ready' | 'busy'
+type SelectingToken = 'in' | 'out' | null
 
 interface OracleResponse {
   approved: boolean
   oracleSignature: string; oracleNonce: string; oracleDeadline: number
   paymentRef: string; fiscalRef: string
   riskScore: number; riskLevel: string; dac8Reportable: boolean
-  eurValue?: number; gasless?: boolean; rejectionReason?: string
+  eurValue?: number; isEurc?: boolean; isSwap?: boolean
+  sourceChain?: string; gasless?: boolean; rejectionReason?: string
 }
 
-function calcSplit(raw: bigint) {
-  const fee = (raw * 50n) / 10_000n
-  return { main: raw - fee, fee }
-}
-function fmtU(raw: bigint, dec: number, dp = 6) {
-  return parseFloat(formatUnits(raw, dec)).toFixed(dp)
-}
 function txLog(event: string, data: Record<string, unknown>) {
-  const entry = { event, timestamp: new Date().toISOString(), network: IS_TESTNET ? 'BASE_SEPOLIA' : 'BASE', ...data }
+  const entry = { event, ts: new Date().toISOString(), ...data }
   console.log('[rp_tx]', JSON.stringify(entry))
   try {
     const raw = localStorage.getItem('rp_tx_history')
-    const history: unknown[] = raw ? JSON.parse(raw) : []
-    history.push(entry)
-    if (history.length > 200) history.splice(0, history.length - 200)
-    localStorage.setItem('rp_tx_history', JSON.stringify(history))
+    const h: unknown[] = raw ? JSON.parse(raw) : []
+    h.push(entry); if (h.length > 200) h.splice(0, h.length - 200)
+    localStorage.setItem('rp_tx_history', JSON.stringify(h))
   } catch { /* SSR */ }
 }
 
-// ── Token Logo con fallback colorato ──────────────────────────────────────
-function TokenLogo({ token, size = 24 }: { token: Pick<TokenOption, 'symbol' | 'logoURI' | 'color'>; size?: number }) {
+// ── Token Logo ─────────────────────────────────────────────────────────────
+function TokenLogo({ token, size = 24 }: {
+  token: Pick<TokenConfig, 'symbol' | 'logoURI' | 'isNative'>
+  size?: number
+}) {
   const [err, setErr] = useState(false)
+  const colorMap: Record<string, string> = {
+    ETH:'#627EEA', USDC:'#2775CA', USDT:'#26A17B',
+    EURC:'#0033cc', cbBTC:'#F7931A', WBTC:'#F7931A',
+    DEGEN:'#845ef7', WETH:'#627EEA',
+  }
+  const color = colorMap[token.symbol] ?? '#4a4a6a'
   return (
-    <div style={{ width: size, height: size, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: err ? token.color : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(255,255,255,0.08)' }}>
+    <div style={{ width:size, height:size, borderRadius:'50%', overflow:'hidden', flexShrink:0, background:err?color:'transparent', display:'flex', alignItems:'center', justifyContent:'center', border:'1.5px solid rgba(255,255,255,0.1)' }}>
       {!err
-        ? <img src={token.logoURI} alt={token.symbol} width={size} height={size} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={() => setErr(true)} />
-        : <span style={{ fontSize: size * 0.38, fontWeight: 800, color: '#fff' }}>{token.symbol.slice(0, 2)}</span>
+        ? <img src={token.logoURI} alt={token.symbol} width={size} height={size}
+            style={{ width:'100%', height:'100%', objectFit:'cover' }}
+            onError={() => setErr(true)} />
+        : <span style={{ fontSize:size*0.36, fontWeight:800, color:'#fff', fontFamily:T.D }}>
+            {token.symbol.slice(0,2)}
+          </span>
       }
     </div>
   )
 }
 
-// ── Token Selector Dropdown custom (risolve bug <select> che sparisce) ────
-function TokenDropdown({ tokens, selected, onSelect, busy }: {
-  tokens: TokenOption[]; selected: TokenOption | null
-  onSelect: (t: TokenOption) => void; busy: boolean
+// ── Token Pill — bottone nel form che apre la modale ──────────────────────
+function TokenPill({ token, onClick, accentColor, busy }: {
+  token: (TokenConfig & { balance: bigint }) | null
+  onClick: () => void
+  accentColor?: string
+  busy: boolean
 }) {
-  const [open, setOpen] = useState(false)
+  const [hovered, setHovered] = useState(false)
+  const accent = accentColor ?? T.emerald
+  return (
+    <button
+      type="button"
+      onClick={e => { e.stopPropagation(); if (!busy) onClick() }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '9px 13px 9px 9px', borderRadius: 18,
+        background: hovered && !busy ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.07)',
+        border: `1px solid ${hovered && !busy ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.1)'}`,
+        cursor: busy ? 'default' : 'pointer',
+        transition: 'all 0.15s ease',
+        flexShrink: 0,
+      }}
+    >
+      {token && <TokenLogo token={token} size={22} />}
+      <span style={{ fontFamily:T.D, fontSize:15, fontWeight:700, color:T.text, letterSpacing:'-0.01em' }}>
+        {token?.symbol ?? '—'}
+      </span>
+      {!busy && (
+        <span style={{ color:T.muted, fontSize:9, display:'inline-block' }}>▾</span>
+      )}
+    </button>
+  )
+}
+
+// ── Token Selector Modal — background solido opaco ────────────────────────
+function TokenSelectorModal({ tokens, onSelect, onClose, title }: {
+  tokens: (TokenConfig & { balance: bigint })[]
+  onSelect: (t: TokenConfig & { balance: bigint }) => void
+  onClose: () => void
+  title: string
+}) {
   const ref = useRef<HTMLDivElement>(null)
 
+  // Chiudi cliccando fuori
   useEffect(() => {
     const h = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
     }
-    document.addEventListener('mousedown', h)
-    return () => document.removeEventListener('mousedown', h)
-  }, [])
+    // Slight delay per evitare che il click che apre la modale la chiuda subito
+    const timer = setTimeout(() => document.addEventListener('mousedown', h), 50)
+    return () => { clearTimeout(timer); document.removeEventListener('mousedown', h) }
+  }, [onClose])
 
-  const fmtBal = (t: TokenOption) => {
+  // Chiudi con ESC
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', h)
+    return () => document.removeEventListener('keydown', h)
+  }, [onClose])
+
+  const fmtBal = (t: TokenConfig & { balance: bigint }) => {
     const v = parseFloat(formatUnits(t.balance, t.decimals))
-    return t.symbol === 'USDC' || t.symbol === 'USDT' ? v.toFixed(2) : t.symbol === 'cbBTC' ? v.toFixed(6) : v.toFixed(4)
+    return ['USDC','USDT','EURC'].includes(t.symbol) ? v.toFixed(2)
+      : t.symbol === 'cbBTC' || t.symbol === 'WBTC' ? v.toFixed(6)
+      : v.toFixed(4)
   }
 
   return (
-    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
-      {/* Pill trigger */}
-      <button
-        type="button"
-        onClick={e => { e.stopPropagation(); if (!busy) setOpen(o => !o) }}
-        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 13px 9px 9px', borderRadius: 18, background: '#1a1a2e', border: `1px solid ${T.border}`, cursor: busy ? 'default' : 'pointer', transition: 'all 0.15s' }}
+    // Overlay semitrasparente
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 200,
+      background: 'rgba(0,0,0,0.55)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '16px',
+    }}>
+      {/* Modale — background SOLIDO, nessuna trasparenza */}
+      <div
+        ref={ref}
+        style={{
+          width: '100%', maxWidth: 380,
+          background: '#111120',           // T.card — solido
+          border: '1px solid rgba(255,255,255,0.10)',
+          borderRadius: 20,
+          boxShadow: '0 24px 80px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.04)',
+          overflow: 'hidden',
+          animation: 'rpFadeUp 0.2s var(--ease-spring) both',
+        }}
       >
-        {selected && <TokenLogo token={selected} size={24} />}
-        <span style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{selected?.symbol ?? '—'}</span>
-        {!busy && <span style={{ color: T.muted, fontSize: 10 }}>▾</span>}
-      </button>
-
-      {/* Dropdown */}
-      {open && (
-        <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 270, zIndex: 1000, background: T.card, border: `1px solid ${T.border}`, borderRadius: 16, boxShadow: '0 16px 48px rgba(0,0,0,0.8)', overflow: 'hidden', animation: 'fadeSlideIn 0.15s ease' }}>
-          <div style={{ padding: '10px 14px 8px', fontFamily: T.mono, fontSize: 10, color: T.muted, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.1em', borderBottom: `1px solid ${T.border}` }}>
-            Seleziona token
-          </div>
-          {tokens.map((t, i) => {
-            const isSel = t.symbol === selected?.symbol
-            return (
-              <button
-                key={t.symbol}
-                type="button"
-                onClick={() => { onSelect(t); setOpen(false) }}
-                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', background: isSel ? T.emerald + '0d' : 'transparent', border: 'none', borderBottom: i < tokens.length - 1 ? `1px solid ${T.border}` : 'none', cursor: 'pointer', transition: 'background 0.12s', textAlign: 'left' as const }}
-                onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
-                onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = 'transparent' }}
-              >
-                <TokenLogo token={t} size={32} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontFamily: T.mono, fontSize: 13, fontWeight: 700, color: isSel ? T.emerald : T.text }}>{t.symbol}</span>
-                    {t.gasless && <span style={{ fontFamily: T.mono, fontSize: 9, color: T.emerald, background: T.emerald + '15', padding: '1px 5px', borderRadius: 4 }}>⛽ Gasless</span>}
-                  </div>
-                  <div style={{ fontFamily: T.mono, fontSize: 10, color: T.muted, marginTop: 1 }}>{t.name}</div>
-                </div>
-                <div style={{ textAlign: 'right' as const }}>
-                  <div style={{ fontFamily: T.mono, fontSize: 12, color: T.text, fontWeight: 600 }}>{fmtBal(t)}</div>
-                  <div style={{ fontFamily: T.mono, fontSize: 10, color: T.muted }}>{t.symbol}</div>
-                </div>
-                {isSel && <div style={{ width: 6, height: 6, borderRadius: '50%', background: T.emerald, flexShrink: 0 }} />}
-              </button>
-            )
-          })}
+        {/* Header modale */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '16px 18px 12px',
+          borderBottom: '1px solid rgba(255,255,255,0.06)',
+        }}>
+          <span style={{ fontFamily:T.D, fontSize:15, fontWeight:800, color:T.text, letterSpacing:'-0.01em' }}>
+            {title}
+          </span>
+          <button
+            onClick={onClose}
+            style={{ width:30, height:30, borderRadius:8, background:'rgba(255,255,255,0.06)', border:'none', color:T.muted, cursor:'pointer', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.15s' }}
+            onMouseEnter={e => e.currentTarget.style.background='rgba(255,255,255,0.12)'}
+            onMouseLeave={e => e.currentTarget.style.background='rgba(255,255,255,0.06)'}
+          >✕</button>
         </div>
-      )}
+
+        {/* Lista token */}
+        <div style={{ maxHeight: 360, overflowY: 'auto' }}>
+          {tokens.map((t, i) => (
+            <button
+              key={t.symbol}
+              type="button"
+              onClick={() => { onSelect(t); onClose() }}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 14,
+                padding: '13px 18px',
+                background: 'transparent',
+                border: 'none',
+                borderBottom: i < tokens.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                cursor: 'pointer',
+                transition: 'background 0.12s ease',
+                textAlign: 'left' as const,
+              }}
+              onMouseEnter={e => e.currentTarget.style.background='rgba(255,255,255,0.05)'}
+              onMouseLeave={e => e.currentTarget.style.background='transparent'}
+            >
+              <TokenLogo token={t} size={36} />
+              <div style={{ flex: 1 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+                  <span style={{ fontFamily:T.D, fontSize:15, fontWeight:700, color:T.text }}>
+                    {t.symbol}
+                  </span>
+                  {t.isEurc && (
+                    <span style={{ fontFamily:T.D, fontSize:9, fontWeight:700, color:'#6699ff', background:'rgba(0,51,204,0.15)', padding:'2px 6px', borderRadius:4, border:'1px solid rgba(0,51,204,0.3)' }}>
+                      ★ EU
+                    </span>
+                  )}
+                  {t.gasless && !t.isEurc && (
+                    <span style={{ fontFamily:T.D, fontSize:9, color:T.emerald, background:'rgba(0,255,163,0.1)', padding:'2px 6px', borderRadius:4 }}>
+                      ⛽ Gasless
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontFamily:T.M, fontSize:11, color:T.muted, marginTop:2 }}>
+                  {t.name}
+                </div>
+              </div>
+              <div style={{ textAlign:'right' as const }}>
+                <div style={{ fontFamily:T.M, fontSize:13, fontWeight:600, color:T.text }}>
+                  {fmtBal(t)}
+                </div>
+                <div style={{ fontFamily:T.M, fontSize:10, color:T.muted, marginTop:1 }}>
+                  {t.symbol}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
 
-// ── Toast — identico a v4 ─────────────────────────────────────────────────
-function Toast({ message, color = T.muted, onDismiss }: { message: string; color?: string; onDismiss: () => void }) {
-  useEffect(() => { const t = setTimeout(onDismiss, 4000); return () => clearTimeout(t) }, [onDismiss])
+// ── Toast ──────────────────────────────────────────────────────────────────
+function Toast({ message, color=T.amber, onDismiss }: { message:string; color?:string; onDismiss:()=>void }) {
+  useEffect(() => { const t = setTimeout(onDismiss, 5000); return () => clearTimeout(t) }, [onDismiss])
   return (
-    <div style={{ position: 'fixed', bottom: 28, left: '50%', transform: 'translateX(-50%)', zIndex: 9999, minWidth: 300, maxWidth: 420, background: T.card, border: `1px solid ${color}30`, borderRadius: 14, padding: '13px 18px', display: 'flex', alignItems: 'center', gap: 10, boxShadow: `0 12px 40px rgba(0,0,0,0.7), 0 0 20px ${color}15`, animation: 'fadeUp 0.3s ease' }}>
-      <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, boxShadow: `0 0 8px ${color}`, flexShrink: 0 }} />
-      <span style={{ fontFamily: T.mono, fontSize: 13, color: T.text, flex: 1 }}>{message}</span>
-      <button onClick={onDismiss} style={{ color: T.muted, background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, padding: 0 }}>✕</button>
+    <div className="rp-toast" style={{ position:'fixed', bottom:24, left:'50%', zIndex:9999, minWidth:280, maxWidth:440, background:T.card, border:`1px solid ${color}30`, borderRadius:14, padding:'13px 18px', display:'flex', alignItems:'center', gap:10, boxShadow:`0 12px 40px rgba(0,0,0,0.8)` }}>
+      <div style={{ width:8, height:8, borderRadius:'50%', background:color, boxShadow:`0 0 8px ${color}`, flexShrink:0 }} />
+      <span style={{ fontFamily:T.D, fontSize:13, color:T.text, flex:1 }}>{message}</span>
+      <button onClick={onDismiss} style={{ color:T.muted, background:'none', border:'none', cursor:'pointer', fontSize:16, padding:0 }}>✕</button>
     </div>
   )
 }
 
-// ── Oracle Denial Banner ───────────────────────────────────────────────────
-function OracleDenialBanner({ reason, riskLevel }: { reason: string; riskLevel: string }) {
-  const color = riskLevel === 'BLOCKED' ? T.red : T.amber
-  return (
-    <div style={{ padding: '12px 14px', borderRadius: 12, background: color + '0d', border: `1px solid ${color}30`, animation: 'fadeSlideIn 0.2s ease' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-        <span style={{ fontSize: 14 }}>{riskLevel === 'BLOCKED' ? '🚫' : '⚠️'}</span>
-        <span style={{ fontFamily: T.mono, fontSize: 12, color, fontWeight: 700 }}>
-          {riskLevel === 'BLOCKED' ? 'Address in Blacklist' : 'Risk Score Too High'}
+// ── Quote Panel ────────────────────────────────────────────────────────────
+function QuotePanel({ quote, tokenOut, isSwap }: {
+  quote: ReturnType<typeof useSwapQuote>
+  tokenOut: TokenConfig | null
+  isSwap: boolean
+}) {
+  if (!quote || !isSwap) return null
+  const { status, netAmountFmt, feeFmt, minAmountOut, poolFee, errorMessage, gasEstimate } = quote
+
+  if (status === 'loading') return (
+    <div style={{ padding:'12px 14px', borderRadius:12, background:'rgba(167,139,250,0.06)', border:`1px solid rgba(167,139,250,0.2)`, display:'flex', alignItems:'center', gap:10 }}>
+      <div className="rp-spinner" style={{ width:14, height:14, border:`2px solid ${T.purple}30`, borderTopColor:'transparent', borderRadius:'50%' }} />
+      <span style={{ fontFamily:T.D, fontSize:13, color:T.purple }}>Calcolando quotazione Uniswap V3…</span>
+    </div>
+  )
+
+  if (status === 'error_liquidity' || status === 'error_network') return (
+    <div style={{ padding:'12px 14px', borderRadius:12, background:`${T.amber}0a`, border:`1px solid ${T.amber}30` }}>
+      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+        <span>⚠️</span>
+        <span style={{ fontFamily:T.D, fontSize:12, fontWeight:700, color:T.amber }}>
+          {status === 'error_liquidity' ? 'Pool con liquidità insufficiente' : 'Quotazione non disponibile'}
         </span>
       </div>
-      <div style={{ fontFamily: T.mono, fontSize: 11, color: T.muted, paddingLeft: 22 }}>{reason}</div>
+      <div style={{ fontFamily:T.D, fontSize:11, color:T.muted, marginTop:4, paddingLeft:20 }}>{errorMessage}</div>
+    </div>
+  )
+
+  if (status !== 'success' || !tokenOut) return null
+
+  const poolFeeLabel = poolFee === 100 ? '0.01%' : poolFee === 500 ? '0.05%' : poolFee === 3000 ? '0.3%' : '1%'
+
+  return (
+    <div style={{ borderRadius:13, overflow:'hidden', border:`1px solid rgba(167,139,250,0.2)`, animation:'rpFadeUp 0.3s var(--ease-spring) both' }}>
+      <div style={{ padding:'8px 14px', background:'rgba(167,139,250,0.08)', fontFamily:T.D, fontSize:11, fontWeight:700, color:T.purple, borderBottom:`1px solid rgba(167,139,250,0.15)`, letterSpacing:'0.04em' }}>
+        ⚡ Uniswap V3 Quote · Pool {poolFeeLabel}
+      </div>
+      {[
+        { l: 'Il destinatario riceverà ~', v: `${netAmountFmt} ${tokenOut.symbol}`, h: true },
+        { l: 'Slippage minimo garantito',  v: `${formatUnits(minAmountOut, tokenOut.decimals).slice(0,10)} ${tokenOut.symbol} (0.5%)`, h: false },
+        { l: 'Gateway fee (0.5%)',          v: `${feeFmt} ${tokenOut.symbol}`, h: false },
+        ...(gasEstimate ? [{ l: 'Gas stimato swap', v: `~${gasEstimate.toString()} units`, h: false }] : []),
+      ].map((r, i, arr) => (
+        <div key={i} style={{ display:'flex', borderLeft:`2px dashed rgba(167,139,250,0.15)` }}>
+          <div style={{ width:'45%', padding:'7px 0 7px 14px', fontFamily:T.D, fontSize:11, fontWeight:500, color:T.muted, borderBottom:i<arr.length-1?`1px solid ${T.border}`:'none' }}>{r.l}</div>
+          <div style={{ width:'55%', padding:'7px 14px', fontFamily:T.M, fontSize:11, fontWeight:r.h?700:500, color:r.h?T.purple:T.muted, borderBottom:i<arr.length-1?`1px solid ${T.border}`:'none' }}>{r.v}</div>
+        </div>
+      ))}
     </div>
   )
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-//  COMPONENTE PRINCIPALE
 // ══════════════════════════════════════════════════════════════════════════
 export default function TransferForm(): React.JSX.Element {
   const { address, isConnected } = useAccount()
@@ -301,34 +375,38 @@ export default function TransferForm(): React.JSX.Element {
   const { switchChain }          = useSwitchChain()
   const publicClient             = usePublicClient()
   const { generateRecord }       = useComplianceEngine()
+  const complianceApi            = useComplianceAPI()
 
-  // Hooks lib
-  const permit2       = usePermit2(FEE_ROUTER_ADDRESS)
-  const paymaster     = useGaslessPaymaster()
-  const complianceApi = useComplianceAPI()
+  // ── Registry ──────────────────────────────────────────────────────────
+  const [registry,  setRegistry]  = useState<NetworkRegistry | null>(null)
+  const [tokenList, setTokenList] = useState<(TokenConfig & { balance: bigint })[]>([])
+  const [tokenIn,   setTokenIn]   = useState<(TokenConfig & { balance: bigint }) | null>(null)
+  const [tokenOut,  setTokenOut]  = useState<(TokenConfig & { balance: bigint }) | null>(null)
 
-  // Form — identico a v4
-  const [tokens,     setTokens]     = useState<TokenOption[]>([])
-  const [selected,   setSelected]   = useState<TokenOption | null>(null)
-  const [recipient,  setRecipient]  = useState('')
+  // ── isSwapMode — auto-detection (niente useState) ─────────────────────
+  // Direct se stesso token (stesso address) — Swap se token diversi
+  const isSwapMode = !!(tokenIn && tokenOut && tokenIn.address !== tokenOut.address)
+
+  // ── Token selector modal ───────────────────────────────────────────────
+  const [selectingToken, setSelectingToken] = useState<SelectingToken>(null)
+
+  // ── Form ───────────────────────────────────────────────────────────────
   const [amount,     setAmount]     = useState('')
-  const [paymentRef, setPaymentRef] = useState('')
-  const [fiscalRef,  setFiscalRef]  = useState('')
+  const [recipient,  setRecipient]  = useState('')
   const [focused,    setFocused]    = useState(false)
   const [addrError,  setAddrError]  = useState('')
   const [showExtras, setShowExtras] = useState(false)
-  const [eurPrice,   setEurPrice]   = useState<number | null>(null)
+  const [paymentRef, setPaymentRef] = useState('')
+  const [fiscalRef,  setFiscalRef]  = useState('')
   const [copied,     setCopied]     = useState(false)
-  const [silentFlow, setSilentFlow] = useState(false)
   const [toast,      setToast]      = useState<{ msg: string; color?: string } | null>(null)
-  const [gaslessBadge, setGaslessBadge] = useState(false)
 
-  // Oracle state — nuovo in v5
+  // ── Oracle ─────────────────────────────────────────────────────────────
   const [oracleData,     setOracleData]     = useState<OracleResponse | null>(null)
   const [oracleDenied,   setOracleDenied]   = useState(false)
   const [oracleChecking, setOracleChecking] = useState(false)
 
-  // TX — identico a v4
+  // ── TX ─────────────────────────────────────────────────────────────────
   const [phase,      setPhase]      = useState<Phase>('idle')
   const [approvHash, setApprovHash] = useState<`0x${string}` | undefined>()
   const [sendHash,   setSendHash]   = useState<`0x${string}` | undefined>()
@@ -341,95 +419,100 @@ export default function TransferForm(): React.JSX.Element {
   const [compRec, setCompRec] = useState<ComplianceRecord | null>(null)
 
   const inputRef = useRef<HTMLInputElement>(null)
+  const { writeContractAsync } = useWriteContract()
 
-  // ── Balances ───────────────────────────────────────────────────────────
+  // ── Quote engine — alimentato da isSwapMode ───────────────────────────
+  const swapQuote = useSwapQuote({
+    chainId,
+    tokenIn:    isSwapMode ? tokenIn  : null,  // null in direct → nessuna call Uniswap
+    tokenOut:   isSwapMode ? tokenOut : null,
+    amountIn:   amount,
+    debounceMs: 600,
+  })
+
+  const directQuote = useDirectQuote(amount, tokenIn?.decimals ?? 18)
+
+  // ── Load registry quando cambia chainId ──────────────────────────────
+  useEffect(() => {
+    const reg = getRegistry(chainId)
+    setRegistry(reg)
+    if (!reg) return
+    const list = Object.values(reg.tokens).map(t => ({ ...t as TokenConfig, balance: 0n as bigint }))
+    setTokenList(list)
+    const ethToken = list.find(t => t.isNative) ?? list[0]
+    setTokenIn(ethToken ?? null)
+    setTokenOut(ethToken ?? null)  // stesso token → isSwapMode=false (direct)
+    setAmount('')
+    setOracleData(null); setOracleDenied(false)
+  }, [chainId])
+
+  // ── Balances ──────────────────────────────────────────────────────────
   const { data: ethBal } = useBalance({ address })
-  const erc20List = TOKENS.filter(t => !t.isNative)
-
+  const erc20s = tokenList.filter(t => !t.isNative)
   const { data: erc20Bals } = useReadContracts({
-    contracts: erc20List.map(t => ({
-      address: t.address as `0x${string}`, abi: erc20Abi,
+    contracts: erc20s.map(t => ({
+      address: t.address!, abi: erc20Abi,
       functionName: 'balanceOf' as const, args: [address!],
     })),
-    query: { enabled: !!address },
+    query: { enabled: !!address && erc20s.length > 0 },
   })
 
   useEffect(() => {
-    const ethCfg = TOKENS.find(t => t.symbol === 'ETH')!
-    const list: TokenOption[] = [{ ...ethCfg, balance: ethBal?.value ?? 0n }]
-    erc20List.forEach((t, i) => {
-      const raw = erc20Bals?.[i]?.result as bigint | undefined
-      list.push({ ...t, balance: raw ?? 0n })
+    if (!registry) return
+    const updated = tokenList.map(t => {
+      if (t.isNative) return { ...t as TokenConfig, balance: ethBal?.value ?? 0n }
+      const idx = erc20s.findIndex(e => e.symbol === t.symbol)
+      const raw = erc20Bals?.[idx]?.result as bigint | undefined
+      return { ...t as TokenConfig, balance: raw ?? 0n }
     })
-    setTokens(list)
-    setSelected(prev => prev ? (list.find(t => t.symbol === prev.symbol) ?? list[0]) : list[0])
-  }, [ethBal, erc20Bals, isConnected])
+    setTokenList(updated)
+    setTokenIn((prev: (TokenConfig & { balance: bigint }) | null) =>
+      prev ? (updated.find(t => t.symbol === prev.symbol) ?? updated[0]) : (updated[0] ?? null)
+    )
+    setTokenOut((prev: (TokenConfig & { balance: bigint }) | null) =>
+      prev ? (updated.find(t => t.symbol === prev.symbol) ?? null) : null
+    )
+  }, [ethBal, erc20Bals])
 
-  useEffect(() => {
-    if (!selected) return
-    const rates: Record<string, number> = { ETH: 2200, USDC: 0.92, USDT: 0.92, cbBTC: 88000, DEGEN: 0.003 }
-    setEurPrice(rates[selected.symbol] ?? null)
-    // Gasless badge
-    if (paymaster.isGaslessEligible(selected.symbol)) {
-      paymaster.estimateGas(selected.symbol).then(est => setGaslessBadge(est.gasSponsored))
-    } else { setGaslessBadge(false) }
-    // Reset oracle quando cambia token
-    setOracleData(null); setOracleDenied(false)
-  }, [selected?.symbol])
-
-  // ── Parse ──────────────────────────────────────────────────────────────
-  const parseAmt = useCallback((): bigint | null => {
-    if (!selected || !amount || isNaN(Number(amount)) || Number(amount) <= 0) return null
-    try { return selected.isNative ? parseEther(amount) : parseUnits(amount, selected.decimals) }
-    catch { return null }
-  }, [selected, amount])
-
-  // ── Silent flow — identico a v4 ────────────────────────────────────────
-  useEffect(() => {
-    const check = async () => {
-      const r = parseAmt()
-      if (!r || !selected || selected.isNative || !address) { setSilentFlow(false); return }
-      try {
-        const allowance = await publicClient?.readContract({
-          address: selected.address!, abi: erc20Abi,
-          functionName: 'allowance', args: [address, FEE_ROUTER_ADDRESS],
-        }) as bigint | undefined
-        setSilentFlow(!!(allowance && allowance >= r))
-      } catch { setSilentFlow(false) }
-    }
-    check()
-  }, [amount, selected?.symbol, address])
-
-  // ── Oracle pre-flight auto (nuovo in v5) ──────────────────────────────
+  // ── Oracle preflight auto ─────────────────────────────────────────────
   useEffect(() => {
     const run = async () => {
-      if (!address || !recipient || !amount || addrError || !isAddress(recipient)) return
-      const r = parseAmt(); if (!r || !selected) return
+      if (!address || !recipient || !amount || addrError || !isAddress(recipient) || !tokenIn) return
+      const r = parseAmtIn(); if (!r) return
       setOracleChecking(true); setOracleData(null); setOracleDenied(false)
       try {
-        const res = await fetch(`${API_BASE}/api/v1/compliance/check`, {
+        const res = await fetch(`${API_BASE}/api/v1/compliance/verify`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            sender: address, recipient,
-            token:  selected.address ?? '0x0000000000000000000000000000000000000000',
-            amount: formatUnits(r, selected.decimals),
-            symbol: selected.symbol, chainId,
+            sender:   address, recipient,
+            tokenIn:  tokenIn.isNative ? '0x0000000000000000000000000000000000000000' : tokenIn.address,
+            tokenOut: isSwapMode && tokenOut
+              ? tokenOut.address
+              : (tokenIn.isNative ? '0x0000000000000000000000000000000000000000' : tokenIn.address),
+            amountIn: formatUnits(r, tokenIn.decimals),
+            chainId,
           }),
           signal: AbortSignal.timeout(8000),
         })
         if (res.ok) {
           const data: OracleResponse = await res.json()
           setOracleData(data); setOracleDenied(!data.approved)
-          txLog('oracle.preflight', { approved: data.approved, riskScore: data.riskScore, riskLevel: data.riskLevel })
+          txLog('oracle.preflight', { approved: data.approved, isSwap: isSwapMode, sourceChain: data.sourceChain })
         }
-      } catch { /* Oracle offline — non bloccare */ }
+      } catch { /* Oracle offline */ }
       finally { setOracleChecking(false) }
     }
     const t = setTimeout(run, 800)
     return () => clearTimeout(t)
-  }, [recipient, amount, selected?.symbol, address])
+  }, [recipient, amount, tokenIn?.symbol, tokenOut?.symbol, isSwapMode, address, chainId])
 
-  // ── Receipts ───────────────────────────────────────────────────────────
+  const parseAmtIn = useCallback((): bigint | null => {
+    if (!tokenIn || !amount || isNaN(Number(amount)) || Number(amount) <= 0) return null
+    try { return tokenIn.isNative ? parseEther(amount) : parseUnits(amount, tokenIn.decimals) }
+    catch { return null }
+  }, [tokenIn, amount])
+
+  // ── Receipts ──────────────────────────────────────────────────────────
   const { isSuccess: approveOk } = useWaitForTransactionReceipt({
     hash: approvHash, query: { enabled: !!approvHash && phase === 'wait_approve' },
   })
@@ -437,264 +520,242 @@ export default function TransferForm(): React.JSX.Element {
     hash: sendHash, query: { enabled: !!sendHash && phase === 'wait_send' },
   })
 
-  const { writeContractAsync } = useWriteContract()
-
-  const execSend = useCallback(async (oracle: OracleResponse) => {
-    const r = parseAmt(); if (!r || !selected) return
+  const execSwap = useCallback(async (oracle: OracleResponse) => {
+    const r = parseAmtIn(); if (!r || !tokenIn || !tokenOut || !registry) return
+    if (!swapQuote || swapQuote.status !== 'success') {
+      setTxError('Quotazione non disponibile.'); setPhase('error'); return
+    }
+    const minOut = swapQuote.minAmountOut
+    if (minOut === 0n) { setTxError('MEV Guard: slippage non configurato.'); setPhase('error'); return }
     setPhase('signing')
-    txLog('tx.signing', { type: 'transferWithOracle', token: selected.symbol })
     try {
+      const args = tokenIn.isNative
+        ? [tokenOut.address!, minOut, getAddress(recipient) as `0x${string}`, oracle.oracleNonce as `0x${string}`, BigInt(oracle.oracleDeadline), oracle.oracleSignature as `0x${string}`]
+        : [tokenIn.address!, tokenOut.address!, r, minOut, getAddress(recipient) as `0x${string}`, oracle.oracleNonce as `0x${string}`, BigInt(oracle.oracleDeadline), oracle.oracleSignature as `0x${string}`]
       const hash = await writeContractAsync({
-        address: FEE_ROUTER_ADDRESS, abi: FEE_ROUTER_ABI,
-        functionName: 'transferWithOracle',
-        args: [
-          selected.address!,
-          r,
-          getAddress(recipient) as `0x${string}`,
-          oracle.oracleNonce as `0x${string}`,
-          BigInt(oracle.oracleDeadline),
-          oracle.oracleSignature as `0x${string}`,
-        ],
+        address: registry.feeRouter, abi: FEE_ROUTER_ABI,
+        functionName: tokenIn.isNative ? 'swapETHAndSend' : 'swapAndSend',
+        args, ...(tokenIn.isNative ? { value: r } : {}),
       })
-      txLog('tx.broadcast', { hash })
+      txLog('swap.broadcast', { hash, tokenIn: tokenIn.symbol, tokenOut: tokenOut.symbol })
       setSendHash(hash); setPhase('wait_send')
     } catch (e) { handleErr(e) }
-  }, [parseAmt, selected, recipient])
+  }, [parseAmtIn, tokenIn, tokenOut, registry, swapQuote, recipient])
+
+  const execDirect = useCallback(async (oracle: OracleResponse) => {
+    const r = parseAmtIn(); if (!r || !tokenIn || !registry) return
+    setPhase('signing')
+    try {
+      let hash: `0x${string}`
+      if (tokenIn.isNative) {
+        hash = await writeContractAsync({
+          address: registry.feeRouter, abi: FEE_ROUTER_ABI,
+          functionName: 'transferETHWithOracle',
+          args: [getAddress(recipient) as `0x${string}`, oracle.oracleNonce as `0x${string}`, BigInt(oracle.oracleDeadline), oracle.oracleSignature as `0x${string}`],
+          value: r,
+        })
+      } else {
+        hash = await writeContractAsync({
+          address: registry.feeRouter, abi: FEE_ROUTER_ABI,
+          functionName: 'transferWithOracle',
+          args: [tokenIn.address!, r, getAddress(recipient) as `0x${string}`, oracle.oracleNonce as `0x${string}`, BigInt(oracle.oracleDeadline), oracle.oracleSignature as `0x${string}`],
+        })
+      }
+      txLog('direct.broadcast', { hash, token: tokenIn.symbol })
+      setSendHash(hash); setPhase('wait_send')
+    } catch (e) { handleErr(e) }
+  }, [parseAmtIn, tokenIn, registry, recipient])
 
   useEffect(() => {
     if (approveOk && phase === 'wait_approve' && oracleData) {
-      txLog('tx.approved', {})
-      execSend(oracleData)
+      if (isSwapMode) execSwap(oracleData)
+      else execDirect(oracleData)
     }
-  }, [approveOk, phase, oracleData, execSend])
+  }, [approveOk, phase, oracleData, isSwapMode, execSwap, execDirect])
 
   useEffect(() => {
-    if (!sendOk || phase !== 'wait_send' || !sendHash || !selected || !address) return
-    const r = parseAmt(); if (!r) return
-    const { main, fee } = calcSplit(r)
-    const eurVal = eurPrice ? (parseFloat(amount) * eurPrice).toFixed(2) + ' EUR' : undefined
-    const ts = new Date().toISOString()
-    const rep = { gross: r, net: main, fee, decimals: selected.decimals, symbol: selected.symbol, txHash: sendHash, timestamp: ts, eurValue: eurVal }
-    setReport(rep)
-
+    if (!sendOk || phase !== 'wait_send' || !sendHash || !tokenIn || !address) return
+    const r = parseAmtIn(); if (!r) return
+    const outToken  = isSwapMode && tokenOut ? tokenOut : tokenIn
+    const grossOut  = isSwapMode && swapQuote?.status === 'success' ? swapQuote.amountOut : r
+    const feeOut    = (grossOut * 50n) / 10_000n
+    const netOut    = grossOut - feeOut
+    const eurRate   = EUR_RATES[outToken.symbol] ?? 1
+    const eurVal    = outToken.isEurc
+      ? parseFloat(formatUnits(netOut, outToken.decimals)).toFixed(2) + ' EUR'
+      : (parseFloat(formatUnits(netOut, outToken.decimals)) * eurRate).toFixed(2) + ' EUR'
+    setReport({ gross: grossOut, net: netOut, fee: feeOut, decimals: outToken.decimals, symbol: outToken.symbol, txHash: sendHash, timestamp: new Date().toISOString(), eurValue: eurVal })
     generateRecord({
       txHash: sendHash, sender: address, recipient,
-      gross: r, net: main, fee,
-      decimals: selected.decimals, symbol: selected.symbol,
+      gross: grossOut, net: netOut, fee: feeOut,
+      decimals: outToken.decimals, symbol: outToken.symbol,
       paymentRef: oracleData?.paymentRef || '—',
       fiscalRef:  oracleData?.fiscalRef  || '—',
-      chainId, isTestnet: IS_TESTNET,
+      chainId, isTestnet: chainId === baseSepolia.id,
     }).then(async rec => {
       setCompRec(rec)
-      txLog('tx.compliance_generated', { id: rec.compliance_id })
-      const apiResult = await complianceApi.submitAfterFinality(rec, 2500)
-      if (apiResult.queued) {
-        setTimeout(() => setToast({ msg: `Compliance in queue (${complianceApi.getPendingCount()} pending). Retry automatico.`, color: T.amber }), 3000)
-      }
+      const api = await complianceApi.submitAfterFinality(rec, 2500)
+      if (api.queued) setTimeout(() => setToast({ msg: 'Compliance in queue.', color: T.amber }), 3000)
     })
-
-    txLog('tx.completed', { hash: sendHash, amount: formatUnits(r, selected.decimals), symbol: selected.symbol })
+    txLog('tx.completed', { hash: sendHash, isSwap: isSwapMode, tokenIn: tokenIn.symbol, tokenOut: outToken.symbol })
     setPhase('done')
   }, [sendOk, phase])
 
-  // ── EIP-1193 Error handler granulare — identico a v4 ──────────────────
   function handleErr(e: unknown) {
     const m    = e instanceof Error ? e.message : String(e)
     const code = (e as { code?: number })?.code
     if (code === 4001 || m.includes('rejected') || m.includes('denied') || m.includes('cancel')) {
-      txLog('tx.cancelled', { code: 4001 })
-      setToast({ msg: 'Transazione annullata sul wallet.', color: T.amber })
-      setPhase('idle')
-    } else if (m.includes('insufficient funds') || m.includes('insufficient balance')) {
-      setTxError('Fondi insufficienti. Verifica saldo ETH per il gas.')
-      setPhase('error')
-    } else if (m.includes('sequencer') || m.includes('Sequencer')) {
-      setTxError('L2 Sequencer Down. Riprova tra qualche minuto.')
-      setPhase('error')
-    } else if (m.includes('gas') || m.includes('intrinsic')) {
-      setTxError('Errore stima gas. La rete potrebbe essere congestionata.')
-      setPhase('error')
-    } else {
-      setTxError('Errore: ' + m.slice(0, 100))
-      setPhase('error')
-    }
+      setToast({ msg: 'Transazione annullata.', color: T.amber }); setPhase('idle')
+    } else if (m.includes('MEVGuard'))            { setTxError('MEV Guard: slippage non configurato.'); setPhase('error') }
+    else if (m.includes('InsufficientLiquidity')) { setTxError('Liquidità insufficiente nel pool. Riduci l\'importo.'); setPhase('error') }
+    else if (m.includes('SlippageExceeded'))      { setTxError('Slippage superato. Riprova.'); setPhase('error') }
+    else                                          { setTxError('Errore: ' + m.slice(0, 100)); setPhase('error') }
   }
 
-  const fmtBal = (t: TokenOption) => {
-    const v = parseFloat(formatUnits(t.balance, t.decimals))
-    return t.symbol === 'USDC' || t.symbol === 'USDT' ? v.toFixed(2) : t.symbol === 'cbBTC' ? v.toFixed(6) : v.toFixed(5)
-  }
-
-  const validateAddr = (addr: string) => {
-    if (!addr) { setAddrError(''); return false }
-    if (!isAddress(addr)) { setAddrError('Indirizzo non valido'); return false }
-    setAddrError(''); return true
-  }
-
-  const handleMax = async () => {
-    if (!selected) return
-    if (selected.isNative) {
-      try {
-        const gp   = await publicClient?.getGasPrice() ?? 1_500_000_000n
-        const cost = (21_000n * gp * 12n) / 10n
-        setAmount(formatEther(selected.balance > cost ? selected.balance - cost : 0n))
-      } catch { setAmount(formatEther(selected.balance)) }
-    } else { setAmount(formatUnits(selected.balance, selected.decimals)) }
-    setTimeout(() => inputRef.current?.focus(), 10)
-  }
-
-  // ── handleTransfer — v4 + Oracle ──────────────────────────────────────
   const handleTransfer = async () => {
-    const r = parseAmt(); if (!r || !selected || !validateAddr(recipient)) return
-
-    // Ottieni Oracle signature (usa quella già cached se fresca)
+    const r = parseAmtIn(); if (!r || !tokenIn || !validateAddr(recipient) || !registry) return
+    if (!tokenIn.isNative) {
+      const tokenChains = findChainForToken(tokenIn.symbol)
+      if (!tokenChains.includes(chainId)) {
+        const targetChain = tokenChains[0]
+        if (targetChain) {
+          setToast({ msg: `${tokenIn.symbol} non disponibile su questa rete. Cambio rete…`, color: T.amber })
+          switchChain({ chainId: targetChain as 1 | 8453 | 84532 | 11155111 })
+          return
+        }
+      }
+    }
     let oracle = oracleData
     if (!oracle || !oracle.approved) {
       setPhase('preflight')
       try {
-        const res = await fetch(`${API_BASE}/api/v1/compliance/check`, {
+        const res = await fetch(`${API_BASE}/api/v1/compliance/verify`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             sender: address, recipient,
-            token:  selected.address ?? '0x0000000000000000000000000000000000000000',
-            amount: formatUnits(r, selected.decimals),
-            symbol: selected.symbol, chainId,
+            tokenIn:  tokenIn.isNative ? '0x0000000000000000000000000000000000000000' : tokenIn.address,
+            tokenOut: isSwapMode && tokenOut
+              ? tokenOut.address
+              : (tokenIn.isNative ? '0x0000000000000000000000000000000000000000' : tokenIn.address),
+            amountIn: formatUnits(r, tokenIn.decimals), chainId,
           }),
           signal: AbortSignal.timeout(10_000),
         })
         oracle = await res.json()
-      } catch (e) {
-        setTxError('Oracle non raggiungibile. Riprova.')
-        setPhase('error'); return
-      }
+      } catch { setTxError('Oracle non raggiungibile.'); setPhase('error'); return }
     }
-
-    if (!oracle?.approved) {
-      setOracleDenied(true); setOracleData(oracle); setPhase('idle'); return
-    }
-
-    txLog('tx.initiated', {
-      token: selected.symbol, amount: formatUnits(r, selected.decimals),
-      silentFlow, permit2: !selected.isNative, gasless: gaslessBadge,
-      riskScore: oracle.riskScore,
-    })
-
+    if (!oracle?.approved) { setOracleDenied(true); setOracleData(oracle); setPhase('idle'); return }
+    txLog('tx.initiated', { isSwap: isSwapMode, token: tokenIn.symbol, chain: chainId })
     try {
-      if (selected.isNative) {
-        // ── ETH: transferETHWithOracle ────────────────────────────────
-        setPhase('signing')
-        const hash = await writeContractAsync({
-          address: FEE_ROUTER_ADDRESS, abi: FEE_ROUTER_ABI,
-          functionName: 'transferETHWithOracle',
-          args: [
-            getAddress(recipient) as `0x${string}`,
-            oracle.oracleNonce as `0x${string}`,
-            BigInt(oracle.oracleDeadline),
-            oracle.oracleSignature as `0x${string}`,
-          ],
-          value: r,
-        })
-        txLog('tx.broadcast_eth', { hash })
-        setSendHash(hash); setPhase('wait_send')
-
-      } else if (silentFlow) {
-        // ── ERC20: allowance OK → skip approve ────────────────────────
-        txLog('tx.silent_flow', { msg: 'Allowance OK' })
-        await execSend(oracle)
-
+      if (isSwapMode) {
+        if (!tokenIn.isNative) {
+          setPhase('approving')
+          const ah = await writeContractAsync({ address: tokenIn.address!, abi: erc20Abi, functionName: 'approve', args: [registry.feeRouter, r] })
+          setApprovHash(ah); setPhase('wait_approve')
+        } else { await execSwap(oracle) }
       } else {
-        // ── ERC20: Permit2 one-time approve + transferWithOracle ──────
-        setPhase('approving')
-        const approved = await permit2.ensureApproval(selected.address!)
-        if (!approved) { handleErr(new Error(permit2.error || 'Permit2 approval failed')); return }
-
-        const ah = await writeContractAsync({
-          address: selected.address!, abi: erc20Abi,
-          functionName: 'approve', args: [FEE_ROUTER_ADDRESS, r],
-        })
-        txLog('tx.approve_broadcast', { hash: ah })
-        setApprovHash(ah); setPhase('wait_approve')
+        if (!tokenIn.isNative) {
+          setPhase('approving')
+          const ah = await writeContractAsync({ address: tokenIn.address!, abi: erc20Abi, functionName: 'approve', args: [registry.feeRouter, r] })
+          setApprovHash(ah); setPhase('wait_approve')
+        } else { await execDirect(oracle) }
       }
     } catch (e) { handleErr(e) }
   }
 
   const reset = () => {
-    setPhase('idle'); setAmount(''); setRecipient(''); setPaymentRef('')
-    setFiscalRef(''); setReport(null); setCompRec(null)
-    setApprovHash(undefined); setSendHash(undefined); setTxError('')
-    setOracleData(null); setOracleDenied(false)
-    permit2.reset(); paymaster.reset()
+    setPhase('idle'); setAmount(''); setRecipient(''); setPaymentRef(''); setFiscalRef('')
+    setReport(null); setCompRec(null); setApprovHash(undefined); setSendHash(undefined)
+    setTxError(''); setOracleData(null); setOracleDenied(false)
   }
 
   const handlePdf = () => {
     if (!report || !address) return
     generatePdfReceipt({
-      txHash: report.txHash, timestamp: report.timestamp,
-      sender: address, recipient,
-      grossAmount: fmtU(report.gross, report.decimals),
-      netAmount:   fmtU(report.net,   report.decimals),
-      feeAmount:   fmtU(report.fee,   report.decimals),
-      symbol: report.symbol,
-      paymentRef: oracleData?.paymentRef || '—',
-      fiscalRef:  oracleData?.fiscalRef  || '—',
-      eurValue: report.eurValue,
-      network: IS_TESTNET ? 'Base Sepolia' : 'Base Mainnet',
+      txHash: report.txHash, timestamp: report.timestamp, sender: address, recipient,
+      grossAmount: formatUnits(report.gross, report.decimals),
+      netAmount:   formatUnits(report.net,   report.decimals),
+      feeAmount:   formatUnits(report.fee,   report.decimals),
+      symbol: report.symbol, paymentRef: oracleData?.paymentRef || '—',
+      fiscalRef: oracleData?.fiscalRef || '—', eurValue: report.eurValue,
+      network: getRegistry(chainId)?.chainName ?? 'Base',
     })
   }
 
-  const rawVal  = parseAmt()
-  const split   = rawVal ? calcSplit(rawVal) : null
-  const busy    = ['preflight','approving','wait_approve','signing','wait_send'].includes(phase)
-  const dec     = selected?.decimals ?? 18
-  const sym     = selected?.symbol ?? 'ETH'
-  const eurVal  = eurPrice && amount && Number(amount) > 0 ? (parseFloat(amount) * eurPrice).toFixed(2) : null
-  const isWrong = isConnected && chainId !== base.id && chainId !== baseSepolia.id
-  const hasInsuf = isConnected && !!rawVal && !!selected && rawVal > selected.balance
-
-  const ctaState: CtaState = !isConnected ? 'disconnected'
-    : isWrong ? 'wrong_network'
-    : busy ? 'busy'
-    : hasInsuf ? 'insufficient'
-    : oracleDenied ? 'oracle_denied'
-    : !recipient || !!addrError ? 'no_recipient'
-    : !rawVal ? 'no_amount'
-    : 'ready'
-
-  // ── Stili — identici a v4 ─────────────────────────────────────────────
-  const C = {
-    card:   { borderRadius: 28, background: T.card, border: `1px solid ${T.border}`, overflow: 'hidden', boxShadow: `0 24px 80px rgba(0,0,0,0.8), 0 0 60px ${T.emerald}05` } satisfies React.CSSProperties,
-    box:    { borderRadius: 20, background: focused ? '#151526' : T.surface, padding: '16px 18px', borderWidth: 1.5, borderStyle: 'solid' as const, borderColor: focused ? T.emerald + '40' : 'transparent', transition: 'all 0.2s', cursor: 'text' } satisfies React.CSSProperties,
-    box2:   { borderRadius: 20, background: T.surface, padding: '16px 18px' } satisfies React.CSSProperties,
-    row:    { display: 'flex', alignItems: 'center', justifyContent: 'space-between' } satisfies React.CSSProperties,
-    mono:   { fontFamily: T.mono } satisfies React.CSSProperties,
-    bigNum: { fontFamily: T.display, fontSize: '2.5rem', fontWeight: 300, letterSpacing: '-0.03em' } satisfies React.CSSProperties,
-    muted:  { color: T.muted, fontSize: 13, fontWeight: 600 } satisfies React.CSSProperties,
-    input:  { width: '100%', background: 'rgba(0,0,0,0.5)', border: `1px solid ${T.border}`, borderRadius: 12, padding: '12px 14px', color: T.text, fontSize: 14, outline: 'none', transition: 'all 0.2s', fontFamily: T.mono, boxSizing: 'border-box' as const } satisfies React.CSSProperties,
+  const fmtBal = (t: TokenConfig & { balance: bigint }) => {
+    const v = parseFloat(formatUnits(t.balance, t.decimals))
+    return ['USDC','USDT','EURC'].includes(t.symbol) ? v.toFixed(2)
+      : t.symbol === 'cbBTC' || t.symbol === 'WBTC' ? v.toFixed(6)
+      : v.toFixed(4)
+  }
+  const validateAddr = (addr: string) => {
+    if (!addr) { setAddrError(''); return false }
+    if (!isAddress(addr)) { setAddrError('Indirizzo non valido'); return false }
+    setAddrError(''); return true
+  }
+  const handleMax = async () => {
+    if (!tokenIn) return
+    if (tokenIn.isNative) {
+      try {
+        const gp   = await publicClient?.getGasPrice() ?? 1_500_000_000n
+        const cost = (21_000n * gp * 12n) / 10n
+        setAmount(formatEther(tokenIn.balance > cost ? tokenIn.balance - cost : 0n))
+      } catch { setAmount(formatEther(tokenIn.balance)) }
+    } else { setAmount(formatUnits(tokenIn.balance, tokenIn.decimals)) }
+    setTimeout(() => inputRef.current?.focus(), 10)
   }
 
-  // ── Receive pill (con logo) — identico a v4 ma con TokenLogo ─────────
-  const ReceivePill = () => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 13px 9px 9px', borderRadius: 18, background: T.emerald + '15', border: `1px solid ${T.emerald}30` }}>
-      {selected && <TokenLogo token={selected} size={24} />}
-      <span style={{ fontSize: 14, fontWeight: 700, color: T.emerald }}>{sym}</span>
-    </div>
-  )
+  // ── Valori derivati ────────────────────────────────────────────────────
+  const rawIn    = parseAmtIn()
+  const busy     = ['preflight','approving','wait_approve','signing','wait_send'].includes(phase)
+  const sym      = tokenIn?.symbol  ?? 'ETH'
+  const symOut   = isSwapMode ? (tokenOut?.symbol ?? 'USDC') : sym
+  const isWrong  = isConnected && !([8453, 1, 84532, 11155111] as number[]).includes(chainId as number)
+  const hasInsuf = isConnected && !!rawIn && !!tokenIn && rawIn > tokenIn.balance
+  const noLiq    = isSwapMode && swapQuote?.status === 'error_liquidity'
+  const isL2     = chainId === 8453 || chainId === 84532
+  const regChain = getRegistry(chainId)
 
-  // ── SUCCESS — identico a v4 ───────────────────────────────────────────
+  const ctaState: CtaState = !isConnected   ? 'disconnected'
+    : isWrong                               ? 'wrong_network'
+    : busy                                  ? 'busy'
+    : hasInsuf                              ? 'insufficient'
+    : oracleDenied                          ? 'oracle_denied'
+    : noLiq                                 ? 'no_liquidity'
+    : !recipient || !!addrError             ? 'no_recipient'
+    : !rawIn                                ? 'no_amount'
+    :                                         'ready'
+
+  const C = {
+    card:  { borderRadius:28, background:T.card, border:`1px solid ${T.border}`, overflow:'hidden' as const, boxShadow:`0 24px 80px rgba(0,0,0,0.8), 0 0 60px ${T.emerald}05` } satisfies React.CSSProperties,
+    box:   { borderRadius:18, background:focused?'rgba(255,255,255,0.04)':'rgba(255,255,255,0.025)', padding:'15px 16px', border:'1.5px solid', borderColor:focused?`${T.emerald}35`:`${T.border}`, transition:'all 0.2s ease', cursor:'text', boxShadow:focused?`0 0 0 3px ${T.emerald}08`:'none' } satisfies React.CSSProperties,
+    box2:  { borderRadius:18, background:'rgba(255,255,255,0.025)', padding:'15px 16px', border:`1.5px solid ${T.border}` } satisfies React.CSSProperties,
+    row:   { display:'flex', alignItems:'center', justifyContent:'space-between' } satisfies React.CSSProperties,
+    input: { width:'100%', background:'rgba(0,0,0,0.3)', border:`1px solid ${T.border}`, borderRadius:11, padding:'11px 13px', color:T.text, fontSize:14, outline:'none', transition:'all 0.2s ease', fontFamily:T.M, boxSizing:'border-box' as const } satisfies React.CSSProperties,
+  }
+
+  // ── SUCCESS ───────────────────────────────────────────────────────────
   if (phase === 'done' && report) return (
     <>
-      <div style={C.card}>
-        <div style={{ padding: '18px 20px 16px', borderBottom: `1px solid ${T.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 9, height: 9, borderRadius: '50%', background: T.emerald, boxShadow: `0 0 12px ${T.emerald}` }} />
-          <span style={{ ...C.mono, color: T.emerald, fontSize: 13, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>Pagamento Confermato</span>
-          <span style={{ ...C.mono, fontSize: 11, color: T.muted, marginLeft: 'auto' }}>{new Date(report.timestamp).toLocaleString('it-IT')}</span>
+      <div style={C.card} className="rp-anim-0">
+        <div style={{ padding:'18px 20px 16px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', gap:10 }}>
+          <div style={{ width:9, height:9, borderRadius:'50%', background:T.emerald, boxShadow:`0 0 12px ${T.emerald}` }} />
+          <span style={{ fontFamily:T.D, color:T.emerald, fontSize:13, fontWeight:700, textTransform:'uppercase' as const, letterSpacing:'0.06em' }}>Pagamento Confermato</span>
+          {oracleData?.isSwap && (
+            <span style={{ fontFamily:T.D, fontSize:10, color:T.purple, background:`${T.purple}15`, padding:'2px 7px', borderRadius:5, border:`1px solid ${T.purple}30` }}>
+              ⚡ Swap V3
+            </span>
+          )}
+          <span style={{ fontFamily:T.M, fontSize:11, color:T.muted, marginLeft:'auto' }}>
+            {new Date(report.timestamp).toLocaleString('it-IT')}
+          </span>
         </div>
-        <div style={{ padding: '20px' }}>
+        <div style={{ padding:'20px' }}>
           <TransactionStatusUI
-            phase="done" txHash={report.txHash} isTestnet={IS_TESTNET}
-            grossStr={fmtU(report.gross, report.decimals)}
-            netStr={fmtU(report.net, report.decimals)}
-            feeStr={fmtU(report.fee, report.decimals)}
+            phase="done" txHash={report.txHash} isTestnet={chainId === baseSepolia.id}
+            grossStr={formatUnits(report.gross, report.decimals)}
+            netStr={formatUnits(report.net, report.decimals)}
+            feeStr={formatUnits(report.fee, report.decimals)}
             symbol={report.symbol} recipient={recipient}
             paymentRef={oracleData?.paymentRef || '—'}
             fiscalRef={oracleData?.fiscalRef || '—'}
@@ -713,265 +774,346 @@ export default function TransferForm(): React.JSX.Element {
   return (
     <>
       <div style={C.card}>
-        {/* Header — v4 + badge Oracle */}
-        <div style={{ ...C.row, padding: '14px 18px 10px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 15, fontWeight: 800, letterSpacing: '-0.02em', color: T.text, fontFamily: 'var(--font-display)' }}>Invia</span>
-            {silentFlow && !selected?.isNative && (
-              <span style={{ ...C.mono, fontSize: 10, color: T.emerald, background: T.emerald + '10', padding: '2px 8px', borderRadius: 6, border: `1px solid ${T.emerald}25` }}>
-                ⚡ Autorizzazione già presente
+
+        {/* Header — niente mode toggle, solo info */}
+        <div className="rp-anim-0" style={{ ...C.row, padding:'16px 18px 10px' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+            <span style={{ fontFamily:T.D, fontSize:17, fontWeight:800, color:T.text, letterSpacing:'-0.02em' }}>
+              Invia
+            </span>
+            {/* Badge auto-detection */}
+            {isSwapMode && (
+              <span style={{ fontFamily:T.D, fontSize:10, fontWeight:700, color:T.purple, background:`${T.purple}12`, padding:'3px 8px', borderRadius:7, border:`1px solid ${T.purple}25` }}>
+                ⚡ Swap & Send
               </span>
             )}
-            {!silentFlow && selected && !selected.isNative && (
-              <span style={{ ...C.mono, fontSize: 9, color: '#a78bfa', background: '#a78bfa12', padding: '2px 7px', borderRadius: 5, border: '1px solid #a78bfa25' }}>Permit2</span>
-            )}
-            {gaslessBadge && (
-              <span style={{ ...C.mono, fontSize: 9, color: T.emerald, background: T.emerald + '0d', padding: '2px 7px', borderRadius: 5, border: `1px solid ${T.emerald}20` }}>⛽ Gasless</span>
+            {!isSwapMode && (
+              <span style={{ fontFamily:T.D, fontSize:10, fontWeight:700, color:T.emerald, background:`${T.emerald}0d`, padding:'3px 8px', borderRadius:7, border:`1px solid ${T.emerald}20` }}>
+                Direct
+              </span>
             )}
             {oracleChecking && (
-              <span style={{ ...C.mono, fontSize: 9, color: T.amber, background: T.amber + '0d', padding: '2px 7px', borderRadius: 5, border: `1px solid ${T.amber}20` }}>🛡 AML…</span>
+              <span style={{ fontFamily:T.D, fontSize:9, color:T.amber, background:`${T.amber}0d`, padding:'2px 7px', borderRadius:5, border:`1px solid ${T.amber}20` }}>
+                🛡 AML…
+              </span>
             )}
             {oracleData?.approved && !oracleChecking && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontFamily: T.mono, fontSize: 10 }}>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: oracleData.riskLevel === 'LOW' ? T.emerald : T.amber, boxShadow: `0 0 5px ${oracleData.riskLevel === 'LOW' ? T.emerald : T.amber}` }} />
-                <span style={{ color: oracleData.riskLevel === 'LOW' ? T.emerald : T.amber }}>AML {oracleData.riskLevel} · {oracleData.riskScore}/100</span>
+              <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+                <div style={{ width:6, height:6, borderRadius:'50%', background:oracleData.riskLevel==='LOW'?T.emerald:T.amber, boxShadow:`0 0 5px ${oracleData.riskLevel==='LOW'?T.emerald:T.amber}` }} />
+                <span style={{ fontFamily:T.D, fontSize:10, color:oracleData.riskLevel==='LOW'?T.emerald:T.amber }}>
+                  AML {oracleData.riskLevel}
+                </span>
               </div>
             )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
             <GasTracker />
-            {isConnected && selected && (
-              <span style={{ ...C.mono, fontSize: 11, color: T.muted }}>{fmtBal(selected)} {sym}</span>
+            {regChain && !isL2 && (
+              <span style={{ fontFamily:T.D, fontSize:10, color:T.amber, background:`${T.amber}0d`, padding:'2px 7px', borderRadius:5 }}>⛽ L1</span>
             )}
-            <button onClick={() => setShowExtras(p => !p)}
-              style={{ width: 32, height: 32, borderRadius: 10, background: showExtras ? T.emerald + '15' : 'transparent', border: 'none', color: showExtras ? T.emerald : T.muted, cursor: 'pointer', fontSize: 15, transition: 'all 0.25s' }}>⚙</button>
+            {isConnected && tokenIn && (
+              <span style={{ fontFamily:T.M, fontSize:11, color:T.muted }}>{fmtBal(tokenIn)} {sym}</span>
+            )}
+            <button
+              onClick={() => setShowExtras(p => !p)}
+              style={{ width:32, height:32, borderRadius:10, background:showExtras?`${T.emerald}15`:'transparent', border:'none', color:showExtras?T.emerald:T.muted, cursor:'pointer', fontSize:14, transition:'all 0.25s' }}
+              onMouseEnter={e => { if (!showExtras) e.currentTarget.style.transform='rotate(45deg)' }}
+              onMouseLeave={e => { if (!showExtras) e.currentTarget.style.transform='rotate(0)' }}
+            >⚙</button>
           </div>
         </div>
 
-        <div style={{ padding: '0 8px' }}>
+        <div style={{ padding:'0 8px 8px' }}>
 
-          {/* SELL — identico a v4, TokenDropdown al posto di <select> */}
-          <div style={C.box} onClick={() => inputRef.current?.focus()}>
-            <div style={{ ...C.row, marginBottom: 8 }}>
-              <span style={{ ...C.muted, fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 13 }}>Sell</span>
-              <button onClick={e => { e.stopPropagation(); handleMax() }}
-                style={{ ...C.mono, fontSize: 12, color: T.emerald, background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600, padding: 0 }}>
-                {isConnected && selected ? `Saldo: ${fmtBal(selected)} MAX` : 'MAX'}
-              </button>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <input ref={inputRef} type="number" placeholder="0" min="0" step="any"
-                value={amount} onChange={e => setAmount(e.target.value)}
-                onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
-                disabled={busy}
-                style={{ ...C.bigNum, flex: 1, background: 'transparent', border: 'none', outline: 'none', color: busy ? T.muted : T.text, minWidth: 0 }}
-              />
-              {/* ── TokenDropdown custom (no <select> nativo) ── */}
-              <div onClick={e => e.stopPropagation()}>
-                <TokenDropdown
-                  tokens={tokens}
-                  selected={selected}
-                  busy={busy}
-                  onSelect={t => { setSelected(t); setAmount(''); setOracleData(null); setOracleDenied(false) }}
-                />
-              </div>
-            </div>
-            <div style={{ ...C.row, marginTop: 6, ...C.mono, fontSize: 13, color: T.muted }}>
-              <span>{eurVal ? '≈ ' + eurVal + ' EUR' : '$0'}</span>
-              {hasInsuf && <span style={{ color: T.red, fontSize: 12 }}>Saldo insufficiente</span>}
-            </div>
-          </div>
-
-          {/* Arrow — identico a v4 */}
-          <div style={{ display: 'flex', justifyContent: 'center', margin: '6px 0' }}>
-            <button style={{ width: 36, height: 36, borderRadius: 12, background: T.surface, border: `2px solid ${T.border}`, color: T.muted, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.3s' }}
-              onMouseEnter={e => { e.currentTarget.style.transform = 'rotate(180deg)'; e.currentTarget.style.color = T.emerald }}
-              onMouseLeave={e => { e.currentTarget.style.transform = 'rotate(0)'; e.currentTarget.style.color = T.muted }}>↓</button>
-          </div>
-
-          {/* RECEIVE — identico a v4 con logo */}
-          <div style={C.box2}>
-            <div style={{ ...C.row, marginBottom: 8 }}>
-              <span style={{ ...C.muted, fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: 13 }}>Receive</span>
-              <span style={{ ...C.mono, fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 20, background: T.emerald + '12', color: T.emerald, border: `1px solid ${T.emerald}25` }}>
-                Auto · 0.5% fee
-              </span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ ...C.bigNum, flex: 1, color: split ? T.text : T.muted, transition: 'color 0.3s' }}>
-                {split ? fmtU(split.main, dec) : '0'}
-              </span>
-              <ReceivePill />
-            </div>
-            <div style={{ ...C.mono, fontSize: 13, color: T.muted, marginTop: 6 }}>
-              {split ? 'Fee: ' + fmtU(split.fee, dec) + ' ' + sym + ' (0.5%)' : 'Inserisci un importo'}
-            </div>
-          </div>
-
-          {/* Recipient — identico a v4 */}
-          <div style={{ margin: '8px 0', padding: '14px 16px', borderRadius: 16, background: T.surface, border: `1px solid ${T.border}` }}>
-            <div style={{ ...C.row, marginBottom: 8 }}>
-              <span style={{ ...C.mono, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.1em', color: T.muted }}>Destinatario</span>
-              {recipient && !addrError && <span style={{ ...C.mono, fontSize: 11, color: T.emerald }}>✓ Valido</span>}
-              {addrError && <span style={{ ...C.mono, fontSize: 11, color: T.red }}>⚠ {addrError}</span>}
-            </div>
-            <input type="text" placeholder="0x..."
-              value={recipient}
-              onChange={e => { setRecipient(e.target.value); validateAddr(e.target.value); setOracleData(null); setOracleDenied(false) }}
-              disabled={busy}
-              style={{ ...C.input, borderColor: addrError ? T.red + '40' : recipient && !addrError ? T.emerald + '30' : T.border }}
-            />
-            <AddressVerifier address={recipient} />
-          </div>
-
-          {/* Oracle denial banner — Zero Trust */}
-          {oracleDenied && oracleData && !busy && (
-            <div style={{ marginBottom: 8 }}>
-              <OracleDenialBanner reason={oracleData.rejectionReason ?? 'Transazione bloccata dall\'Oracle AML.'} riskLevel={oracleData.riskLevel} />
+          {/* Gas warning L1 */}
+          {!isL2 && isConnected && (
+            <div style={{ margin:'0 0 8px', padding:'8px 12px', borderRadius:10, background:`${T.amber}08`, border:`1px solid ${T.amber}20`, fontFamily:T.D, fontSize:11, color:T.amber, display:'flex', alignItems:'center', gap:8 }}>
+              <span>⚠</span>
+              <span>Gas su Ethereum L1 è più costoso. Considera Base per micro-pagamenti.</span>
             </div>
           )}
 
-          {/* Extras DAC8 — v4 + nota oracle */}
+          {/* SELL — rp-anim-1 */}
+          <div className="rp-anim-1">
+            <div style={C.box} onClick={() => inputRef.current?.focus()}>
+              <div style={{ ...C.row, marginBottom:8 }}>
+                <span style={{ fontFamily:T.D, fontSize:13, fontWeight:700, color:T.muted }}>
+                  {isSwapMode ? 'Stai inviando' : 'Sell'}
+                </span>
+                <button
+                  onClick={e => { e.stopPropagation(); handleMax() }}
+                  style={{ fontFamily:T.D, fontSize:12, fontWeight:700, color:T.emerald, background:'none', border:'none', cursor:'pointer', padding:0, transition:'opacity 0.15s' }}
+                  onMouseEnter={e => e.currentTarget.style.opacity='0.7'}
+                  onMouseLeave={e => e.currentTarget.style.opacity='1'}
+                >
+                  {isConnected && tokenIn ? `Saldo: ${fmtBal(tokenIn)} MAX` : 'MAX'}
+                </button>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                <input
+                  ref={inputRef} type="number" placeholder="0" min="0" step="any"
+                  value={amount} onChange={e => setAmount(e.target.value)}
+                  onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+                  disabled={busy}
+                  style={{ fontFamily:T.D, fontSize:'2.3rem', fontWeight:300, letterSpacing:'-0.03em', flex:1, background:'transparent', border:'none', outline:'none', color:busy?T.muted:T.text, minWidth:0 }}
+                />
+                <div onClick={e => e.stopPropagation()}>
+                  <TokenPill
+                    token={tokenIn}
+                    busy={busy}
+                    onClick={() => setSelectingToken('in')}
+                  />
+                </div>
+              </div>
+              <div style={{ ...C.row, marginTop:6 }}>
+                <span style={{ fontFamily:T.D, fontSize:13, fontWeight:500, color:T.muted }}>
+                  {amount && tokenIn ? `≈ ${(parseFloat(amount) * (EUR_RATES[tokenIn.symbol] ?? 1)).toFixed(2)} EUR` : '$0'}
+                </span>
+                {hasInsuf && (
+                  <span style={{ fontFamily:T.D, fontSize:12, fontWeight:600, color:T.red }}>Saldo insufficiente</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Arrow — ⇅ se swap, ↓ se direct, cliccabile per invertire */}
+          <div className="rp-anim-2" style={{ display:'flex', justifyContent:'center', margin:'5px 0' }}>
+            <button
+              onClick={() => {
+                if (isSwapMode && tokenIn && tokenOut) {
+                  const tmp = tokenIn; setTokenIn(tokenOut); setTokenOut(tmp); setAmount('')
+                }
+              }}
+              style={{ width:36, height:36, borderRadius:12, background:isSwapMode?`${T.purple}15`:'rgba(255,255,255,0.04)', border:`1.5px solid ${isSwapMode?`${T.purple}40`:T.border}`, color:isSwapMode?T.purple:T.muted, fontSize:15, cursor:isSwapMode?'pointer':'default', display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.25s ease' }}
+              onMouseEnter={e => { if (isSwapMode) { e.currentTarget.style.transform='rotate(180deg)'; e.currentTarget.style.color=T.purple } }}
+              onMouseLeave={e => { e.currentTarget.style.transform='rotate(0)'; e.currentTarget.style.color=isSwapMode?T.purple:T.muted }}
+            >
+              {isSwapMode ? '⇅' : '↓'}
+            </button>
+          </div>
+
+          {/* RECEIVE — rp-anim-2 */}
+          <div className="rp-anim-2">
+            <div style={C.box2}>
+              <div style={{ ...C.row, marginBottom:8 }}>
+                <span style={{ fontFamily:T.D, fontSize:13, fontWeight:700, color:T.muted }}>
+                  {isSwapMode ? 'Il destinatario riceverà' : 'Receive'}
+                </span>
+                <span style={{ fontFamily:T.D, fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:20, background:`${isSwapMode?T.purple:T.emerald}10`, color:isSwapMode?T.purple:T.emerald, border:`1px solid ${isSwapMode?T.purple:T.emerald}25` }}>
+                  {isSwapMode ? '⚡ Uniswap V3' : 'Auto · 0.5% fee'}
+                </span>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                <span style={{ fontFamily:T.D, fontSize:'2.3rem', fontWeight:300, letterSpacing:'-0.03em', flex:1, color:T.text, transition:'color 0.3s' }}>
+                  {isSwapMode
+                    ? (swapQuote?.status === 'success' ? swapQuote.netAmountFmt
+                       : swapQuote?.status === 'loading' ? '…' : '0')
+                    : (directQuote ? directQuote.netFmt : '0')
+                  }
+                </span>
+                {/* TokenPill sempre cliccabile — apre modal output */}
+                {/* Scegliere token diverso da tokenIn → isSwapMode=true auto */}
+                <div onClick={e => e.stopPropagation()}>
+                  <TokenPill
+                    token={isSwapMode ? tokenOut : tokenIn}
+                    busy={busy}
+                    accentColor={isSwapMode ? T.purple : T.emerald}
+                    onClick={() => setSelectingToken('out')}
+                  />
+                </div>
+              </div>
+              <div style={{ fontFamily:T.D, fontSize:13, fontWeight:500, color:T.muted, marginTop:6 }}>
+                {isSwapMode
+                  ? (swapQuote?.status === 'success'
+                     ? `Fee gateway: ${swapQuote.feeFmt} ${symOut} (0.5%)`
+                     : 'Inserisci un importo per la quotazione')
+                  : (directQuote ? `Fee: ${directQuote.feeFmt} ${sym} (0.5%)` : 'Inserisci un importo')
+                }
+              </div>
+            </div>
+          </div>
+
+          {/* Quote panel — solo in swap mode */}
+          {isSwapMode && swapQuote && (
+            <div style={{ marginTop:8 }}>
+              <QuotePanel quote={swapQuote} tokenOut={tokenOut} isSwap={isSwapMode} />
+            </div>
+          )}
+
+          {/* Recipient — rp-anim-3 */}
+          <div className="rp-anim-3" style={{ margin:'8px 0' }}>
+            <div style={{ padding:'13px 15px', borderRadius:16, background:'rgba(255,255,255,0.025)', border:`1px solid ${T.border}` }}>
+              <div style={{ ...C.row, marginBottom:8 }}>
+                <span style={{ fontFamily:T.D, fontSize:11, fontWeight:700, textTransform:'uppercase' as const, letterSpacing:'0.1em', color:T.muted }}>
+                  Destinatario
+                </span>
+                {recipient && !addrError && (
+                  <span style={{ fontFamily:T.D, fontSize:11, fontWeight:600, color:T.emerald }}>✓ Valido</span>
+                )}
+                {addrError && (
+                  <span style={{ fontFamily:T.D, fontSize:11, fontWeight:600, color:T.red }}>⚠ {addrError}</span>
+                )}
+              </div>
+              <input
+                type="text" placeholder="0x..."
+                value={recipient}
+                onChange={e => { setRecipient(e.target.value); validateAddr(e.target.value); setOracleData(null); setOracleDenied(false) }}
+                disabled={busy}
+                style={{ ...C.input, borderColor:addrError?`${T.red}40`:recipient&&!addrError?`${T.emerald}25`:T.border }}
+              />
+              <AddressVerifier address={recipient} />
+            </div>
+          </div>
+
+          {/* Oracle denial */}
+          {oracleDenied && oracleData && !busy && (
+            <div style={{ marginBottom:8, padding:'12px 14px', borderRadius:12, background:`${T.red}0d`, border:`1px solid ${T.red}30` }}>
+              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
+                <span>🚫</span>
+                <span style={{ fontFamily:T.D, fontSize:12, fontWeight:700, color:T.red }}>
+                  Transazione negata per policy di conformità AML
+                </span>
+              </div>
+              <div style={{ fontFamily:T.D, fontSize:11, color:T.muted, paddingLeft:22 }}>
+                {oracleData.rejectionReason}
+              </div>
+            </div>
+          )}
+
+          {/* Extras DAC8 */}
           {showExtras && (
-            <div style={{ margin: '0 0 8px', padding: '14px 16px', borderRadius: 16, background: T.surface, border: `1px solid ${T.border}`, animation: 'fadeSlideIn 0.25s ease' }}>
-              <div style={{ ...C.mono, fontSize: 10, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.1em', color: T.muted, marginBottom: 10 }}>
+            <div style={{ margin:'0 0 8px', padding:'13px 15px', borderRadius:16, background:'rgba(255,255,255,0.025)', border:`1px solid ${T.border}`, animation:'rpFadeUp 0.25s var(--ease-spring) both' }}>
+              <div style={{ fontFamily:T.D, fontSize:11, fontWeight:700, textTransform:'uppercase' as const, letterSpacing:'0.1em', color:T.muted, marginBottom:10 }}>
                 payment_ref & fiscal_ref (MiCA/DAC8)
               </div>
-              <input type="text" placeholder="Rif. pagamento (es. INV-001)"
-                value={paymentRef} onChange={e => setPaymentRef(e.target.value)} disabled={busy}
-                style={{ ...C.input, marginBottom: 8 }} />
-              <input type="text" placeholder="ID Fiscale / Rif. Fattura (DAC8)"
-                value={fiscalRef} onChange={e => setFiscalRef(e.target.value)} disabled={busy}
-                style={C.input} />
-              <div style={{ ...C.mono, fontSize: 10, color: T.muted + '80', marginTop: 6 }}>
-                On-chain + SHA-256 → /api/v1/tx/callback
-              </div>
+              <input type="text" placeholder="Rif. pagamento (es. INV-001)" value={paymentRef} onChange={e => setPaymentRef(e.target.value)} disabled={busy} style={{ ...C.input, marginBottom:8 }} />
+              <input type="text" placeholder="ID Fiscale" value={fiscalRef} onChange={e => setFiscalRef(e.target.value)} disabled={busy} style={C.input} />
               {oracleData?.dac8Reportable && (
-                <div style={{ ...C.mono, fontSize: 10, color: T.amber, marginTop: 4 }}>
-                  ⚠ DAC8 reportable (≥ €1.000) — fiscal_ref obbligatorio
-                </div>
+                <div style={{ fontFamily:T.D, fontSize:10, color:T.amber, marginTop:6 }}>⚠ DAC8 reportable (≥ €1.000)</div>
               )}
-              {complianceApi.getPendingCount() > 0 && (
-                <div style={{ ...C.mono, fontSize: 10, color: T.amber, marginTop: 4 }}>
-                  ⏳ {complianceApi.getPendingCount()} record in queue (retry al prossimo avvio)
+              {oracleData?.sourceChain && (
+                <div style={{ fontFamily:T.M, fontSize:10, color:T.muted, marginTop:4 }}>
+                  sourceChain: {oracleData.sourceChain} · isSwap: {String(oracleData.isSwap)}
                 </div>
               )}
             </div>
           )}
 
-          {/* Split preview — v4 + gas_cost gasless */}
-          {split && !hasInsuf && !oracleDenied && (
-            <div style={{ margin: '0 0 8px', borderRadius: 14, overflow: 'hidden', border: `1px solid ${T.emerald}20`, animation: 'fadeSlideIn 0.3s ease' }}>
-              <div style={{ ...C.mono, padding: '7px 14px', background: T.emerald + '08', fontSize: 10, color: T.emerald, fontWeight: 700, borderBottom: `1px solid ${T.emerald}15`, letterSpacing: '0.06em' }}>
-                200 · Preview split
-              </div>
-              {[
-                { l: 'net_amount (99.5%)', v: fmtU(split.main, dec) + ' ' + sym, h: true  },
-                { l: 'fee_amount (0.5%)',  v: fmtU(split.fee,  dec) + ' ' + sym, h: false },
-                ...(eurVal ? [{ l: 'fiat_amount', v: '≈ ' + eurVal + ' EUR', h: false }] : []),
-                ...(gaslessBadge ? [{ l: 'gas_cost', v: '0.0000 USD · ⛽ Gasless', h: false }] : []),
-              ].map((r, i, arr) => (
-                <div key={i} style={{ display: 'flex', borderLeft: `1px dashed ${T.border}` }}>
-                  <div style={{ width: '40%', padding: '7px 0 7px 14px', ...C.mono, fontSize: 11, color: T.muted, borderBottom: i < arr.length - 1 ? `1px solid ${T.border}` : 'none' }}>{r.l}</div>
-                  <div style={{ width: '60%', padding: '7px 14px', ...C.mono, fontSize: 11, fontWeight: r.h ? 700 : 500, color: r.h ? T.emerald : T.muted, borderBottom: i < arr.length - 1 ? `1px solid ${T.border}` : 'none' }}>{r.v}</div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Ballistic progress — identico a v4 */}
-          {phase === 'wait_send' && (
-            <div style={{ margin: '0 0 8px' }}>
-              <BallisticProgress active={true} />
-            </div>
-          )}
-
-          {/* TX Status — identico a v4 */}
+          {/* Progress */}
+          {phase === 'wait_send' && <div style={{ margin:'0 0 8px' }}><BallisticProgress active={true} /></div>}
           {(busy || phase === 'error') && (
-            <div style={{ marginBottom: 8 }}>
-              {busy && <MicroStateBadge phase={phase} silent={silentFlow} />}
+            <div style={{ marginBottom:8 }}>
+              {busy && <MicroStateBadge phase={phase} silent={false} />}
               {phase === 'error' && (
-                <TransactionStatusUI phase="error" error={txError} isTestnet={IS_TESTNET} onReset={reset} />
+                <TransactionStatusUI phase="error" error={txError} isTestnet={chainId === baseSepolia.id} onReset={reset} />
               )}
             </div>
           )}
 
-          {/* Smart CTA — v4 + stato oracle_denied */}
-          <div style={{ padding: '2px 0 4px' }}>
+          {/* Smart CTA — rp-anim-4 */}
+          <div className="rp-anim-4" style={{ padding:'2px 0 4px' }}>
             {ctaState === 'disconnected' ? (
               <ConnectButton.Custom>
                 {({ openConnectModal }) => (
-                  <button onClick={openConnectModal} style={{
-                    width: '100%', padding: '17px', borderRadius: 22, border: 'none',
-                    fontFamily: T.display, fontSize: 17, fontWeight: 700,
-                    background: `linear-gradient(135deg, ${T.pink}, #ff6b9d)`,
-                    color: '#fff', cursor: 'pointer',
-                    boxShadow: `0 4px 28px ${T.pink}40`, transition: 'all 0.2s',
-                  }}>Connetti wallet</button>
+                  <button
+                    onClick={openConnectModal}
+                    className="rp-btn-primary rp-btn-glow-pink"
+                    style={{ width:'100%', padding:'17px', borderRadius:22, border:'none', fontFamily:T.D, fontSize:17, fontWeight:700, letterSpacing:'-0.02em', background:`linear-gradient(135deg, ${T.pink}, #ff6b9d)`, color:'#fff', cursor:'pointer' }}
+                  >
+                    Connetti wallet
+                  </button>
                 )}
               </ConnectButton.Custom>
             ) : (
               <button
-                onClick={ctaState === 'wrong_network'
-                  ? () => switchChain({ chainId: chainId === base.id ? baseSepolia.id : base.id })
-                  : ctaState === 'ready' ? handleTransfer : undefined}
-                disabled={['busy','insufficient','no_recipient','no_amount','oracle_denied'].includes(ctaState)}
+                onClick={
+                  ctaState === 'wrong_network' ? () => switchChain({ chainId: 8453 })
+                  : ctaState === 'ready' ? handleTransfer
+                  : undefined
+                }
+                disabled={['busy','insufficient','no_recipient','no_amount','oracle_denied','no_liquidity'].includes(ctaState)}
+                className={ctaState === 'ready' ? `rp-btn-primary ${isSwapMode?'':'rp-btn-glow'}` : 'rp-btn-primary'}
                 style={{
-                  width: '100%', padding: '17px', borderRadius: 22, border: 'none',
-                  fontFamily: T.display, fontSize: 17, fontWeight: 700, letterSpacing: '-0.01em',
-                  cursor: ['busy','insufficient','no_recipient','no_amount','oracle_denied'].includes(ctaState) ? 'not-allowed' : 'pointer',
-                  background: ctaState === 'oracle_denied' ? T.red + '15'
-                    : ctaState === 'busy' || ctaState === 'no_recipient' || ctaState === 'no_amount' ? T.emerald + '10'
-                    : ctaState === 'insufficient' ? T.red + '15'
-                    : ctaState === 'wrong_network' ? `linear-gradient(135deg, ${T.amber}, #ffcc00)`
-                    : `linear-gradient(135deg, ${T.emerald}, #00cc80)`,
-                  color: ctaState === 'oracle_denied' ? T.red + '60'
-                    : ctaState === 'busy' || ctaState === 'no_recipient' || ctaState === 'no_amount' ? T.emerald + '40'
-                    : ctaState === 'insufficient' ? T.red + '60' : '#000',
-                  boxShadow: ctaState === 'ready' ? `0 4px 28px ${T.emerald}35` : 'none',
-                  transition: 'all 0.2s',
+                  width:'100%', padding:'17px', borderRadius:22, border:'none',
+                  fontFamily:T.D, fontSize:17, fontWeight:700, letterSpacing:'-0.02em',
+                  cursor:['busy','insufficient','no_recipient','no_amount','oracle_denied','no_liquidity'].includes(ctaState)?'not-allowed':'pointer',
+                  background:
+                    ctaState==='oracle_denied'  ? `${T.red}15`
+                    : ctaState==='no_liquidity' ? `${T.amber}15`
+                    : ctaState==='busy'||ctaState==='no_recipient'||ctaState==='no_amount' ? `${T.emerald}08`
+                    : ctaState==='insufficient' ? `${T.red}15`
+                    : ctaState==='wrong_network'? `linear-gradient(135deg, ${T.amber}, #ffcc00)`
+                    : isSwapMode                ? `linear-gradient(135deg, ${T.purple}, #c084fc)`
+                    :                             `linear-gradient(135deg, ${T.emerald}, #00cc80)`,
+                  color:
+                    ctaState==='oracle_denied'  ? `${T.red}60`
+                    : ctaState==='no_liquidity' ? `${T.amber}60`
+                    : ctaState==='busy'||ctaState==='no_recipient'||ctaState==='no_amount' ? `${T.emerald}30`
+                    : ctaState==='insufficient' ? `${T.red}60`
+                    : isSwapMode&&ctaState==='ready' ? '#fff'
+                    : '#000',
+                  boxShadow: ctaState==='ready' ? `0 4px 28px ${isSwapMode?T.purple:T.emerald}35` : 'none',
+                  transition:'all 0.2s ease',
                 }}
               >
                 {busy ? (
-                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                    <span style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${T.emerald}30`, borderTopColor: T.emerald, animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
-                    {phase === 'preflight' ? '🛡 AML Check…'
-                      : phase === 'wait_send' ? 'finalizing_on_base…'
-                      : 'In corso…'}
+                  <span style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:10 }}>
+                    <span className="rp-spinner" style={{ width:16, height:16, border:`2px solid ${T.emerald}25`, borderTopColor:'transparent', borderRadius:'50%', display:'inline-block' }} />
+                    <span style={{ fontFamily:T.D }}>
+                      {phase==='preflight'               ? '🛡 AML Check…'
+                       : phase==='approving'||phase==='wait_approve' ? 'Approvazione…'
+                       :                                   'Finalizzazione su chain…'}
+                    </span>
                   </span>
-                ) : ctaState === 'oracle_denied' ? '🚫 Transazione Bloccata'
-                  : ctaState === 'wrong_network' ? 'Cambia rete'
-                  : ctaState === 'insufficient' ? 'Saldo insufficiente'
-                  : ctaState === 'no_recipient' ? 'Inserisci destinatario'
-                  : ctaState === 'no_amount' ? 'Inserisci importo'
-                  : silentFlow && sym !== 'ETH' ? `⚡ Invia ${sym} · 1 firma`
-                  : gaslessBadge ? `⛽ Invia ${sym} · Gasless`
-                  : `Invia ${sym}`}
+                ) : ctaState==='oracle_denied'  ? '🚫 Transazione Bloccata'
+                  : ctaState==='no_liquidity'   ? '⚠ Liquidità insufficiente'
+                  : ctaState==='wrong_network'  ? 'Cambia rete'
+                  : ctaState==='insufficient'   ? 'Saldo insufficiente'
+                  : ctaState==='no_recipient'   ? 'Inserisci destinatario'
+                  : ctaState==='no_amount'      ? 'Inserisci importo'
+                  : isSwapMode                  ? `⚡ Swap & Invia ${sym} → ${symOut}`
+                  :                               `Invia ${sym}`}
               </button>
             )}
           </div>
 
-          {/* Footer — identico a v4 + AML Oracle */}
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 14, padding: '10px 0 14px', ...C.mono, fontSize: 10, color: T.muted + '60' }}>
-            <span>🔒 FeeRouterV3</span>
-            <span>⚡ Base L2</span>
-            <span>📋 MiCA/DAC8</span>
-            <span>🔏 Permit2</span>
-            <span>🛡 AML Oracle</span>
-            {gaslessBadge && <span style={{ color: T.emerald + '55' }}>⛽ Gasless</span>}
-            {isConnected && <span style={{ color: T.emerald + '45' }}>API Bridge ✓</span>}
+          {/* Footer — rp-anim-5 */}
+          <div className="rp-anim-5" style={{ display:'flex', justifyContent:'center', gap:12, padding:'10px 0 12px', flexWrap:'wrap' }}>
+            {[
+              { t:'🔒 FeeRouterV4',                c:T.muted+'60' },
+              { t:`⚡ ${regChain?.chainName ?? 'Base'}`, c:T.muted+'60' },
+              { t:'📋 DAC8/MiCA',                  c:T.muted+'60' },
+              { t:'🛡 AML Oracle',                  c:T.muted+'60' },
+              ...(isSwapMode ? [{ t:'🦄 Uniswap V3', c:T.purple+'80' }] : []),
+              ...(isConnected ? [{ t:'VASP ✓', c:T.emerald+'50' }] : []),
+            ].map(b => (
+              <span key={b.t} style={{ fontFamily:T.D, fontSize:10, fontWeight:600, color:b.c, letterSpacing:'0.02em' }}>{b.t}</span>
+            ))}
           </div>
         </div>
       </div>
 
-      {toast && <Toast message={toast.msg} color={toast.color} onDismiss={() => setToast(null)} />}
+      {/* Token Selector Modal */}
+      {selectingToken && (
+        <TokenSelectorModal
+          title={selectingToken === 'in' ? 'Seleziona token di input' : 'Seleziona token di output'}
+          tokens={tokenList}
+          onClose={() => setSelectingToken(null)}
+          onSelect={t => {
+            if (selectingToken === 'in') {
+              setTokenIn(t)
+            } else {
+              setTokenOut(t)
+            }
+            // tokenIn === tokenOut → direct mode (isSwapMode=false)
+            // tokenIn !== tokenOut → swap mode (isSwapMode=true)
+            setAmount(''); setOracleData(null); setOracleDenied(false)
+            setSelectingToken(null)
+          }}
+        />
+      )}
 
-      <style>{`
-        @keyframes fadeSlideIn { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
-        @keyframes fadeUp { from { opacity:0; transform:translate(-50%,12px); } to { opacity:1; transform:translate(-50%,0); } }
-        @keyframes spin { to { transform:rotate(360deg); } }
-        @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
-      `}</style>
+      {toast && <Toast message={toast.msg} color={toast.color} onDismiss={() => setToast(null)} />}
     </>
   )
 }
