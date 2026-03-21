@@ -34,6 +34,7 @@ import {
   type TokenConfig, type NetworkRegistry,
 } from '../lib/contractRegistry'
 import { useSwapQuote, useDirectQuote } from '../lib/useSwapQuote'
+import NetworkSelector from './NetworkSelector'
 
 // ── Theme ──────────────────────────────────────────────────────────────────
 const T = {
@@ -749,9 +750,11 @@ export default function TransferForm(): React.JSX.Element {
   const noLiq    = isSwapMode && swapQuote?.status === 'error_liquidity'
   const isL2     = chainId === 8453 || chainId === 84532
   const regChain = getRegistry(chainId)
+  const noContract = isConnected && !isWrong && regChain?.feeRouter === '0x0000000000000000000000000000000000000000'
 
   const ctaState: CtaState = !isConnected   ? 'disconnected'
     : isWrong                               ? 'wrong_network'
+    : noContract                            ? 'wrong_network'
     : busy                                  ? 'busy'
     : hasInsuf                              ? 'insufficient'
     : oracleDenied                          ? 'oracle_denied'
@@ -842,11 +845,25 @@ export default function TransferForm(): React.JSX.Element {
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:8 }}>
             <GasTracker />
+            {isConnected && (
+              <div style={{ position:'relative' }}>
+                <NetworkSelector
+                  compact
+                  onNetworkChange={(newChainId) => {
+                    // Reset completo — il useEffect su [chainId] ricaricherà
+                    // registry + tokenList + tokenIn/tokenOut automaticamente
+                    setAmount('')
+                    setOracleData(null)
+                    setOracleDenied(false)
+                    setPhase('idle')
+                    setTxError('')
+                    setReport(null)
+                  }}
+                />
+              </div>
+            )}
             {regChain && !isL2 && (
               <span style={{ fontFamily:T.D, fontSize:10, color:T.amber, background:`${T.amber}0d`, padding:'2px 7px', borderRadius:5 }}>⛽ L1</span>
-            )}
-            {isConnected && tokenIn && (
-              <span style={{ fontFamily:T.M, fontSize:11, color:T.muted }}>{fmtBal(tokenIn)} {sym}</span>
             )}
             <button
               onClick={() => setShowExtras(p => !p)}
@@ -1061,7 +1078,7 @@ export default function TransferForm(): React.JSX.Element {
             ) : (
               <button
                 onClick={
-                  ctaState === 'wrong_network' ? () => switchChain({ chainId: 84532 })
+                  ctaState === 'wrong_network' ? () => switchChain({ chainId: 8453 })
                   : ctaState === 'ready' ? handleTransfer
                   : undefined
                 }
@@ -1101,7 +1118,7 @@ export default function TransferForm(): React.JSX.Element {
                   </span>
                 ) : ctaState==='oracle_denied'  ? '🚫 Transazione Bloccata'
                   : ctaState==='no_liquidity'   ? '⚠ Liquidità insufficiente'
-                  : ctaState==='wrong_network'  ? 'Cambia rete'
+                  : ctaState==='wrong_network'  ? (noContract ? `⚠ ${regChain?.chainName ?? 'Rete'} non disponibile` : 'Cambia rete ↑')
                   : ctaState==='insufficient'   ? 'Saldo insufficiente'
                   : ctaState==='no_recipient'   ? 'Inserisci destinatario'
                   : ctaState==='no_amount'      ? 'Inserisci importo'
