@@ -1,21 +1,21 @@
 'use client'
 
 /**
- * page.tsx — GPU-Accelerated Background + Staggered Fade-In
+ * page.tsx — RPagos Gateway Main Page
  *
- * Background: 5 orbs GPU-only (transform: translate3d + scale3d)
- *   - Zero top/left animati → zero layout thrashing
- *   - will-change pre-alloca layer GPU separati
- *   - contain: strict isola il repaint
- *   - Nessun resize listener React
- *
- * Staggered: rp-anim-0..5 → fadeUp cascata 0→80→160→240ms
+ * Features:
+ *   - AccountHeader (wallet identity + activity) fisso in alto a destra
+ *   - GPU-Accelerated Background con orbs animati
+ *   - Staggered fade-in su tutti i componenti
+ *   - TransferForm con NetworkSelector, Oracle EIP-712, Swap V3
+ *   - Footer badges compliance (MiCA/DAC8, VASP, AML)
  */
 
 import dynamic from 'next/dynamic'
 
 // TransferForm importato dinamico — no SSR (wagmi richiede browser)
 const TransferForm = dynamic(() => import('./TransferForm'), { ssr: false })
+const AccountHeader = dynamic(() => import('./AccountHeader'), { ssr: false })
 
 export default function Home() {
   return (
@@ -29,6 +29,11 @@ export default function Home() {
         <div className="rp-orb rp-orb--4" />
         <div className="rp-orb rp-orb--5" />
         <div className="rp-bg__noise" />
+      </div>
+
+      {/* ── Account Header — fisso in alto a destra ────────────────── */}
+      <div style={{ position: 'fixed', top: 16, right: 20, zIndex: 1000 }}>
+        <AccountHeader />
       </div>
 
       {/* ── Contenuto ─────────────────────────────────────────────────── */}
@@ -71,6 +76,17 @@ export default function Home() {
               padding:      '2px 8px',
               letterSpacing: '0.05em',
             }}>Base</span>
+            <span style={{
+              fontFamily:   'var(--font-mono)',
+              fontSize:     9,
+              fontWeight:   500,
+              color:        '#4a4a6a',
+              background:   'rgba(255,255,255,0.04)',
+              border:       '1px solid rgba(255,255,255,0.06)',
+              borderRadius: 5,
+              padding:      '2px 6px',
+              letterSpacing: '0.04em',
+            }}>v4</span>
           </div>
 
           <h1 style={{
@@ -103,6 +119,24 @@ export default function Home() {
             <span style={{ color: '#00ffa3' }}>fee splitting automatico</span>
             {' '}su Base Network.
           </p>
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            gap: 6, marginTop: 10,
+          }}>
+            <div style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: '#00ffa3',
+              boxShadow: '0 0 8px rgba(0,255,163,0.5)',
+            }} />
+            <span style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 10,
+              color: '#4a4a6a',
+              letterSpacing: '0.04em',
+            }}>
+              Operativo · Multi-Chain · Compliance DAC8
+            </span>
+          </div>
         </div>
 
         {/* TransferForm — stagger 1 */}
@@ -119,10 +153,12 @@ export default function Home() {
           justifyContent: 'center',
         }}>
           {[
-            { icon: '⚡', label: 'Base L2' },
-            { icon: '🔒', label: 'Non-Custodial' },
-            { icon: '📋', label: 'MiCA/DAC8' },
-            { icon: '🛡', label: 'AML Oracle' },
+            { icon: '⚡', label: 'Base L2',        accent: false },
+            { icon: '🔒', label: 'Non-Custodial',  accent: false },
+            { icon: '📋', label: 'MiCA/DAC8',      accent: false },
+            { icon: '🛡', label: 'AML Oracle',     accent: false },
+            { icon: '🦄', label: 'Uniswap V3',     accent: false },
+            { icon: '✓',  label: 'VASP Compliant', accent: true  },
           ].map(b => (
             <div key={b.label} style={{
               display:      'flex',
@@ -130,9 +166,9 @@ export default function Home() {
               gap:          5,
               fontFamily:   'var(--font-mono)',
               fontSize:     10,
-              color:        '#4a4a6a',
-              background:   'rgba(255,255,255,0.03)',
-              border:       '1px solid rgba(255,255,255,0.05)',
+              color:        b.accent ? '#00ffa3' : '#4a4a6a',
+              background:   b.accent ? 'rgba(0,255,163,0.06)' : 'rgba(255,255,255,0.03)',
+              border:       `1px solid ${b.accent ? 'rgba(0,255,163,0.15)' : 'rgba(255,255,255,0.05)'}`,
               borderRadius: 8,
               padding:      '4px 10px',
             }}>
@@ -140,6 +176,18 @@ export default function Home() {
               <span>{b.label}</span>
             </div>
           ))}
+        </div>
+
+        {/* Powered by — stagger 3 */}
+        <div className="rp-anim-3" style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 9,
+          color: '#2a2a3a',
+          letterSpacing: '0.06em',
+          textAlign: 'center' as const,
+          paddingBottom: 8,
+        }}>
+          RPagos Gateway · FeeRouterV4 · Built on Base
         </div>
 
       </main>
