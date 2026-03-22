@@ -1,19 +1,18 @@
 'use client'
 
 /**
- * PortfolioDashboard.tsx V4 — Uniswap Portfolio Clone
+ * PortfolioDashboard.tsx V5 — Fluid Transitions
  *
- * Layout replica dell'app.uniswap.org/portfolio:
- *   - Header: identicon + address
- *   - Tabs: Overview | Tokens | Activity
- *   - Overview: Balance + Chart + Quick Actions + Stats
- *   - Tokens: tabella con logo, prezzo, saldo, valore
- *   - Activity: timeline transazioni
+ * framer-motion:
+ *   - layoutId="activeTab" per indicator che scivola
+ *   - AnimatePresence mode="wait" per content fade+slide
+ *   - Overlay fade-in con motion.div
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useAccount, useChainId } from 'wagmi'
 import { createPortal } from 'react-dom'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts'
@@ -30,8 +29,8 @@ const C = {
   surface: '#1b1b1b',
   card:    '#1e1e1e',
   border:  'rgba(255,255,255,0.07)',
-  text:    '#FFFFFF',
-  sub:     '#9B9B9B',
+  text:    '#E2E2F0',
+  sub:     '#98A1C0',
   dim:     '#5E5E5E',
   pink:    '#FC74FE',
   green:   '#40B66B',
@@ -60,6 +59,7 @@ interface PData {
 }
 type Tab = 'overview'|'tokens'|'activity'|'swap'
 type Range = '1D'|'1W'
+const TABS: [Tab, string][] = [['overview','Overview'],['tokens','Tokens'],['activity','Activity'],['swap','Swap']]
 
 // ═══════════════════════════════════════════════════════════
 //  HOOK
@@ -114,7 +114,6 @@ const TK:Record<string,string>={
   DEGEN:'#845ef7',AERO:'#0091FF',LINK:'#2A5ADA',UNI:'#FF007A',
   AAVE:'#B6509E',ARB:'#28A0F0',OP:'#FF0420',COMP:'#00D395',
 }
-
 function TIcon({symbol,logo,size=32}:{symbol:string;logo?:string|null;size?:number}){
   const[err,setErr]=useState(false)
   const c=TK[symbol]??'#5E5E5E'
@@ -130,16 +129,12 @@ function TIcon({symbol,logo,size=32}:{symbol:string;logo?:string|null;size?:numb
   )
 }
 
-// ═══════════════════════════════════════════════════════════
-//  SKELETON
-// ═══════════════════════════════════════════════════════════
+// Skeleton
 function Sk({w,h,r=8}:{w:string|number;h:number;r?:number}){
   return<div style={{width:w,height:h,borderRadius:r,background:'linear-gradient(90deg,rgba(255,255,255,0.03) 25%,rgba(255,255,255,0.06) 50%,rgba(255,255,255,0.03) 75%)',backgroundSize:'200% 100%',animation:'rpShimmer 1.8s ease infinite'}}/>
 }
 
-// ═══════════════════════════════════════════════════════════
-//  TOOLTIP
-// ═══════════════════════════════════════════════════════════
+// Chart Tooltip
 function CTip({active,payload,label}:{active?:boolean;payload?:{value:number}[];label?:string}){
   if(!active||!payload?.length)return null
   return(
@@ -152,9 +147,7 @@ function CTip({active,payload,label}:{active?:boolean;payload?:{value:number}[];
   )
 }
 
-// ═══════════════════════════════════════════════════════════
-//  IDENTICON
-// ═══════════════════════════════════════════════════════════
+// Identicon
 function Ident({addr,size=40}:{addr:string;size?:number}){
   const h=addr.toLowerCase().slice(2)
   const h1=parseInt(h.slice(0,6),16)%360
@@ -163,120 +156,180 @@ function Ident({addr,size=40}:{addr:string;size?:number}){
 }
 
 // ═══════════════════════════════════════════════════════════
+//  MOTION — unified cinematic transition
+// ═══════════════════════════════════════════════════════════
+const smooth = { type:'spring' as const, bounce:0, duration:0.6 }
+
+const tabContent = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+  exit:    { opacity: 0, y: -8 },
+}
+const overlay = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1 },
+  exit:    { opacity: 0 },
+}
+const panel = {
+  initial: { opacity: 0, scale: 0.97, y: 12 },
+  animate: { opacity: 1, scale: 1, y: 0 },
+  exit:    { opacity: 0, scale: 0.97, y: 12 },
+}
+
+// ═══════════════════════════════════════════════════════════
 //  MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════
-interface Props{open:boolean;onClose:()=>void;initialTab?:Tab}
+interface Props { open:boolean; onClose:()=>void; initialTab?:Tab }
 
-export default function PortfolioDashboard({open,onClose,initialTab}:Props){
-  const{address,isConnected}=useAccount()
-  const chainId=useChainId()
-  const{data,loading,refresh}=usePortfolio(address,chainId)
-  const[tab,setTab]=useState<Tab>(initialTab??'overview')
-  const[tabKey,setTabKey]=useState(0) // trigger re-animation on tab change
-  const[range,setRange]=useState<Range>('1D')
-  const reg=getRegistry(chainId)
-  const ld=loading&&!data
+export default function PortfolioDashboard({ open, onClose, initialTab }:Props){
+  const { address, isConnected } = useAccount()
+  const chainId = useChainId()
+  const { data, loading, refresh } = usePortfolio(address, chainId)
+  const [tab, setTab] = useState<Tab>(initialTab ?? 'overview')
+  const [range, setRange] = useState<Range>('1D')
+  const reg = getRegistry(chainId)
+  const ld = loading && !data
 
-  // Sync initialTab when it changes externally
-  useEffect(()=>{if(initialTab&&open)setTab(initialTab)},[initialTab,open])
+  useEffect(() => { if (initialTab && open) setTab(initialTab) }, [initialTab, open])
+  useEffect(() => {
+    if (!open) return
+    const h = (e:KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', h)
+    return () => document.removeEventListener('keydown', h)
+  }, [open, onClose])
 
-  // Animate on tab change
-  const switchTab=(t:Tab)=>{setTab(t);setTabKey(k=>k+1)}
+  const chart = useMemo(() => {
+    if (!data?.balanceHistory) return []
+    return range === '1D' ? data.balanceHistory.slice(-24) : data.balanceHistory
+  }, [data?.balanceHistory, range])
 
-  useEffect(()=>{if(!open)return;const h=(e:KeyboardEvent)=>{if(e.key==='Escape')onClose()};document.addEventListener('keydown',h);return()=>document.removeEventListener('keydown',h)},[open,onClose])
+  const pnl = useMemo(() => {
+    if (!chart.length) return { v:0, pct:0, up:true }
+    const f=chart[0].value, l=chart[chart.length-1].value, d=l-f
+    return { v:d, pct:f>0?(d/f)*100:0, up:d>=0 }
+  }, [chart])
 
-  const chart=useMemo(()=>{
-    if(!data?.balanceHistory)return[]
-    return range==='1D'?data.balanceHistory.slice(-24):data.balanceHistory
-  },[data?.balanceHistory,range])
+  const lineColor = pnl.up ? C.green : C.red
 
-  const pnl=useMemo(()=>{
-    if(!chart.length)return{v:0,pct:0,up:true}
-    const f=chart[0].value,l=chart[chart.length-1].value,d=l-f
-    return{v:d,pct:f>0?(d/f)*100:0,up:d>=0}
-  },[chart])
-
-  const lineColor=pnl.up?C.green:C.red
-
-  if(!open||!isConnected||!address)return null
+  if (!isConnected || !address) return null
 
   return createPortal(
-    <div style={{position:'fixed',inset:0,zIndex:10000,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
-      <div onClick={onClose} style={{position:'absolute',inset:0,background:'rgba(0,0,0,0.6)',backdropFilter:'blur(16px)',WebkitBackdropFilter:'blur(16px)'}}/>
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          key="portfolio-overlay"
+          style={{ position:'fixed', inset:0, zIndex:10000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+          initial="initial" animate="animate" exit="exit"
+        >
+          {/* Backdrop */}
+          <motion.div
+            onClick={onClose}
+            variants={overlay}
+            transition={smooth}
+            style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.6)', backdropFilter:'blur(16px)', WebkitBackdropFilter:'blur(16px)' }}
+          />
 
-      <div style={{
-        position:'relative',zIndex:1,width:'100%',maxWidth:920,
-        maxHeight:'calc(100vh - 40px)',
-        background:C.bg,border:`1px solid ${C.border}`,borderRadius:20,
-        boxShadow:'0 40px 120px rgba(0,0,0,0.8)',
-        overflow:'hidden',display:'flex',flexDirection:'column',
-        animation:'rpOverlayIn 0.3s cubic-bezier(0.16,1,0.3,1) both',
-      }}>
+          {/* Panel */}
+          <motion.div
+            layout="position"
+            variants={panel}
+            transition={smooth}
+            style={{
+              position:'relative', zIndex:1, width:'100%', maxWidth:920,
+              maxHeight:'calc(100vh - 40px)',
+              background:C.bg, border:`1px solid ${C.border}`, borderRadius:20,
+              boxShadow:'0 40px 120px rgba(0,0,0,0.8)',
+              overflow:'hidden', display:'flex', flexDirection:'column',
+            }}
+          >
 
-        {/* ── HEADER ────────────────────────────────────── */}
-        <div style={{padding:'20px 28px 0',flexShrink:0}}>
-          <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
-            <div style={{display:'flex',alignItems:'center',gap:12}}>
-              <Ident addr={address} size={40}/>
-              <span style={{fontFamily:C.D,fontSize:18,fontWeight:600,color:C.text}}>{ta(address,6,4)}</span>
+            {/* ── HEADER ──────────────────────────────── */}
+            <div style={{ padding:'20px 28px 0', flexShrink:0 }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                  <Ident addr={address} size={40}/>
+                  <span style={{ fontFamily:C.D, fontSize:18, fontWeight:600, color:C.text }}>{ta(address,6,4)}</span>
+                </div>
+                <div style={{ display:'flex', gap:8 }}>
+                  <button onClick={refresh} style={{ padding:'8px 16px', borderRadius:20, background:C.surface, border:`1px solid ${C.border}`, color:C.sub, fontFamily:C.D, fontSize:12, fontWeight:600, cursor:'pointer' }}>
+                    ↻ Aggiorna
+                  </button>
+                  <button onClick={onClose} style={{ width:36, height:36, borderRadius:12, background:C.surface, border:`1px solid ${C.border}`, color:C.dim, cursor:'pointer', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center' }}>✕</button>
+                </div>
+              </div>
+
+              {/* ── TAB BAR with layoutId indicator ────── */}
+              <div style={{ display:'flex', gap:0, borderBottom:`1px solid ${C.border}`, position:'relative' }}>
+                {TABS.map(([k, l]) => (
+                  <button key={k} onClick={() => setTab(k)} style={{
+                    padding:'12px 20px', background:'transparent', border:'none',
+                    color: tab===k ? C.text : C.dim,
+                    fontFamily:C.D, fontSize:14, fontWeight: tab===k ? 600 : 400,
+                    cursor:'pointer', position:'relative',
+                    transition:'color 0.2s ease',
+                  }}>
+                    {l}
+                    {tab === k && (
+                      <motion.div
+                        layoutId="activeTab"
+                        style={{
+                          position:'absolute', bottom:-1, left:0, right:0,
+                          height:2, background:C.text, borderRadius:1,
+                        }}
+                        transition={smooth}
+                      />
+                    )}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div style={{display:'flex',gap:8}}>
-              <button onClick={refresh} style={{padding:'8px 16px',borderRadius:20,background:C.surface,border:`1px solid ${C.border}`,color:C.sub,fontFamily:C.D,fontSize:12,fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
-                ↻ Aggiorna
-              </button>
-              <button onClick={onClose} style={{width:36,height:36,borderRadius:12,background:C.surface,border:`1px solid ${C.border}`,color:C.dim,cursor:'pointer',fontSize:16,display:'flex',alignItems:'center',justifyContent:'center'}}>✕</button>
-            </div>
-          </div>
 
-          {/* Tabs */}
-          <div style={{display:'flex',gap:0,borderBottom:`1px solid ${C.border}`,position:'relative'}}>
-            {([['overview','Overview'],['tokens','Tokens'],['activity','Activity'],['swap','Swap']] as [Tab,string][]).map(([k,l])=>(
-              <button key={k} onClick={()=>switchTab(k)} style={{
-                padding:'12px 20px',background:'transparent',border:'none',
-                borderBottom:`2px solid ${tab===k?C.text:'transparent'}`,
-                color:tab===k?C.text:C.dim,
-                fontFamily:C.D,fontSize:14,fontWeight:tab===k?600:400,
-                cursor:'pointer',transition:'all 0.25s ease',
-              }}>{l}</button>
-            ))}
-          </div>
-        </div>
+            {/* ── CONTENT — scrollable + fluid height ──── */}
+            <div style={{ flex:1, overflowY:'auto' }}>
+            <motion.div
+              layout="position"
+              initial={false}
+              animate={{ height: 'auto' }}
+              style={{ overflow:'hidden', position:'relative', minHeight:200 }}
+              transition={smooth}
+            >
+              <div style={{ padding:'24px 28px 28px' }}>
+              <AnimatePresence mode="popLayout" initial={false}>
+                <motion.div
+                  key={tab}
+                  layout="position"
+                  variants={tabContent}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  transition={smooth}
+                >
 
-        {/* ── CONTENT ───────────────────────────────────── */}
-        <div style={{flex:1,overflowY:'auto',padding:'24px 28px 28px'}}>
-
-          {/* Tab content with fade-slide animation */}
-          <div key={tabKey} style={{animation:'rpTabIn 0.3s ease both'}}>
-
-          {/* ═══ OVERVIEW TAB ═══════════════════════════════ */}
+          {/* ═══ OVERVIEW ══════════════════════════════════ */}
           {tab==='overview'&&(
             <div>
-              {/* Balance + Chart + Actions grid */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 280px',gap:24,marginBottom:32}}>
-
-                {/* LEFT: Balance + Chart */}
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:24, marginBottom:32 }}>
                 <div>
-                  {ld?(
-                    <div style={{marginBottom:20}}><Sk w={180} h={40} r={10}/><div style={{marginTop:8}}><Sk w={120} h={18}/></div></div>
-                  ):(
-                    <div style={{marginBottom:20}}>
-                      <div style={{fontFamily:C.D,fontSize:36,fontWeight:600,color:C.text,letterSpacing:'-0.03em'}}>
+                  {ld ? (
+                    <div style={{ marginBottom:20 }}><Sk w={180} h={40} r={10}/><div style={{ marginTop:8 }}><Sk w={120} h={18}/></div></div>
+                  ) : (
+                    <div style={{ marginBottom:20 }}>
+                      <div style={{ fontFamily:C.D, fontSize:36, fontWeight:600, color:C.text, letterSpacing:'-0.03em' }}>
                         {$(data?.totalUsd??0)}
                       </div>
-                      <div style={{display:'flex',alignItems:'center',gap:6,marginTop:4}}>
-                        <span style={{color:pnl.up?C.green:C.red,fontSize:13,fontFamily:C.D,fontWeight:500}}>
+                      <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:4 }}>
+                        <span style={{ color:pnl.up?C.green:C.red, fontSize:13, fontFamily:C.D, fontWeight:500 }}>
                           {pnl.up?'▲':'▼'} {$(Math.abs(pnl.v))} ({pnl.up?'+':''}{pnl.pct.toFixed(2)}%)
                         </span>
                       </div>
                     </div>
                   )}
 
-                  {/* Chart */}
-                  {ld?<Sk w="100%" h={200} r={16}/>:(
-                    <div style={{marginBottom:12}}>
-                      <div style={{width:'100%',height:200}}>
+                  {ld ? <Sk w="100%" h={200} r={16}/> : (
+                    <div style={{ marginBottom:12 }}>
+                      <div style={{ width:'100%', height:200 }}>
                         <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart data={chart} margin={{top:4,right:0,left:0,bottom:0}}>
+                          <AreaChart data={chart} margin={{ top:4, right:0, left:0, bottom:0 }}>
                             <defs>
                               <linearGradient id="uGrad" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="0%" stopColor={lineColor} stopOpacity={0.15}/>
@@ -290,13 +343,13 @@ export default function PortfolioDashboard({open,onClose,initialTab}:Props){
                           </AreaChart>
                         </ResponsiveContainer>
                       </div>
-                      <div style={{display:'flex',gap:4,marginTop:10}}>
-                        {(['1D','1W'] as Range[]).map(r=>(
-                          <button key={r} onClick={()=>setRange(r)} style={{
-                            padding:'6px 14px',borderRadius:20,
+                      <div style={{ display:'flex', gap:4, marginTop:10 }}>
+                        {(['1D','1W'] as Range[]).map(r => (
+                          <button key={r} onClick={() => setRange(r)} style={{
+                            padding:'6px 14px', borderRadius:20,
                             background:range===r?C.surface:'transparent',
-                            border:'none',color:range===r?C.text:C.dim,
-                            fontFamily:C.D,fontSize:12,fontWeight:600,cursor:'pointer',
+                            border:'none', color:range===r?C.text:C.dim,
+                            fontFamily:C.D, fontSize:12, fontWeight:600, cursor:'pointer',
                           }}>{r}</button>
                         ))}
                       </div>
@@ -304,93 +357,87 @@ export default function PortfolioDashboard({open,onClose,initialTab}:Props){
                   )}
                 </div>
 
-                {/* RIGHT: Quick Actions + Stats */}
-                <div style={{display:'flex',flexDirection:'column',gap:12}}>
-                  {/* Actions grid 2x2 */}
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
                     {[
-                      {label:'Send',icon:'↗',color:C.pink,action:()=>onClose()},
-                      {label:'Receive',icon:'↙',color:C.green,action:undefined},
-                      {label:'Swap',icon:'⇅',color:C.blue,action:()=>switchTab('swap')},
-                      {label:'More',icon:'•••',color:C.dim,action:undefined},
-                    ].map(a=>(
+                      { label:'Send', icon:'↗', color:C.pink, action:()=>onClose() },
+                      { label:'Receive', icon:'↙', color:C.green, action:undefined },
+                      { label:'Swap', icon:'⇅', color:C.blue, action:()=>setTab('swap') },
+                      { label:'More', icon:'•••', color:C.dim, action:undefined },
+                    ].map(a => (
                       <button key={a.label} onClick={a.action} style={{
-                        padding:'20px 16px',borderRadius:16,
-                        background:C.surface,border:`1px solid ${C.border}`,
-                        cursor:'pointer',display:'flex',flexDirection:'column',
-                        alignItems:'flex-start',gap:8,transition:'all 0.15s',
+                        padding:'20px 16px', borderRadius:16,
+                        background:C.surface, border:`1px solid ${C.border}`,
+                        cursor:'pointer', display:'flex', flexDirection:'column',
+                        alignItems:'flex-start', gap:8, transition:'all 0.15s',
                       }}
-                      onMouseEnter={e=>e.currentTarget.style.background=C.card}
-                      onMouseLeave={e=>e.currentTarget.style.background=C.surface}
+                      onMouseEnter={e => e.currentTarget.style.background = C.card}
+                      onMouseLeave={e => e.currentTarget.style.background = C.surface}
                       >
-                        <span style={{fontSize:18,color:a.color}}>{a.icon}</span>
-                        <span style={{fontFamily:C.D,fontSize:13,fontWeight:600,color:a.color}}>{a.label}</span>
+                        <span style={{ fontSize:18, color:a.color }}>{a.icon}</span>
+                        <span style={{ fontFamily:C.D, fontSize:13, fontWeight:600, color:a.color }}>{a.label}</span>
                       </button>
                     ))}
                   </div>
 
-                  {/* Stats */}
-                  <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,padding:16,display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                  <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:16, padding:16, display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
                     <div>
-                      <div style={{fontFamily:C.D,fontSize:11,color:C.dim,marginBottom:4}}>TX this week</div>
-                      <div style={{fontFamily:C.D,fontSize:20,fontWeight:700,color:C.text}}>{data?.txCount7d??0}</div>
+                      <div style={{ fontFamily:C.D, fontSize:11, color:C.dim, marginBottom:4 }}>TX this week</div>
+                      <div style={{ fontFamily:C.D, fontSize:20, fontWeight:700, color:C.text }}>{data?.txCount7d??0}</div>
                     </div>
                     <div>
-                      <div style={{fontFamily:C.D,fontSize:11,color:C.dim,marginBottom:4}}>Total value</div>
-                      <div style={{fontFamily:C.D,fontSize:20,fontWeight:700,color:C.text}}>{$(data?.totalUsd??0)}</div>
+                      <div style={{ fontFamily:C.D, fontSize:11, color:C.dim, marginBottom:4 }}>Total value</div>
+                      <div style={{ fontFamily:C.D, fontSize:20, fontWeight:700, color:C.text }}>{$(data?.totalUsd??0)}</div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Bottom: Tokens + Recent Activity side by side */}
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:24}}>
-                {/* Tokens preview */}
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:24 }}>
                 <div>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
                     <div>
-                      <span style={{fontFamily:C.D,fontSize:16,fontWeight:600,color:C.text}}>Tokens</span>
-                      <span style={{fontFamily:C.D,fontSize:12,color:C.dim,marginLeft:8}}>{data?.assets?.length??0} tokens</span>
+                      <span style={{ fontFamily:C.D, fontSize:16, fontWeight:600, color:C.text }}>Tokens</span>
+                      <span style={{ fontFamily:C.D, fontSize:12, color:C.dim, marginLeft:8 }}>{data?.assets?.length??0} tokens</span>
                     </div>
-                    <button onClick={()=>switchTab('tokens')} style={{background:'none',border:'none',color:C.dim,fontFamily:C.D,fontSize:12,cursor:'pointer'}}>Vedi tutti →</button>
+                    <button onClick={() => setTab('tokens')} style={{ background:'none', border:'none', color:C.dim, fontFamily:C.D, fontSize:12, cursor:'pointer' }}>View all →</button>
                   </div>
-                  {(data?.assets??[]).slice(0,4).map((a:Asset)=>(
-                    <div key={a.contractAddress+a.symbol} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 0',borderBottom:`1px solid ${C.border}`}}>
+                  {(data?.assets??[]).slice(0,4).map((a:Asset) => (
+                    <div key={a.contractAddress+a.symbol} style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 0', borderBottom:`1px solid ${C.border}` }}>
                       <TIcon symbol={a.symbol} logo={a.logo} size={32}/>
-                      <div style={{flex:1}}>
-                        <span style={{fontFamily:C.D,fontSize:14,fontWeight:600,color:C.text}}>{a.name}</span>
-                        {a.dac8Monitored&&<span style={{fontFamily:C.M,fontSize:8,color:C.pink,marginLeft:6,background:`${C.pink}12`,padding:'1px 5px',borderRadius:3}}>DAC8</span>}
+                      <div style={{ flex:1 }}>
+                        <span style={{ fontFamily:C.D, fontSize:14, fontWeight:600, color:C.text }}>{a.name}</span>
+                        {a.dac8Monitored && <span style={{ fontFamily:C.M, fontSize:8, color:C.pink, marginLeft:6, background:`${C.pink}12`, padding:'1px 5px', borderRadius:3 }}>DAC8</span>}
                       </div>
-                      <div style={{textAlign:'right' as const}}>
-                        <div style={{fontFamily:C.M,fontSize:13,fontWeight:600,color:C.text}}>{fb(a.balance,a.symbol)}</div>
-                        <div style={{fontFamily:C.M,fontSize:11,color:C.sub}}>{$(a.usdValue)}</div>
+                      <div style={{ textAlign:'right' as const }}>
+                        <div style={{ fontFamily:C.M, fontSize:13, fontWeight:600, color:C.text }}>{fb(a.balance,a.symbol)}</div>
+                        <div style={{ fontFamily:C.M, fontSize:11, color:C.sub }}>{$(a.usdValue)}</div>
                       </div>
                     </div>
                   ))}
                 </div>
 
-                {/* Recent activity preview */}
                 <div>
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
                     <div>
-                      <span style={{fontFamily:C.D,fontSize:16,fontWeight:600,color:C.text}}>Recent activity</span>
-                      <span style={{fontFamily:C.D,fontSize:12,color:C.dim,marginLeft:8}}>{data?.activity?.length??0} tx</span>
+                      <span style={{ fontFamily:C.D, fontSize:16, fontWeight:600, color:C.text }}>Recent activity</span>
+                      <span style={{ fontFamily:C.D, fontSize:12, color:C.dim, marginLeft:8 }}>{data?.activity?.length??0} tx</span>
                     </div>
-                    <button onClick={()=>switchTab('activity')} style={{background:'none',border:'none',color:C.dim,fontFamily:C.D,fontSize:12,cursor:'pointer'}}>Vedi tutto →</button>
+                    <button onClick={() => setTab('activity')} style={{ background:'none', border:'none', color:C.dim, fontFamily:C.D, fontSize:12, cursor:'pointer' }}>View all →</button>
                   </div>
-                  {(data?.activity??[]).slice(0,4).map((tx:Tx,i:number)=>{
-                    const isSend=tx.from?.toLowerCase()===address?.toLowerCase()
-                    return(
+                  {(data?.activity??[]).slice(0,4).map((tx:Tx, i:number) => {
+                    const isSend = tx.from?.toLowerCase() === address?.toLowerCase()
+                    return (
                       <a key={tx.hash+i} href={`${reg?.blockExplorer??'https://basescan.org'}/tx/${tx.hash}`} target="_blank" rel="noopener noreferrer"
-                        style={{display:'flex',alignItems:'center',gap:12,padding:'12px 0',borderBottom:`1px solid ${C.border}`,textDecoration:'none'}}>
-                        <div style={{width:32,height:32,borderRadius:'50%',background:isSend?'rgba(253,118,107,0.08)':'rgba(64,182,107,0.08)',border:`1px solid ${isSend?'rgba(253,118,107,0.15)':'rgba(64,182,107,0.15)'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,color:isSend?C.red:C.green,flexShrink:0}}>
+                        style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 0', borderBottom:`1px solid ${C.border}`, textDecoration:'none' }}>
+                        <div style={{ width:32, height:32, borderRadius:'50%', background:isSend?'rgba(253,118,107,0.08)':'rgba(64,182,107,0.08)', border:`1px solid ${isSend?'rgba(253,118,107,0.15)':'rgba(64,182,107,0.15)'}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, color:isSend?C.red:C.green, flexShrink:0 }}>
                           {isSend?'↑':'↓'}
                         </div>
-                        <div style={{flex:1}}>
-                          <div style={{fontFamily:C.D,fontSize:13,fontWeight:500,color:C.text}}>{isSend?'Sent':'Received'} {tx.value?.toFixed(4)} {tx.asset}</div>
-                          <div style={{fontFamily:C.M,fontSize:10,color:C.dim,marginTop:2}}>{isSend?'→':'←'} {ta(isSend?(tx.to??''):(tx.from??''))}</div>
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontFamily:C.D, fontSize:13, fontWeight:500, color:C.text }}>{isSend?'Sent':'Received'} {tx.value?.toFixed(4)} {tx.asset}</div>
+                          <div style={{ fontFamily:C.M, fontSize:10, color:C.dim, marginTop:2 }}>{isSend?'→':'←'} {ta(isSend?(tx.to??''):(tx.from??''))}</div>
                         </div>
-                        <span style={{fontFamily:C.M,fontSize:10,color:C.dim}}>{ago(tx.timestamp)}</span>
+                        <span style={{ fontFamily:C.M, fontSize:10, color:C.dim }}>{ago(tx.timestamp)}</span>
                       </a>
                     )
                   })}
@@ -399,54 +446,53 @@ export default function PortfolioDashboard({open,onClose,initialTab}:Props){
             </div>
           )}
 
-          {/* ═══ TOKENS TAB ═════════════════════════════════ */}
-          {tab==='tokens'&&(
-            ld?(
-              <div style={{display:'flex',flexDirection:'column',gap:4}}>
-                {[0,1,2,3,4,5].map(i=>(
-                  <div key={i} style={{display:'flex',alignItems:'center',gap:14,padding:'16px 0'}}>
-                    <Sk w={36} h={36} r={18}/><div style={{flex:1}}><Sk w={100} h={14}/><div style={{marginTop:4}}><Sk w={60} h={10}/></div></div>
-                    <div style={{textAlign:'right'}}><Sk w={80} h={14}/><div style={{marginTop:4}}><Sk w={50} h={10}/></div></div>
+          {/* ═══ TOKENS ════════════════════════════════════ */}
+          {tab==='tokens' && (
+            ld ? (
+              <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                {[0,1,2,3,4,5].map(i => (
+                  <div key={i} style={{ display:'flex', alignItems:'center', gap:14, padding:'16px 0' }}>
+                    <Sk w={36} h={36} r={18}/><div style={{ flex:1 }}><Sk w={100} h={14}/><div style={{ marginTop:4 }}><Sk w={60} h={10}/></div></div>
+                    <div style={{ textAlign:'right' }}><Sk w={80} h={14}/><div style={{ marginTop:4 }}><Sk w={50} h={10}/></div></div>
                   </div>
                 ))}
               </div>
-            ):(!data?.assets?.length)?(
-              <div style={{padding:48,textAlign:'center' as const,fontFamily:C.D,fontSize:14,color:C.dim}}>Nessun token trovato</div>
-            ):(
+            ) : (!data?.assets?.length) ? (
+              <div style={{ padding:48, textAlign:'center' as const, fontFamily:C.D, fontSize:14, color:C.dim }}>No tokens found</div>
+            ) : (
               <div>
-                {/* Table header */}
-                <div style={{display:'flex',padding:'8px 4px 12px',borderBottom:`1px solid ${C.border}`}}>
-                  <span style={{flex:1,fontFamily:C.D,fontSize:12,color:C.dim,fontWeight:500}}>Token</span>
-                  <span style={{width:100,textAlign:'right' as const,fontFamily:C.D,fontSize:12,color:C.dim,fontWeight:500}}>Price</span>
-                  <span style={{width:120,textAlign:'right' as const,fontFamily:C.D,fontSize:12,color:C.dim,fontWeight:500}}>Balance</span>
-                  <span style={{width:100,textAlign:'right' as const,fontFamily:C.D,fontSize:12,color:C.dim,fontWeight:500}}>Value</span>
+                <div style={{ display:'flex', padding:'8px 4px 12px', borderBottom:`1px solid ${C.border}` }}>
+                  <span style={{ flex:1, fontFamily:C.D, fontSize:12, color:C.dim, fontWeight:500 }}>Token</span>
+                  <span style={{ width:100, textAlign:'right' as const, fontFamily:C.D, fontSize:12, color:C.dim, fontWeight:500 }}>Price</span>
+                  <span style={{ width:120, textAlign:'right' as const, fontFamily:C.D, fontSize:12, color:C.dim, fontWeight:500 }}>Balance</span>
+                  <span style={{ width:100, textAlign:'right' as const, fontFamily:C.D, fontSize:12, color:C.dim, fontWeight:500 }}>Value</span>
                 </div>
-                {data.assets.map((a:Asset,i:number)=>(
+                {data.assets.map((a:Asset, i:number) => (
                   <div key={a.contractAddress+a.symbol} style={{
-                    display:'flex',alignItems:'center',padding:'14px 4px',
+                    display:'flex', alignItems:'center', padding:'14px 4px',
                     borderBottom:i<data.assets.length-1?`1px solid ${C.border}`:'none',
                     transition:'background 0.1s',
                   }}
-                  onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.02)'}
-                  onMouseLeave={e=>e.currentTarget.style.background='transparent'}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                   >
-                    <div style={{flex:1,display:'flex',alignItems:'center',gap:12}}>
+                    <div style={{ flex:1, display:'flex', alignItems:'center', gap:12 }}>
                       <TIcon symbol={a.symbol} logo={a.logo} size={36}/>
                       <div>
-                        <div style={{display:'flex',alignItems:'center',gap:6}}>
-                          <span style={{fontFamily:C.D,fontSize:14,fontWeight:600,color:C.text}}>{a.name}</span>
-                          {a.dac8Monitored&&<span style={{fontFamily:C.M,fontSize:8,color:C.pink,background:`${C.pink}12`,padding:'1px 5px',borderRadius:3}}>DAC8</span>}
+                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                          <span style={{ fontFamily:C.D, fontSize:14, fontWeight:600, color:C.text }}>{a.name}</span>
+                          {a.dac8Monitored && <span style={{ fontFamily:C.M, fontSize:8, color:C.pink, background:`${C.pink}12`, padding:'1px 5px', borderRadius:3 }}>DAC8</span>}
                         </div>
-                        <div style={{fontFamily:C.M,fontSize:11,color:C.dim,marginTop:1}}>{a.symbol}</div>
+                        <div style={{ fontFamily:C.M, fontSize:11, color:C.dim, marginTop:1 }}>{a.symbol}</div>
                       </div>
                     </div>
-                    <div style={{width:100,textAlign:'right' as const,fontFamily:C.M,fontSize:13,color:C.sub}}>
+                    <div style={{ width:100, textAlign:'right' as const, fontFamily:C.M, fontSize:13, color:C.sub }}>
                       {a.usdValue>0&&a.balance>0?$(a.usdValue/a.balance):'—'}
                     </div>
-                    <div style={{width:120,textAlign:'right' as const,fontFamily:C.M,fontSize:13,fontWeight:600,color:C.text}}>
+                    <div style={{ width:120, textAlign:'right' as const, fontFamily:C.M, fontSize:13, fontWeight:600, color:C.text }}>
                       {fb(a.balance,a.symbol)}
                     </div>
-                    <div style={{width:100,textAlign:'right' as const,fontFamily:C.M,fontSize:13,fontWeight:600,color:C.text}}>
+                    <div style={{ width:100, textAlign:'right' as const, fontFamily:C.M, fontSize:13, fontWeight:600, color:C.text }}>
                       {$(a.usdValue)}
                     </div>
                   </div>
@@ -455,39 +501,39 @@ export default function PortfolioDashboard({open,onClose,initialTab}:Props){
             )
           )}
 
-          {/* ═══ ACTIVITY TAB ═══════════════════════════════ */}
-          {tab==='activity'&&(
-            ld?(
-              <div style={{display:'flex',flexDirection:'column',gap:4}}>
-                {[0,1,2,3,4,5,6].map(i=>(
-                  <div key={i} style={{display:'flex',alignItems:'center',gap:14,padding:'14px 0'}}>
-                    <Sk w={36} h={36} r={18}/><div style={{flex:1}}><Sk w={140} h={14}/><div style={{marginTop:4}}><Sk w={90} h={10}/></div></div><Sk w={40} h={14}/>
+          {/* ═══ ACTIVITY ══════════════════════════════════ */}
+          {tab==='activity' && (
+            ld ? (
+              <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                {[0,1,2,3,4,5,6].map(i => (
+                  <div key={i} style={{ display:'flex', alignItems:'center', gap:14, padding:'14px 0' }}>
+                    <Sk w={36} h={36} r={18}/><div style={{ flex:1 }}><Sk w={140} h={14}/><div style={{ marginTop:4 }}><Sk w={90} h={10}/></div></div><Sk w={40} h={14}/>
                   </div>
                 ))}
               </div>
-            ):(!data?.activity?.length)?(
-              <div style={{padding:48,textAlign:'center' as const,fontFamily:C.D,fontSize:14,color:C.dim}}>Nessuna attività</div>
-            ):(
+            ) : (!data?.activity?.length) ? (
+              <div style={{ padding:48, textAlign:'center' as const, fontFamily:C.D, fontSize:14, color:C.dim }}>No activity yet</div>
+            ) : (
               <div>
-                {data.activity.map((tx:Tx,i:number)=>{
-                  const exp=reg?.blockExplorer??'https://basescan.org'
-                  const isSend=tx.from?.toLowerCase()===address?.toLowerCase()
-                  return(
+                {data.activity.map((tx:Tx, i:number) => {
+                  const exp = reg?.blockExplorer ?? 'https://basescan.org'
+                  const isSend = tx.from?.toLowerCase() === address?.toLowerCase()
+                  return (
                     <a key={tx.hash+i} href={`${exp}/tx/${tx.hash}`} target="_blank" rel="noopener noreferrer"
-                      style={{display:'flex',alignItems:'center',gap:14,padding:'14px 4px',borderBottom:i<data.activity.length-1?`1px solid ${C.border}`:'none',textDecoration:'none',transition:'background 0.1s'}}
-                      onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.02)'}
-                      onMouseLeave={e=>e.currentTarget.style.background='transparent'}
+                      style={{ display:'flex', alignItems:'center', gap:14, padding:'14px 4px', borderBottom:i<data.activity.length-1?`1px solid ${C.border}`:'none', textDecoration:'none', transition:'background 0.1s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
-                      <div style={{width:36,height:36,borderRadius:'50%',background:isSend?'rgba(253,118,107,0.08)':'rgba(64,182,107,0.08)',border:`1px solid ${isSend?'rgba(253,118,107,0.15)':'rgba(64,182,107,0.15)'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,color:isSend?C.red:C.green,flexShrink:0}}>
+                      <div style={{ width:36, height:36, borderRadius:'50%', background:isSend?'rgba(253,118,107,0.08)':'rgba(64,182,107,0.08)', border:`1px solid ${isSend?'rgba(253,118,107,0.15)':'rgba(64,182,107,0.15)'}`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, color:isSend?C.red:C.green, flexShrink:0 }}>
                         {isSend?'↑':'↓'}
                       </div>
-                      <div style={{flex:1}}>
-                        <div style={{fontFamily:C.D,fontSize:14,fontWeight:500,color:C.text}}>{isSend?'Sent':'Received'} {tx.value?.toFixed(4)} {tx.asset}</div>
-                        <div style={{fontFamily:C.M,fontSize:10,color:C.dim,marginTop:3}}>{isSend?'To':'From'}: {ta(isSend?(tx.to??''):(tx.from??''))}</div>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontFamily:C.D, fontSize:14, fontWeight:500, color:C.text }}>{isSend?'Sent':'Received'} {tx.value?.toFixed(4)} {tx.asset}</div>
+                        <div style={{ fontFamily:C.M, fontSize:10, color:C.dim, marginTop:3 }}>{isSend?'To':'From'}: {ta(isSend?(tx.to??''):(tx.from??''))}</div>
                       </div>
-                      <div style={{textAlign:'right' as const,flexShrink:0}}>
-                        <div style={{fontFamily:C.M,fontSize:11,color:C.sub}}>{ago(tx.timestamp)}</div>
-                        <div style={{fontFamily:C.M,fontSize:9,color:C.dim,marginTop:2}}>↗</div>
+                      <div style={{ textAlign:'right' as const, flexShrink:0 }}>
+                        <div style={{ fontFamily:C.M, fontSize:11, color:C.sub }}>{ago(tx.timestamp)}</div>
+                        <div style={{ fontFamily:C.M, fontSize:9, color:C.dim, marginTop:2 }}>↗</div>
                       </div>
                     </a>
                   )
@@ -496,17 +542,22 @@ export default function PortfolioDashboard({open,onClose,initialTab}:Props){
             )
           )}
 
-          {/* ═══ SWAP TAB ═══════════════════════════════════ */}
-          {tab==='swap'&&(
-            <div style={{maxWidth:440,margin:'0 auto'}}>
-              <SwapModule onSwapComplete={()=>{refresh();setTimeout(()=>switchTab('activity'),1500)}} />
+          {/* ═══ SWAP ══════════════════════════════════════ */}
+          {tab==='swap' && (
+            <div style={{ maxWidth:440, margin:'0 auto' }}>
+              <SwapModule onSwapComplete={() => { refresh(); setTimeout(() => setTab('activity'), 1500) }} />
             </div>
           )}
 
-          </div>{/* end animated wrapper */}
-        </div>
-      </div>
-    </div>,
+                </motion.div>
+              </AnimatePresence>
+              </div>
+            </motion.div>
+            </div>{/* end scrollable */}
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
     document.body
   )
 }
