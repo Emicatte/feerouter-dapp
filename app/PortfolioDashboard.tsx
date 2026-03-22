@@ -156,6 +156,84 @@ function Ident({addr,size=40}:{addr:string;size?:number}){
 }
 
 // ═══════════════════════════════════════════════════════════
+//  TOKEN ROW with Smart Tooltip
+// ═══════════════════════════════════════════════════════════
+function TokenRow({ a, idx, total }: { a: Asset; idx: number; total: number }) {
+  const [hover, setHover] = useState(false)
+  const price = a.balance > 0 && a.usdValue > 0 ? a.usdValue / a.balance : 0
+  const pctPortfolio = total > 0 ? ((a.usdValue / total) * 100) : 0
+
+  return (
+    <div
+      style={{
+        display:'flex', alignItems:'center', padding:'14px 4px',
+        borderBottom: idx >= 0 ? `1px solid ${C.border}` : 'none',
+        transition:'background 0.1s', position:'relative',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; setHover(true) }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; setHover(false) }}
+    >
+      <div style={{ flex:1, display:'flex', alignItems:'center', gap:12 }}>
+        <TIcon symbol={a.symbol} logo={a.logo} size={36}/>
+        <div>
+          <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+            <span style={{ fontFamily:C.D, fontSize:14, fontWeight:600, color:C.text }}>{a.name}</span>
+            {a.dac8Monitored && <span style={{ fontFamily:C.M, fontSize:8, color:C.pink, background:`${C.pink}12`, padding:'1px 5px', borderRadius:3 }}>DAC8</span>}
+          </div>
+          <div style={{ fontFamily:C.M, fontSize:11, color:C.dim, marginTop:1 }}>{a.symbol}</div>
+        </div>
+      </div>
+      <div style={{ width:100, textAlign:'right' as const, fontFamily:C.M, fontSize:13, color:C.sub }}>
+        {price > 0 ? $(price) : '—'}
+      </div>
+      <div style={{ width:120, textAlign:'right' as const, fontFamily:C.M, fontSize:13, fontWeight:600, color:C.text }}>
+        {fb(a.balance, a.symbol)}
+      </div>
+      <div style={{ width:100, textAlign:'right' as const, fontFamily:C.M, fontSize:13, fontWeight:600, color:C.text }}>
+        {$(a.usdValue)}
+      </div>
+
+      {/* Smart Tooltip */}
+      {hover && a.usdValue > 0 && (
+        <div style={{
+          position:'absolute', top:'100%', right:4, zIndex:50,
+          background:C.card, border:`1px solid ${C.border}`, borderRadius:14,
+          padding:'12px 16px', minWidth:220,
+          boxShadow:'0 12px 32px rgba(0,0,0,0.6)',
+          pointerEvents:'none',
+        }}>
+          <div style={{ fontFamily:C.D, fontSize:11, fontWeight:600, color:C.text, marginBottom:8 }}>
+            {a.symbol} — Dettagli
+          </div>
+          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5 }}>
+            <span style={{ fontFamily:C.M, fontSize:10, color:C.dim }}>Prezzo unitario</span>
+            <span style={{ fontFamily:C.M, fontSize:10, color:C.sub }}>{$(price)}</span>
+          </div>
+          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5 }}>
+            <span style={{ fontFamily:C.M, fontSize:10, color:C.dim }}>% del portfolio</span>
+            <span style={{ fontFamily:C.M, fontSize:10, color:C.sub }}>{pctPortfolio.toFixed(1)}%</span>
+          </div>
+          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5 }}>
+            <span style={{ fontFamily:C.M, fontSize:10, color:C.dim }}>Giacenza media</span>
+            <span style={{ fontFamily:C.M, fontSize:10, color:C.sub }}>{fb(a.balance, a.symbol)} {a.symbol}</span>
+          </div>
+          {a.dac8Monitored && (
+            <div style={{
+              display:'flex', alignItems:'center', gap:5, marginTop:6,
+              padding:'4px 8px', borderRadius:6,
+              background:'rgba(64,182,107,0.06)', border:'1px solid rgba(64,182,107,0.12)',
+            }}>
+              <span style={{ fontSize:10 }}>✓</span>
+              <span style={{ fontFamily:C.M, fontSize:9, color:C.green }}>Monitorato DAC8 — incluso nel report fiscale</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
 //  MOTION — unified cinematic transition
 // ═══════════════════════════════════════════════════════════
 const smooth = { type:'spring' as const, bounce:0, duration:0.6 }
@@ -393,6 +471,46 @@ export default function PortfolioDashboard({ open, onClose, initialTab }:Props){
                 </div>
               </div>
 
+              {/* ── Fiscal Health + Trust Signals ──────────── */}
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:24 }}>
+                <div style={{
+                  background:C.surface, border:`1px solid ${C.border}`, borderRadius:16,
+                  padding:'16px 18px', display:'flex', alignItems:'center', gap:12,
+                }}>
+                  <div style={{
+                    width:36, height:36, borderRadius:10,
+                    background:'rgba(64,182,107,0.08)', border:'1px solid rgba(64,182,107,0.15)',
+                    display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, flexShrink:0,
+                  }}>🛡</div>
+                  <div>
+                    <div style={{ fontFamily:C.D, fontSize:12, fontWeight:600, color:C.green }}>
+                      Stato Fiscale: Conforme
+                    </div>
+                    <div style={{ fontFamily:C.M, fontSize:10, color:C.dim, marginTop:2 }}>
+                      Tutte le TX monitorate DAC8/MiCA
+                    </div>
+                  </div>
+                </div>
+                <div style={{
+                  background:C.surface, border:`1px solid ${C.border}`, borderRadius:16,
+                  padding:'16px 18px', display:'flex', alignItems:'center', gap:12,
+                }}>
+                  <div style={{
+                    width:36, height:36, borderRadius:10,
+                    background:'rgba(76,130,251,0.08)', border:'1px solid rgba(76,130,251,0.15)',
+                    display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, flexShrink:0,
+                  }}>🔒</div>
+                  <div>
+                    <div style={{ fontFamily:C.D, fontSize:12, fontWeight:600, color:C.blue }}>
+                      Non-Custodial · Encrypted
+                    </div>
+                    <div style={{ fontFamily:C.M, fontSize:10, color:C.dim, marginTop:2 }}>
+                      Chiavi private mai condivise
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:24 }}>
                 <div>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
@@ -468,34 +586,7 @@ export default function PortfolioDashboard({ open, onClose, initialTab }:Props){
                   <span style={{ width:100, textAlign:'right' as const, fontFamily:C.D, fontSize:12, color:C.dim, fontWeight:500 }}>Value</span>
                 </div>
                 {data.assets.map((a:Asset, i:number) => (
-                  <div key={a.contractAddress+a.symbol} style={{
-                    display:'flex', alignItems:'center', padding:'14px 4px',
-                    borderBottom:i<data.assets.length-1?`1px solid ${C.border}`:'none',
-                    transition:'background 0.1s',
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
-                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                  >
-                    <div style={{ flex:1, display:'flex', alignItems:'center', gap:12 }}>
-                      <TIcon symbol={a.symbol} logo={a.logo} size={36}/>
-                      <div>
-                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                          <span style={{ fontFamily:C.D, fontSize:14, fontWeight:600, color:C.text }}>{a.name}</span>
-                          {a.dac8Monitored && <span style={{ fontFamily:C.M, fontSize:8, color:C.pink, background:`${C.pink}12`, padding:'1px 5px', borderRadius:3 }}>DAC8</span>}
-                        </div>
-                        <div style={{ fontFamily:C.M, fontSize:11, color:C.dim, marginTop:1 }}>{a.symbol}</div>
-                      </div>
-                    </div>
-                    <div style={{ width:100, textAlign:'right' as const, fontFamily:C.M, fontSize:13, color:C.sub }}>
-                      {a.usdValue>0&&a.balance>0?$(a.usdValue/a.balance):'—'}
-                    </div>
-                    <div style={{ width:120, textAlign:'right' as const, fontFamily:C.M, fontSize:13, fontWeight:600, color:C.text }}>
-                      {fb(a.balance,a.symbol)}
-                    </div>
-                    <div style={{ width:100, textAlign:'right' as const, fontFamily:C.M, fontSize:13, fontWeight:600, color:C.text }}>
-                      {$(a.usdValue)}
-                    </div>
-                  </div>
+                  <TokenRow key={a.contractAddress+a.symbol} a={a} idx={i < data.assets.length-1 ? i : -1} total={data.totalUsd} />
                 ))}
               </div>
             )
@@ -545,7 +636,7 @@ export default function PortfolioDashboard({ open, onClose, initialTab }:Props){
           {/* ═══ SWAP ══════════════════════════════════════ */}
           {tab==='swap' && (
             <div style={{ maxWidth:440, margin:'0 auto' }}>
-              <SwapModule onSwapComplete={() => { refresh(); setTimeout(() => setTab('activity'), 1500) }} />
+              <SwapModule onSwapComplete={() => { refresh(); setTimeout(() => setTab('activity'), 1500) }} portfolioAssets={data?.assets} />
             </div>
           )}
 

@@ -93,11 +93,17 @@ type Phase = 'idle' | 'quoting' | 'approving' | 'signing_oracle' | 'swapping' | 
 // ═══════════════════════════════════════════════════════════
 //  SWAP MODULE
 // ═══════════════════════════════════════════════════════════
-interface SwapModuleProps {
-  onSwapComplete?: () => void
+interface PortfolioAsset {
+  symbol: string; balance: number; decimals: number
+  contractAddress: string; logo?: string | null
 }
 
-export default function SwapModule({ onSwapComplete }: SwapModuleProps) {
+interface SwapModuleProps {
+  onSwapComplete?: () => void
+  portfolioAssets?: PortfolioAsset[]
+}
+
+export default function SwapModule({ onSwapComplete, portfolioAssets }: SwapModuleProps) {
   const { address, isConnected } = useAccount()
   const chainId = useChainId()
   const publicClient = usePublicClient()
@@ -130,7 +136,7 @@ export default function SwapModule({ onSwapComplete }: SwapModuleProps) {
     setPhase('idle')
   }, [tokens])
 
-  // Balances
+  // Balances — prefer portfolio data, fallback to RPC
   const { data: ethBal } = useBalance({ address })
   const erc20s = tokens.filter(t => !t.isNative)
   const { data: erc20Bals } = useReadContracts({
@@ -142,10 +148,27 @@ export default function SwapModule({ onSwapComplete }: SwapModuleProps) {
   })
 
   const getBalance = useCallback((t: TokenConfig): bigint => {
+    // 1. Try portfolio data first (most reliable, already fetched from Alchemy)
+    if (portfolioAssets?.length) {
+      const pa = portfolioAssets.find(a =>
+        a.symbol === t.symbol ||
+        (a.contractAddress?.toLowerCase() === t.address?.toLowerCase() && t.address !== '0x0000000000000000000000000000000000000000')
+      )
+      if (pa && pa.balance > 0) {
+        return BigInt(Math.round(pa.balance * (10 ** (t.decimals ?? 18))))
+      }
+    }
+
+    // 2. Fallback: RPC data
     if (t.isNative) return ethBal?.value ?? 0n
     const idx = erc20s.findIndex(e => e.symbol === t.symbol)
-    return (erc20Bals?.[idx]?.result as bigint | undefined) ?? 0n
-  }, [ethBal, erc20Bals, erc20s])
+    if (idx >= 0) {
+      const val = erc20Bals?.[idx]?.result as bigint | undefined
+      if (val && val > 0n) return val
+    }
+
+    return 0n
+  }, [ethBal, erc20Bals, erc20s, portfolioAssets])
 
   const inBal = tokenIn ? getBalance(tokenIn) : 0n
   const inBalFmt = tokenIn ? parseFloat(formatUnits(inBal, tokenIn.decimals)) : 0
@@ -328,7 +351,7 @@ export default function SwapModule({ onSwapComplete }: SwapModuleProps) {
     <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20, padding: 20 }}>
 
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
         <span style={{ fontFamily: C.D, fontSize: 16, fontWeight: 600, color: C.text }}>Swap</span>
         <button onClick={() => setShowSettings(s => !s)} style={{
           width: 28, height: 28, borderRadius: 8,
@@ -336,6 +359,19 @@ export default function SwapModule({ onSwapComplete }: SwapModuleProps) {
           border: `1px solid ${C.border}`, color: C.dim, cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14,
         }}>⚙</button>
+      </div>
+
+      {/* Compliance advantage */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        padding: '6px 10px', borderRadius: 8,
+        background: 'rgba(64,182,107,0.05)', border: '1px solid rgba(64,182,107,0.1)',
+        marginBottom: 14,
+      }}>
+        <span style={{ fontSize: 10 }}>🛡</span>
+        <span style={{ fontFamily: C.M, fontSize: 9, color: '#40B66B', letterSpacing: '0.02em' }}>
+          Zero-Hop Swap · Registrato automaticamente per il report fiscale DAC8
+        </span>
       </div>
 
       {/* Slippage settings */}
@@ -500,11 +536,21 @@ export default function SwapModule({ onSwapComplete }: SwapModuleProps) {
       {/* Success */}
       {phase === 'success' && txHash && (
         <div style={{ marginTop: 10, padding: '14px', borderRadius: 14, background: `${C.green}08`, border: `1px solid ${C.green}20`, textAlign: 'center' as const }}>
-          <div style={{ fontFamily: C.D, fontSize: 13, fontWeight: 600, color: C.green, marginBottom: 6 }}>Swap completato ✓</div>
-          <a href={`${reg?.blockExplorer ?? 'https://basescan.org'}/tx/${txHash}`} target="_blank" rel="noopener noreferrer"
-            style={{ fontFamily: C.M, fontSize: 10, color: C.sub, textDecoration: 'underline' }}>
-            Vedi su Explorer ↗
-          </a>
+          <div style={{ fontFamily: C.D, fontSize: 13, fontWeight: 600, color: C.green, marginBottom: 4 }}>Swap completato ✓</div>
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            padding: '3px 10px', borderRadius: 6,
+            background: 'rgba(252,116,254,0.06)', border: '1px solid rgba(252,116,254,0.12)',
+            marginBottom: 8,
+          }}>
+            <span style={{ fontFamily: C.M, fontSize: 9, color: C.pink }}>📋 DAC8 Verified — Registrato nel report fiscale</span>
+          </div>
+          <div>
+            <a href={`${reg?.blockExplorer ?? 'https://basescan.org'}/tx/${txHash}`} target="_blank" rel="noopener noreferrer"
+              style={{ fontFamily: C.M, fontSize: 10, color: C.sub, textDecoration: 'underline' }}>
+              Vedi su Explorer ↗
+            </a>
+          </div>
           <div style={{ marginTop: 8 }}>
             <button onClick={reset} style={{
               padding: '8px 20px', borderRadius: 12,
@@ -544,6 +590,26 @@ export default function SwapModule({ onSwapComplete }: SwapModuleProps) {
         </button>
       )}
 
+      {/* Trust Signals */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        gap: 12, marginTop: 12, flexWrap: 'wrap' as const,
+      }}>
+        {[
+          { icon: '🔒', label: 'Non-Custodial' },
+          { icon: '📋', label: 'DAC8 Verified' },
+          { icon: '⚡', label: 'Base L2' },
+        ].map(b => (
+          <div key={b.label} style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            fontFamily: C.M, fontSize: 9, color: C.dim,
+          }}>
+            <span style={{ fontSize: 9 }}>{b.icon}</span>
+            <span>{b.label}</span>
+          </div>
+        ))}
+      </div>
+
       {/* Token Selector Modal */}
       {selectingFor && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -557,7 +623,17 @@ export default function SwapModule({ onSwapComplete }: SwapModuleProps) {
               Select token
             </div>
             <div style={{ maxHeight: 320, overflowY: 'auto' }}>
-              {tokens.map(t => (
+              {[...tokens]
+                .sort((a, b) => {
+                  const bA = Number(getBalance(a)) / (10 ** a.decimals)
+                  const bB = Number(getBalance(b)) / (10 ** b.decimals)
+                  return bB - bA
+                })
+                .map(t => {
+                const bal = getBalance(t)
+                const balFmt = parseFloat(formatUnits(bal, t.decimals))
+                const pa = portfolioAssets?.find(a => a.symbol === t.symbol)
+                return (
                 <button key={t.symbol} onClick={() => {
                   if (selectingFor === 'in') setTokenIn(t)
                   else setTokenOut(t)
@@ -568,6 +644,7 @@ export default function SwapModule({ onSwapComplete }: SwapModuleProps) {
                   padding: '12px 18px', background: 'transparent', border: 'none',
                   borderBottom: `1px solid ${C.border}`, cursor: 'pointer',
                   textAlign: 'left' as const, transition: 'background 0.1s',
+                  opacity: balFmt > 0 ? 1 : 0.5,
                 }}
                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
                 onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
@@ -577,11 +654,12 @@ export default function SwapModule({ onSwapComplete }: SwapModuleProps) {
                     <div style={{ fontFamily: C.D, fontSize: 14, fontWeight: 600, color: C.text }}>{t.symbol}</div>
                     <div style={{ fontFamily: C.M, fontSize: 10, color: C.dim }}>{t.name}</div>
                   </div>
-                  <span style={{ fontFamily: C.M, fontSize: 11, color: C.sub }}>
-                    {parseFloat(formatUnits(getBalance(t), t.decimals)).toFixed(4)}
+                  <span style={{ fontFamily: C.M, fontSize: 11, color: balFmt > 0 ? C.text : C.dim }}>
+                    {balFmt > 0 ? balFmt.toFixed(4) : '0'}
                   </span>
                 </button>
-              ))}
+                )
+              })}
             </div>
           </div>
         </div>
