@@ -1,17 +1,31 @@
-FROM python:3.12-slim
+# ═══════════════════════════════════════════════════════════
+#  RPagos Backend — Production Dockerfile
+#  Multi-stage build: slim image, non-root user
+# ═══════════════════════════════════════════════════════════
+
+FROM python:3.11-slim AS base
+
+# Security: non-root user
+RUN groupadd -r rpagos && useradd -r -g rpagos -d /app rpagos
 
 WORKDIR /app
 
-# Dipendenze di sistema per lxml
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends libxml2-dev libxslt1-dev && \
-    rm -rf /var/lib/apt/lists/*
-
+# Install dependencies first (cached layer)
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Copy app code
 COPY . .
+
+# Create reports directory
+RUN mkdir -p /app/reports && chown -R rpagos:rpagos /app
+
+USER rpagos
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]

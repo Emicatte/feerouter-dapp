@@ -1,8 +1,9 @@
 """
-RPagos Backend Core — Database Session Manager.
+RPagos Backend — Database Session Manager.
 
-Gestione asincrona della connessione al DB.
-In dev usa SQLite; in prod PostgreSQL via asyncpg.
+Supporta:
+  - SQLite + aiosqlite (dev locale)
+  - PostgreSQL + asyncpg (produzione)
 """
 
 from sqlalchemy.ext.asyncio import (
@@ -15,7 +16,6 @@ from app.models.db_models import Base
 
 settings = get_settings()
 
-# Per SQLite asincrono serve aiosqlite
 if settings.database_url.startswith("sqlite"):
     engine = create_async_engine(
         settings.database_url,
@@ -23,18 +23,24 @@ if settings.database_url.startswith("sqlite"):
         connect_args={"check_same_thread": False},
     )
 else:
+    # PostgreSQL con pool
     engine = create_async_engine(
         settings.database_url,
         echo=settings.debug,
-        pool_size=10,
-        max_overflow=20,
+        pool_size=20,
+        max_overflow=30,
+        pool_timeout=30,
+        pool_recycle=1800,
+        pool_pre_ping=True,
     )
 
-async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+async_session = async_sessionmaker(
+    engine, class_=AsyncSession, expire_on_commit=False
+)
 
 
 async def init_db() -> None:
-    """Crea tutte le tabelle (dev only — in prod usa Alembic)."""
+    """Crea tabelle. In produzione usa Alembic."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
