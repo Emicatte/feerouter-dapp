@@ -94,6 +94,8 @@ except ImportError:
 
 # ── Routes ───────────────────────────────────────────────
 app.include_router(router)
+from app.api.sweeper_routes import sweeper_router
+app.include_router(sweeper_router)
 
 
 # ── Health check ─────────────────────────────────────────
