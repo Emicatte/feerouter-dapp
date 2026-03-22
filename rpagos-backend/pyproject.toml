@@ -1,0 +1,9 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[project]
+name = "rpagos-backend-core"
+version = "1.0.0"
+description = "Compliance & Data Engine per transazioni Web3 — DAC8/CARF"
+requires-python = ">=3.11"

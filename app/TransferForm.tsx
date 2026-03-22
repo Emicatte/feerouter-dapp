@@ -35,6 +35,7 @@ import {
 } from '../lib/contractRegistry'
 import { useSwapQuote, useDirectQuote } from '../lib/useSwapQuote'
 import NetworkSelector from './NetworkSelector'
+import { useBackendCallback } from '../lib/useBackendCallback'
 
 // ── Theme ──────────────────────────────────────────────────────────────────
 const T = {
@@ -375,6 +376,7 @@ export default function TransferForm(): React.JSX.Element {
   const publicClient             = usePublicClient()
   const { generateRecord }       = useComplianceEngine()
   const complianceApi            = useComplianceAPI()
+  const sendBackend              = useBackendCallback()
 
   // ── Registry ──────────────────────────────────────────────────────────
   const [registry,  setRegistry]  = useState<NetworkRegistry | null>(null)
@@ -617,6 +619,33 @@ export default function TransferForm(): React.JSX.Element {
       setCompRec(rec)
       const api = await complianceApi.submitAfterFinality(rec, 2500)
       if (api.queued) setTimeout(() => setToast({ msg: 'Compliance in queue.', color: T.amber }), 3000)
+
+      // ── Invia al backend RPagos ─────────────────────────────
+      sendBackend({
+        txHash:    sendHash,
+        grossStr:  formatUnits(grossOut, outToken.decimals),
+        netStr:    formatUnits(netOut, outToken.decimals),
+        feeStr:    formatUnits(feeOut, outToken.decimals),
+        symbol:    outToken.symbol,
+        recipient,
+        paymentRef: oracleData?.paymentRef,
+        fiscalRef:  oracleData?.fiscalRef,
+        eurValue:   eurVal,
+        timestamp:  new Date().toISOString(),
+        isTestnet:  chainId === baseSepolia.id,
+        complianceRecord: rec ? {
+          compliance_id:    rec.compliance_id,
+          block_timestamp:  rec.block_timestamp,
+          fiat_rate:        rec.fiat_rate ?? undefined,
+          asset:            rec.asset,
+          fiat_gross:       rec.fiat_gross ? parseFloat(rec.fiat_gross) : undefined,
+          ip_jurisdiction:  rec.ip_jurisdiction,
+          mica_applicable:  rec.mica_applicable,
+          fiscal_ref:       rec.fiscal_ref,
+          network:          rec.network,
+          dac8_reportable:  rec.dac8_reportable,
+        } : undefined,
+      }).catch(err => console.warn('[RPagos Backend] callback error:', err))
     })
     txLog('tx.completed', { hash: sendHash, isSwap: isSwapMode, tokenIn: tokenIn.symbol, tokenOut: outToken.symbol })
     setPhase('done')
