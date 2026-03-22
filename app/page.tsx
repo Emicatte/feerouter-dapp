@@ -1,15 +1,5 @@
 'use client'
 
-/**
- * page.tsx — RPagos Gateway Main Page
- *
- * Features:
- *   - AccountHeader (wallet identity + activity) fisso in alto a destra
- *   - GPU-Accelerated Background con orbs animati
- *   - Staggered fade-in su tutti i componenti
- *   - TransferForm con NetworkSelector, Oracle EIP-712, Swap V3
- *   - Footer badges compliance (MiCA/DAC8, VASP, AML)
- */
 
 import dynamic from 'next/dynamic'
 

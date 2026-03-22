@@ -1,22 +1,4 @@
-/**
- * lib/useGaslessPaymaster.ts — ERC-4337 Gasless Payments
- *
- * Supporta stablecoin (USDC/EURC) senza richiedere ETH per il gas.
- * Usa Pimlico Bundler su Base come Paymaster aziendale.
- *
- * Modalità operative:
- *   1. SPONSORED: il Paymaster copre tutto il gas (Gas-as-a-Service)
- *   2. ERC20_PAYMASTER: il gas viene detratto dal token inviato
- *
- * Per attivare il Paymaster reale:
- *   - Crea account su https://dashboard.pimlico.io
- *   - Imposta NEXT_PUBLIC_PIMLICO_API_KEY nel .env.local
- *   - Configura il budget gas nel pannello Pimlico
- *
- * NOTA: In questa implementazione la logica Paymaster è modellata
- * con un sistema di fallback graceful: se il Paymaster non è
- * disponibile, cade automaticamente sulla TX standard.
- */
+
 
 import { useState, useCallback } from 'react'
 import { useAccount, usePublicClient } from 'wagmi'
@@ -114,17 +96,7 @@ export function useGaslessPaymaster() {
     }
   }, [publicClient, apiKey, bundlerUrl, isGaslessEligible])
 
-  /**
-   * buildUserOperation — costruisce una UserOperation ERC-4337
-   *
-   * In produzione questo chiama il bundler Pimlico per:
-   *  1. eth_estimateUserOperationGas
-   *  2. pm_sponsorUserOperation (Paymaster)
-   *  3. eth_sendUserOperation
-   *
-   * Per ora è un placeholder modulare pronto per l'integrazione
-   * quando il contratto FeeRouter sarà aggiornato per ERC-4337.
-   */
+  
   const buildSponsoredTx = useCallback(async (params: {
     to:      `0x${string}`
     data:    `0x${string}`

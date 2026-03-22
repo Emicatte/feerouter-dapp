@@ -1,9 +1,3 @@
-/**
- * lib/usePortfolioData.ts — Portfolio Data Hook
- *
- * Fetches portfolio data from /api/portfolio/[address]
- * Auto-refreshes every 60 seconds.
- */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 

@@ -1,13 +1,5 @@
 'use client'
 
-/**
- * PortfolioDashboard.tsx V5 — Fluid Transitions
- *
- * framer-motion:
- *   - layoutId="activeTab" per indicator che scivola
- *   - AnimatePresence mode="wait" per content fade+slide
- *   - Overlay fade-in con motion.div
- */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useAccount, useChainId } from 'wagmi'

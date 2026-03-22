@@ -1,16 +1,3 @@
-/**
- * lib/usePdfReceipt.ts v2 — EURC-First Accounting
- *
- * Se il token è EURC:
- *   - Nessuna conversione USD/EUR
- *   - Importi direttamente in EUR con simbolo €
- *   - Header "Ricevuta Fiscale Europea — ERC-20 Euro"
- *   - Conforme standard contabili UE (direttiva 2013/34/UE)
- *   - Campo "Valuta di Riferimento: EUR (EURC on Base)"
- *
- * Per tutti gli altri token:
- *   - Comportamento invariato dal v1
- */
 
 import jsPDF from 'jspdf'
 

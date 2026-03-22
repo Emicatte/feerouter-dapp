@@ -459,12 +459,11 @@ body {
 }
 
 /* ============================================================
-   TOKEN DROPDOWN — Depth & Glassmorphism leggero
-   Blur adattivo: ridotto su macchine con prefers-reduced-motion
+   TOKEN DROPDOWN 
    ============================================================ */
 
 .rp-dropdown {
-  /* Glassmorphism leggero — 12px max per performance */
+  
   backdrop-filter: blur(12px) saturate(180%);
   -webkit-backdrop-filter: blur(12px) saturate(180%);
 
@@ -472,7 +471,6 @@ body {
   transform-origin: top right;
 }
 
-/* Riduce il blur su macchine più lente / preferenza utente */
 @media (prefers-reduced-motion: reduce) {
   .rp-dropdown {
     backdrop-filter: blur(4px);
@@ -546,14 +544,12 @@ body {
    UTILITY — Performance helpers
    ============================================================ */
 
-/* Forza GPU layer su qualsiasi elemento */
 .rp-gpu {
   transform: translateZ(0);
   backface-visibility: hidden;
   will-change: transform;
 }
 
-/* Contenuto non interattivo al di sopra del background */
 .rp-content {
   position: relative;
   z-index: 1;
@@ -591,7 +587,6 @@ body {
    FORM LABELS — Bold display font per Sell / Receive / Invia
    ============================================================ */
 
-/* Override per le label Sell/Receive nel TransferForm */
 .rp-label {
   font-family: var(--font-display) !important;
   font-weight: 700 !important;
@@ -600,7 +595,6 @@ body {
   color: var(--c-muted);
 }
 
-/* Header "Invia" */
 .rp-title {
   font-family:    var(--font-display) !important;
   font-weight:    800 !important;
@@ -609,7 +603,6 @@ body {
   color: var(--c-text);
 }
 
-/* Big number input */
 .rp-big-num {
   font-family:    var(--font-display) !important;
   font-weight:    300;
@@ -618,7 +611,6 @@ body {
   line-height:    1;
 }
 
-/* Section title uppercase (DESTINATARIO, DAC8...) */
 .rp-section-title {
   font-family:    var(--font-mono) !important;
   font-weight:    700 !important;
@@ -627,15 +619,11 @@ body {
   letter-spacing: 0.1em;
   color: var(--c-muted);
 }
-/* ── Aggiungi questo alla fine di globals.css ────────────────── */
 
 @keyframes rpShimmer {
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
-/* ── Aggiungi questo alla fine di globals.css ────────────────── */
-
-/* ── Aggiungi TUTTO questo alla fine di globals.css ──────── */
 
 @keyframes rpShimmer {
   0%   { background-position: 200% 0; }

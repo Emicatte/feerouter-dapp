@@ -1,13 +1,5 @@
 'use client'
 
-/**
- * AccountHeader.tsx V2 — Wallet Identity + Portfolio Trigger
- *
- * Il pill button apre un dropdown con:
- *   - Saldo in tempo reale
- *   - "Vedi Portfolio" → apre PortfolioDashboard overlay
- *   - Copia indirizzo, Explorer, Disconnect
- */
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'

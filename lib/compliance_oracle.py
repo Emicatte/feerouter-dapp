@@ -1,19 +1,4 @@
-"""
-compliance_oracle.py v3 — VASP Multi-Asset Oracle + DAC8 Bulk Reporting
 
-Endpoint principali:
-  POST /api/v1/compliance/verify    → AML check + EIP-712 signature (nuovo nome)
-  POST /api/v1/compliance/check     → alias del precedente (backward compat)
-  POST /api/v1/tx/callback          → riceve ComplianceRecord post-finality
-  GET  /api/v1/compliance/status    → health check
-  GET  /api/v1/tx/history           → storico per audit
-  GET  /api/v1/dac8/export          → DAC8 XML bulk export
-  GET  /api/v1/dac8/summary         → riepilogo aggregato per giurisdizione
-  GET  /api/v1/tokens               → token supportati
-
-Avvio:
-  python3 -m uvicorn compliance_oracle:app --port 8000 --reload
-"""
 
 import os
 import hashlib

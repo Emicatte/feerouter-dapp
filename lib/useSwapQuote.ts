@@ -1,13 +1,3 @@
-/**
- * lib/useSwapQuote.ts — Real-Time Uniswap V3 Quote Engine
- *
- * Strategia "Best-of-All-Tiers":
- *   - Lancia Promise.allSettled su TUTTI i fee tier in parallelo
- *   - Sceglie il tier con il maggior amountOut (miglior prezzo per l'utente)
- *   - ETH nativo → WETH automatico dal registry
- *   - Quoter address corretto per chain (Base ≠ Ethereum)
- *   - error_liquidity solo se TUTTI i tier falliscono
- */
 
 import { useState, useEffect, useRef } from 'react'
 import { usePublicClient } from 'wagmi'

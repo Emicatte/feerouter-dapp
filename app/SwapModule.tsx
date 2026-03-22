@@ -1,12 +1,5 @@
 'use client'
 
-/**
- * SwapModule.tsx — Uniswap V3 Swap Widget
- *
- * Integrato nella PortfolioDashboard.
- * Usa useSwapQuote per il quoting, writeContract per l'esecuzione,
- * e invia callback al backend per compliance DAC8.
- */
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
@@ -24,7 +17,7 @@ import { useSwapQuote } from '../lib/useSwapQuote'
 const BACKEND = process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:8000'
 
 // ═══════════════════════════════════════════════════════════
-//  PALETTE (coerente con dashboard)
+//  PALETTE
 // ═══════════════════════════════════════════════════════════
 const C = {
   bg:      '#131313',
@@ -79,7 +72,7 @@ function TIcon({ symbol, size = 28 }: { symbol: string; size?: number }) {
 }
 
 // ═══════════════════════════════════════════════════════════
-//  FEE ROUTER ABI (swap functions)
+//  FEE ROUTER ABI 
 // ═══════════════════════════════════════════════════════════
 const FEE_ROUTER_ABI: Abi = [
   { name:'swapAndSend', type:'function', stateMutability:'nonpayable',

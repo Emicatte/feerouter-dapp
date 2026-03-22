@@ -1,12 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-/**
- * /api/portfolio/[address]/route.ts V3
- *
- * Token espansi: ETH, USDC, USDT, EURC, BTC variants, SOL, TRX, DEGEN
- * Logo da Alchemy → CoinGecko fallback
- * Spam filter: solo token noti o valore > $0.50
- */
 
 const AK = process.env.ALCHEMY_API_KEY ?? ''
 
@@ -16,7 +9,6 @@ const URLS: Record<number, string> = {
   1:     `https://eth-mainnet.g.alchemy.com/v2/${AK}`,
 }
 
-// ── Prezzi mock espansi — in produzione: CoinGecko/Chainlink ───────────────
 const PRICES: Record<string, number> = {
   ETH: 2150, WETH: 2150,
   USDC: 1, USDT: 1, EURC: 1.08, DAI: 1, USDS: 1, FRAX: 1, USDbC: 1,

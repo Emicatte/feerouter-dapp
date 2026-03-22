@@ -1,16 +1,5 @@
 'use client'
 
-/**
- * TransferForm.tsx V4 — Omni-chain Swap-and-Forward
- *
- * Refactoring:
- *   - Rimosso mode state ('direct'|'swap') → auto-detection
- *   - isSwapMode = tokenIn.symbol !== tokenOut.symbol
- *   - Token Selector Modal con background solido opaco
- *   - selectingToken ('in'|'out'|null) per aprire la modale
- *   - chainId fix: valori letterali numerici
- */
-
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   useAccount, useBalance, useReadContracts,

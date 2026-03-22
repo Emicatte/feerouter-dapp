@@ -1,12 +1,6 @@
 'use client'
 
-/**
- * NetworkSelector.tsx — Network-First Chain Selector (Portal)
- *
- * Il dropdown viene renderizzato con createPortal su document.body
- * per evitare problemi di overflow:hidden, z-index e backdrop-filter
- * del contenitore card.
- */
+
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'

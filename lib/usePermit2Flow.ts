@@ -1,24 +1,4 @@
-/**
- * lib/usePermit2Flow.ts — Unified Permit2 + Compliance Flow Hook
- *
- * Gestisce il doppio flusso di firma in sequenza:
- *
- *   FASE 1 — Pre-Flight Compliance (off-chain)
- *     → POST /api/v1/compliance/check
- *     → Backend AML verifica sender/recipient/amount
- *     → Backend restituisce complianceSignature + nonce + deadline
- *
- *   FASE 2 — Permit2 EIP-712 Sign (off-chain, gasless)
- *     → useSignTypedData (wagmi)
- *     → Genera firma per ISignatureTransfer.PermitTransferFrom
- *     → Nessuna TX on-chain, nessun gas
- *
- *   FASE 3 — Atomic Execution (on-chain, 1 TX)
- *     → FeeRouterV3.transferWithPermit2(permit2Sig, complianceSig)
- *     → Split atomico in 1 blocco
- *
- * Risultato UX: 2 firme wallet + 1 TX (invece di approve + transfer)
- */
+'use client'
 
 import { useState, useCallback } from 'react'
 import {

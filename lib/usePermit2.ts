@@ -1,14 +1,3 @@
-/**
- * lib/usePermit2.ts v2 — Uniswap Permit2 Hook
- *
- * Flow completo zero-friction:
- *  1. Check one-time approval token → Permit2
- *  2. Se mancante: approve(Permit2, maxUint256) — UNA SOLA VOLTA per token/wallet
- *  3. signTypedData EIP-712 PermitTransferFrom (off-chain, gasless)
- *  4. FeeRouter chiama permitTransferFrom passando la firma
- *
- * Risultato: da 2 TX on-chain + 1 firma → 1 firma off-chain + 1 TX
- */
 
 import { useState, useCallback } from 'react'
 import {

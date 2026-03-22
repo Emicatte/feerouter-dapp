@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-/**
- * /api/portfolio/[address]/route.ts V2
- *
- * Proxy server-side per Alchemy — API key lato server.
- * V2: metadata + loghi fetchati in parallelo con Promise.all
- */
+
 
 const ALCHEMY_KEY = process.env.ALCHEMY_API_KEY ?? ''
 
