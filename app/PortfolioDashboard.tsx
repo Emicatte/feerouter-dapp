@@ -18,6 +18,9 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import { getRegistry } from '../lib/contractRegistry'
+import dynamic from 'next/dynamic'
+
+const SwapModule = dynamic(() => import('./SwapModule'), { ssr: false })
 
 // ═══════════════════════════════════════════════════════════
 //  PALETTE
@@ -55,7 +58,7 @@ interface PData {
   totalUsd:number; assets:Asset[]; activity:Tx[]
   balanceHistory:Pt[]; txCount7d?:number; updatedAt:string
 }
-type Tab = 'overview'|'tokens'|'activity'
+type Tab = 'overview'|'tokens'|'activity'|'swap'
 type Range = '1D'|'1W'
 
 // ═══════════════════════════════════════════════════════════
@@ -162,16 +165,23 @@ function Ident({addr,size=40}:{addr:string;size?:number}){
 // ═══════════════════════════════════════════════════════════
 //  MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════
-interface Props{open:boolean;onClose:()=>void}
+interface Props{open:boolean;onClose:()=>void;initialTab?:Tab}
 
-export default function PortfolioDashboard({open,onClose}:Props){
+export default function PortfolioDashboard({open,onClose,initialTab}:Props){
   const{address,isConnected}=useAccount()
   const chainId=useChainId()
   const{data,loading,refresh}=usePortfolio(address,chainId)
-  const[tab,setTab]=useState<Tab>('overview')
+  const[tab,setTab]=useState<Tab>(initialTab??'overview')
+  const[tabKey,setTabKey]=useState(0) // trigger re-animation on tab change
   const[range,setRange]=useState<Range>('1D')
   const reg=getRegistry(chainId)
   const ld=loading&&!data
+
+  // Sync initialTab when it changes externally
+  useEffect(()=>{if(initialTab&&open)setTab(initialTab)},[initialTab,open])
+
+  // Animate on tab change
+  const switchTab=(t:Tab)=>{setTab(t);setTabKey(k=>k+1)}
 
   useEffect(()=>{if(!open)return;const h=(e:KeyboardEvent)=>{if(e.key==='Escape')onClose()};document.addEventListener('keydown',h);return()=>document.removeEventListener('keydown',h)},[open,onClose])
 
@@ -219,14 +229,14 @@ export default function PortfolioDashboard({open,onClose}:Props){
           </div>
 
           {/* Tabs */}
-          <div style={{display:'flex',gap:0,borderBottom:`1px solid ${C.border}`}}>
-            {([['overview','Overview'],['tokens','Tokens'],['activity','Activity']] as [Tab,string][]).map(([k,l])=>(
-              <button key={k} onClick={()=>setTab(k)} style={{
+          <div style={{display:'flex',gap:0,borderBottom:`1px solid ${C.border}`,position:'relative'}}>
+            {([['overview','Overview'],['tokens','Tokens'],['activity','Activity'],['swap','Swap']] as [Tab,string][]).map(([k,l])=>(
+              <button key={k} onClick={()=>switchTab(k)} style={{
                 padding:'12px 20px',background:'transparent',border:'none',
                 borderBottom:`2px solid ${tab===k?C.text:'transparent'}`,
                 color:tab===k?C.text:C.dim,
                 fontFamily:C.D,fontSize:14,fontWeight:tab===k?600:400,
-                cursor:'pointer',transition:'all 0.15s',
+                cursor:'pointer',transition:'all 0.25s ease',
               }}>{l}</button>
             ))}
           </div>
@@ -234,6 +244,9 @@ export default function PortfolioDashboard({open,onClose}:Props){
 
         {/* ── CONTENT ───────────────────────────────────── */}
         <div style={{flex:1,overflowY:'auto',padding:'24px 28px 28px'}}>
+
+          {/* Tab content with fade-slide animation */}
+          <div key={tabKey} style={{animation:'rpTabIn 0.3s ease both'}}>
 
           {/* ═══ OVERVIEW TAB ═══════════════════════════════ */}
           {tab==='overview'&&(
@@ -296,12 +309,12 @@ export default function PortfolioDashboard({open,onClose}:Props){
                   {/* Actions grid 2x2 */}
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
                     {[
-                      {label:'Send',icon:'↗',color:C.pink},
-                      {label:'Receive',icon:'↙',color:C.green},
-                      {label:'Buy',icon:'🏛',color:C.blue},
-                      {label:'More',icon:'•••',color:C.dim},
+                      {label:'Send',icon:'↗',color:C.pink,action:()=>onClose()},
+                      {label:'Receive',icon:'↙',color:C.green,action:undefined},
+                      {label:'Swap',icon:'⇅',color:C.blue,action:()=>switchTab('swap')},
+                      {label:'More',icon:'•••',color:C.dim,action:undefined},
                     ].map(a=>(
-                      <button key={a.label} onClick={a.label==='Send'?onClose:undefined} style={{
+                      <button key={a.label} onClick={a.action} style={{
                         padding:'20px 16px',borderRadius:16,
                         background:C.surface,border:`1px solid ${C.border}`,
                         cursor:'pointer',display:'flex',flexDirection:'column',
@@ -339,7 +352,7 @@ export default function PortfolioDashboard({open,onClose}:Props){
                       <span style={{fontFamily:C.D,fontSize:16,fontWeight:600,color:C.text}}>Tokens</span>
                       <span style={{fontFamily:C.D,fontSize:12,color:C.dim,marginLeft:8}}>{data?.assets?.length??0} tokens</span>
                     </div>
-                    <button onClick={()=>setTab('tokens')} style={{background:'none',border:'none',color:C.dim,fontFamily:C.D,fontSize:12,cursor:'pointer'}}>Vedi tutti →</button>
+                    <button onClick={()=>switchTab('tokens')} style={{background:'none',border:'none',color:C.dim,fontFamily:C.D,fontSize:12,cursor:'pointer'}}>Vedi tutti →</button>
                   </div>
                   {(data?.assets??[]).slice(0,4).map((a:Asset)=>(
                     <div key={a.contractAddress+a.symbol} style={{display:'flex',alignItems:'center',gap:12,padding:'12px 0',borderBottom:`1px solid ${C.border}`}}>
@@ -363,7 +376,7 @@ export default function PortfolioDashboard({open,onClose}:Props){
                       <span style={{fontFamily:C.D,fontSize:16,fontWeight:600,color:C.text}}>Recent activity</span>
                       <span style={{fontFamily:C.D,fontSize:12,color:C.dim,marginLeft:8}}>{data?.activity?.length??0} tx</span>
                     </div>
-                    <button onClick={()=>setTab('activity')} style={{background:'none',border:'none',color:C.dim,fontFamily:C.D,fontSize:12,cursor:'pointer'}}>Vedi tutto →</button>
+                    <button onClick={()=>switchTab('activity')} style={{background:'none',border:'none',color:C.dim,fontFamily:C.D,fontSize:12,cursor:'pointer'}}>Vedi tutto →</button>
                   </div>
                   {(data?.activity??[]).slice(0,4).map((tx:Tx,i:number)=>{
                     const isSend=tx.from?.toLowerCase()===address?.toLowerCase()
@@ -482,6 +495,15 @@ export default function PortfolioDashboard({open,onClose}:Props){
               </div>
             )
           )}
+
+          {/* ═══ SWAP TAB ═══════════════════════════════════ */}
+          {tab==='swap'&&(
+            <div style={{maxWidth:440,margin:'0 auto'}}>
+              <SwapModule onSwapComplete={()=>{refresh();setTimeout(()=>switchTab('activity'),1500)}} />
+            </div>
+          )}
+
+          </div>{/* end animated wrapper */}
         </div>
       </div>
     </div>,

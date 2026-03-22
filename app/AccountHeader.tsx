@@ -60,6 +60,7 @@ export default function AccountHeader() {
 
   const [open, setOpen]                 = useState(false)
   const [portfolioOpen, setPortfolioOpen] = useState(false)
+  const [portfolioTab, setPortfolioTab] = useState<'overview'|'tokens'|'activity'|'swap'>('overview')
   const [copied, setCopied]             = useState(false)
   const [recentTxs, setRecentTxs]       = useState<RecentTx[]>([])
   const [menuPos, setMenuPos]           = useState({ top: 0, right: 0 })
@@ -102,6 +103,18 @@ export default function AccountHeader() {
       .catch(() => { if (!c) setRecentTxs([]) })
     return () => { c = true }
   }, [open, address])
+
+  // Global event listeners (from page.tsx buttons)
+  useEffect(() => {
+    const openSwap = () => { setPortfolioTab('swap'); setPortfolioOpen(true) }
+    const openPortfolio = () => { setPortfolioTab('overview'); setPortfolioOpen(true) }
+    window.addEventListener('rpagos:openSwap', openSwap)
+    window.addEventListener('rpagos:openPortfolio', openPortfolio)
+    return () => {
+      window.removeEventListener('rpagos:openSwap', openSwap)
+      window.removeEventListener('rpagos:openPortfolio', openPortfolio)
+    }
+  }, [])
 
   const handleCopy = useCallback(async () => {
     if (!address) return
@@ -179,7 +192,7 @@ export default function AccountHeader() {
               </div>
 
               {/* View Portfolio — HERO BUTTON */}
-              <button onClick={() => { setOpen(false); setPortfolioOpen(true) }} style={{
+              <button onClick={() => { setOpen(false); setPortfolioTab('overview'); setPortfolioOpen(true) }} style={{
                 width: '100%', padding: '11px 0', borderRadius: 12,
                 background: 'linear-gradient(135deg, rgba(0,255,163,0.08), rgba(0,255,163,0.02))',
                 border: '1px solid rgba(0,255,163,0.2)',
@@ -192,6 +205,21 @@ export default function AccountHeader() {
               onMouseLeave={e => e.currentTarget.style.background = 'linear-gradient(135deg, rgba(0,255,163,0.08), rgba(0,255,163,0.02))'}
               >
                 📊 Vedi Portfolio
+              </button>
+
+              {/* Swap shortcut */}
+              <button onClick={() => { setOpen(false); setPortfolioTab('swap'); setPortfolioOpen(true) }} style={{
+                width: '100%', padding: '10px 0', borderRadius: 12,
+                background: 'rgba(76,130,251,0.06)',
+                border: '1px solid rgba(76,130,251,0.15)',
+                color: '#4C82FB', fontFamily: 'var(--font-display)',
+                fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                transition: 'all 0.15s', marginBottom: 10,
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(76,130,251,0.12)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(76,130,251,0.06)'}
+              >
+                ⇅ Swap Token
               </button>
 
               {/* Action row */}
@@ -264,7 +292,7 @@ export default function AccountHeader() {
       )}
 
       {/* Portfolio Dashboard Overlay */}
-      <PortfolioDashboard open={portfolioOpen} onClose={() => setPortfolioOpen(false)} />
+      <PortfolioDashboard open={portfolioOpen} onClose={() => setPortfolioOpen(false)} initialTab={portfolioTab} />
     </>
   )
 }

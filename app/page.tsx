@@ -144,6 +144,48 @@ export default function Home() {
           <TransferForm />
         </div>
 
+        {/* Quick swap access — stagger 1.5 */}
+        <div className="rp-anim-1" style={{
+          display: 'flex', gap: 10, justifyContent: 'center',
+        }}>
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('rpagos:openSwap'))}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '10px 22px', borderRadius: 14,
+              background: 'rgba(76,130,251,0.06)',
+              border: '1px solid rgba(76,130,251,0.15)',
+              color: '#4C82FB',
+              fontFamily: 'var(--font-display)',
+              fontSize: 12, fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(76,130,251,0.12)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'rgba(76,130,251,0.06)'}
+          >
+            ⇅ Swap Token
+          </button>
+          <button
+            onClick={() => window.dispatchEvent(new CustomEvent('rpagos:openPortfolio'))}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '10px 22px', borderRadius: 14,
+              background: 'rgba(255,255,255,0.03)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              color: '#9B9B9B',
+              fontFamily: 'var(--font-display)',
+              fontSize: 12, fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
+          >
+            📊 Portfolio
+          </button>
+        </div>
+
         {/* Footer badges — stagger 2 */}
         <div className="rp-anim-2" style={{
           display:        'flex',
