@@ -20,6 +20,7 @@ import { getRegistry } from '../lib/contractRegistry'
 import dynamic from 'next/dynamic'
 
 const SwapModule = dynamic(() => import('./SwapModule'), { ssr: false })
+const AutoForward = dynamic(() => import('./AutoForward'), { ssr: false })
 
 // ═══════════════════════════════════════════════════════════
 //  PALETTE
@@ -57,9 +58,9 @@ interface PData {
   totalUsd:number; assets:Asset[]; activity:Tx[]
   balanceHistory:Pt[]; txCount7d?:number; updatedAt:string
 }
-type Tab = 'overview'|'tokens'|'activity'|'swap'
+type Tab = 'overview'|'tokens'|'activity'|'swap'|'forward'
 type Range = '1D'|'1W'
-const TABS: [Tab, string][] = [['overview','Overview'],['tokens','Tokens'],['activity','Activity'],['swap','Swap']]
+const TABS: [Tab, string][] = [['overview','Overview'],['tokens','Tokens'],['activity','Activity'],['swap','Swap'],['forward','Forward']]
 
 // ═══════════════════════════════════════════════════════════
 //  HOOK
@@ -637,6 +638,13 @@ export default function PortfolioDashboard({ open, onClose, initialTab }:Props){
           {tab==='swap' && (
             <div style={{ maxWidth:440, margin:'0 auto' }}>
               <SwapModule onSwapComplete={() => { refresh(); setTimeout(() => setTab('activity'), 1500) }} portfolioAssets={data?.assets} />
+            </div>
+          )}
+
+          {/* ═══ FORWARD ═══════════════════════════════════ */}
+          {tab==='forward' && (
+            <div style={{ maxWidth:600, margin:'0 auto' }}>
+              <AutoForward />
             </div>
           )}
 
