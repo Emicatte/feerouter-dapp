@@ -1,8 +1,10 @@
 """
-RPagos Backend — Forwarding Rules Model
+RSend Backend — Forwarding Rules Model (Split Routing)
 
-Tabella per le regole di auto-forwarding (sweeper).
-Ogni utente può avere più regole attive.
+Supporta:
+  - Single destination (100%)
+  - Split routing (es. 70% wallet A, 30% wallet B)
+  - Gas deduction proporzionale
 """
 
 from datetime import datetime, timezone
@@ -32,26 +34,26 @@ class ForwardingRule(Base):
     __tablename__ = "forwarding_rules"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-
-    # Chi e dove
     user_id = Column(String(64), nullable=False, index=True)
     source_wallet = Column(String(42), nullable=False, index=True)
     destination_wallet = Column(String(42), nullable=False)
 
-    # Condizioni
-    is_active = Column(Boolean, default=True, nullable=False)
-    min_threshold = Column(Float, default=0.001, nullable=False)  # Min ETH/token
-    gas_strategy = Column(SAEnum(GasStrategy), default=GasStrategy.normal)
-    max_gas_percent = Column(Float, default=10.0)  # Max 10% del valore in gas
+    # ── Split Routing ─────────────────────────────────────
+    split_enabled = Column(Boolean, default=False, nullable=False)
+    split_percent = Column(Integer, default=100, nullable=False)  # % a destination_wallet
+    split_destination = Column(String(42), nullable=True)         # secondo wallet
 
-    # Token filter (null = ETH nativo, altrimenti indirizzo ERC-20)
+    # ── Condizioni ────────────────────────────────────────
+    is_active = Column(Boolean, default=True, nullable=False)
+    min_threshold = Column(Float, default=0.001, nullable=False)
+    gas_strategy = Column(SAEnum(GasStrategy), default=GasStrategy.normal)
+    max_gas_percent = Column(Float, default=10.0)
+
+    # ── Token filter ──────────────────────────────────────
     token_address = Column(String(42), nullable=True)
     token_symbol = Column(String(16), default="ETH")
-
-    # Chain
     chain_id = Column(Integer, default=8453, nullable=False)
 
-    # Timestamps
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))
@@ -65,31 +67,29 @@ class SweepLog(Base):
     __tablename__ = "sweep_logs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-
     rule_id = Column(Integer, nullable=False, index=True)
     source_wallet = Column(String(42), nullable=False)
     destination_wallet = Column(String(42), nullable=False)
 
-    # Importi
+    # ── Split info ────────────────────────────────────────
+    is_split = Column(Boolean, default=False)
+    split_index = Column(Integer, default=0)  # 0=primary, 1=secondary
+    split_percent = Column(Integer, default=100)
+
     amount_wei = Column(String(78), nullable=False)
     amount_human = Column(Float, nullable=False)
     token_symbol = Column(String(16), default="ETH")
 
-    # Gas
     gas_used = Column(Integer, nullable=True)
     gas_price_gwei = Column(Float, nullable=True)
     gas_cost_eth = Column(Float, nullable=True)
-    gas_percent = Column(Float, nullable=True)  # % del valore trasferito
+    gas_percent = Column(Float, nullable=True)
 
-    # Status
     status = Column(SAEnum(SweepStatus), default=SweepStatus.pending)
     tx_hash = Column(String(66), nullable=True, unique=True)
     error_message = Column(Text, nullable=True)
+    trigger_tx_hash = Column(String(66), nullable=True)
 
-    # Trigger
-    trigger_tx_hash = Column(String(66), nullable=True)  # TX in entrata che ha triggerato lo sweep
-
-    # Timestamps
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     executed_at = Column(DateTime(timezone=True), nullable=True)
 
