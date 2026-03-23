@@ -3,7 +3,6 @@ import { Syne, DM_Mono } from 'next/font/google'
 import './globals.css'
 import { Providers } from './providers'
 
-// ── Font con display swap — nessun FOUT ───────────────────────────────────
 const syne = Syne({
   subsets:  ['latin'],
   variable: '--font-display',
@@ -19,15 +18,15 @@ const dmMono = DM_Mono({
 })
 
 export const metadata: Metadata = {
-  title:       'RPagos — Gateway B2B su Base',
-  description: 'Gateway di pagamento Web3-native non-custodial su Base L2 con compliance MiCA/DAC8.',
-  keywords:    ['Web3', 'Base', 'USDC', 'EURC', 'pagamenti', 'crypto', 'B2B'],
+  title:       'RSend — Smart Financial Routing on Base',
+  description: 'Automazione finanziaria Web3 non-custodial su Base L2 con split routing e compliance DAC8.',
+  keywords:    ['Web3', 'Base', 'USDC', 'EURC', 'pagamenti', 'crypto', 'B2B', 'split routing', 'DAC8'],
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="it" className={`${syne.variable} ${dmMono.variable}`}>
-      <body style={{ background: '#080810' }}>
+      <body style={{ background: '#0a0a0f' }}>
         <Providers>
           {children}
         </Providers>
