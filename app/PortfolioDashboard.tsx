@@ -1,5 +1,13 @@
 'use client'
 
+/**
+ * PortfolioDashboard.tsx V5 — Fluid Transitions
+ *
+ * framer-motion:
+ *   - layoutId="activeTab" per indicator che scivola
+ *   - AnimatePresence mode="wait" per content fade+slide
+ *   - Overlay fade-in con motion.div
+ */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useAccount, useChainId } from 'wagmi'
@@ -125,6 +133,83 @@ function TIcon({symbol,logo,size=32}:{symbol:string;logo?:string|null;size?:numb
 // Skeleton
 function Sk({w,h,r=8}:{w:string|number;h:number;r?:number}){
   return<div style={{width:w,height:h,borderRadius:r,background:'linear-gradient(90deg,rgba(255,255,255,0.03) 25%,rgba(255,255,255,0.06) 50%,rgba(255,255,255,0.03) 75%)',backgroundSize:'200% 100%',animation:'rpShimmer 1.8s ease infinite'}}/>
+}
+
+// Tab-specific skeleton layouts
+function OverviewSkeleton() {
+  return (
+    <div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 280px',gap:24,marginBottom:32}}>
+        <div>
+          <div style={{marginBottom:20}}><Sk w={180} h={40} r={10}/><div style={{marginTop:8}}><Sk w={120} h={18}/></div></div>
+          <Sk w="100%" h={200} r={16}/>
+        </div>
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+            {[0,1,2,3].map(i=><Sk key={i} w="100%" h={70} r={16}/>)}
+          </div>
+          <Sk w="100%" h={80} r={16}/>
+        </div>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:24}}>
+        <div>{[0,1,2,3].map(i=><div key={i} style={{display:'flex',gap:12,padding:'12px 0'}}><Sk w={32} h={32} r={16}/><div style={{flex:1}}><Sk w={100} h={14}/><div style={{marginTop:4}}><Sk w={60} h={10}/></div></div></div>)}</div>
+        <div>{[0,1,2,3].map(i=><div key={i} style={{display:'flex',gap:12,padding:'12px 0'}}><Sk w={32} h={32} r={16}/><div style={{flex:1}}><Sk w={140} h={14}/><div style={{marginTop:4}}><Sk w={90} h={10}/></div></div></div>)}</div>
+      </div>
+    </div>
+  )
+}
+
+function TokensSkeleton() {
+  return (
+    <div>
+      <div style={{display:'flex',padding:'8px 4px 12px',gap:8}}><Sk w={80} h={12}/><div style={{flex:1}}/><Sk w={50} h={12}/><Sk w={60} h={12}/><Sk w={50} h={12}/></div>
+      {[0,1,2,3,4,5].map(i=>(
+        <div key={i} style={{display:'flex',alignItems:'center',gap:14,padding:'16px 4px'}}>
+          <Sk w={36} h={36} r={18}/><div style={{flex:1}}><Sk w={100} h={14}/><div style={{marginTop:4}}><Sk w={60} h={10}/></div></div>
+          <Sk w={60} h={14}/><Sk w={80} h={14}/><Sk w={60} h={14}/>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ActivitySkeleton() {
+  return (
+    <div>
+      {[0,1,2,3,4,5,6].map(i=>(
+        <div key={i} style={{display:'flex',alignItems:'center',gap:14,padding:'14px 4px'}}>
+          <Sk w={36} h={36} r={18}/><div style={{flex:1}}><Sk w={160} h={14}/><div style={{marginTop:4}}><Sk w={100} h={10}/></div></div><Sk w={40} h={14}/>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function SwapSkeleton() {
+  return (
+    <div style={{maxWidth:440,margin:'0 auto'}}>
+      <Sk w="100%" h={24} r={8}/>
+      <div style={{marginTop:12}}><Sk w="100%" h={120} r={16}/></div>
+      <div style={{display:'flex',justifyContent:'center',margin:'8px 0'}}><Sk w={36} h={36} r={10}/></div>
+      <Sk w="100%" h={120} r={16}/>
+      <div style={{marginTop:12}}><Sk w="100%" h={50} r={12}/></div>
+    </div>
+  )
+}
+
+function ForwardSkeleton() {
+  return (
+    <div style={{maxWidth:600,margin:'0 auto'}}>
+      <div style={{display:'flex',justifyContent:'space-between',marginBottom:16}}><Sk w={160} h={20}/><Sk w={100} h={32} r={12}/></div>
+      {[0,1,2].map(i=>(
+        <div key={i} style={{display:'flex',gap:12,padding:'12px 14px',marginBottom:6}}>
+          <div style={{flex:1}}><Sk w={200} h={14}/><div style={{marginTop:4}}><Sk w={140} h={10}/></div></div>
+          <Sk w={40} h={24} r={8}/>
+        </div>
+      ))}
+      <div style={{marginTop:16}}><Sk w="100%" h={80} r={16}/></div>
+    </div>
+  )
 }
 
 // Chart Tooltip
@@ -257,11 +342,20 @@ export default function PortfolioDashboard({ open, onClose, initialTab }:Props){
   const chainId = useChainId()
   const { data, loading, refresh } = usePortfolio(address, chainId)
   const [tab, setTab] = useState<Tab>(initialTab ?? 'overview')
+  const [tabLoading, setTabLoading] = useState(false)
   const [range, setRange] = useState<Range>('1D')
   const reg = getRegistry(chainId)
   const ld = loading && !data
 
   useEffect(() => { if (initialTab && open) setTab(initialTab) }, [initialTab, open])
+
+  // Skeleton loading on tab switch for fluid UX
+  const switchTab = (t: Tab) => {
+    if (t === tab) return
+    setTabLoading(true)
+    setTab(t)
+    setTimeout(() => setTabLoading(false), 400)
+  }
   useEffect(() => {
     if (!open) return
     const h = (e:KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -332,7 +426,7 @@ export default function PortfolioDashboard({ open, onClose, initialTab }:Props){
               {/* ── TAB BAR with layoutId indicator ────── */}
               <div style={{ display:'flex', gap:0, borderBottom:`1px solid ${C.border}`, position:'relative' }}>
                 {TABS.map(([k, l]) => (
-                  <button key={k} onClick={() => setTab(k)} style={{
+                  <button key={k} onClick={() => switchTab(k)} style={{
                     padding:'12px 20px', background:'transparent', border:'none',
                     color: tab===k ? C.text : C.dim,
                     fontFamily:C.D, fontSize:14, fontWeight: tab===k ? 600 : 400,
@@ -376,8 +470,15 @@ export default function PortfolioDashboard({ open, onClose, initialTab }:Props){
                   transition={smooth}
                 >
 
+          {/* ═══ SKELETON LOADING ══════════════════════════ */}
+          {tabLoading && tab==='overview' && <OverviewSkeleton />}
+          {tabLoading && tab==='tokens' && <TokensSkeleton />}
+          {tabLoading && tab==='activity' && <ActivitySkeleton />}
+          {tabLoading && tab==='swap' && <SwapSkeleton />}
+          {tabLoading && tab==='forward' && <ForwardSkeleton />}
+
           {/* ═══ OVERVIEW ══════════════════════════════════ */}
-          {tab==='overview'&&(
+          {!tabLoading && tab==='overview'&&(
             <div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:24, marginBottom:32 }}>
                 <div>
@@ -433,7 +534,7 @@ export default function PortfolioDashboard({ open, onClose, initialTab }:Props){
                     {[
                       { label:'Send', icon:'↗', color:C.pink, action:()=>onClose() },
                       { label:'Receive', icon:'↙', color:C.green, action:undefined },
-                      { label:'Swap', icon:'⇅', color:C.blue, action:()=>setTab('swap') },
+                      { label:'Swap', icon:'⇅', color:C.blue, action:()=>switchTab('swap') },
                       { label:'More', icon:'•••', color:C.dim, action:undefined },
                     ].map(a => (
                       <button key={a.label} onClick={a.action} style={{
@@ -511,7 +612,7 @@ export default function PortfolioDashboard({ open, onClose, initialTab }:Props){
                       <span style={{ fontFamily:C.D, fontSize:16, fontWeight:600, color:C.text }}>Tokens</span>
                       <span style={{ fontFamily:C.D, fontSize:12, color:C.dim, marginLeft:8 }}>{data?.assets?.length??0} tokens</span>
                     </div>
-                    <button onClick={() => setTab('tokens')} style={{ background:'none', border:'none', color:C.dim, fontFamily:C.D, fontSize:12, cursor:'pointer' }}>View all →</button>
+                    <button onClick={() => switchTab('tokens')} style={{ background:'none', border:'none', color:C.dim, fontFamily:C.D, fontSize:12, cursor:'pointer' }}>View all →</button>
                   </div>
                   {(data?.assets??[]).slice(0,4).map((a:Asset) => (
                     <div key={a.contractAddress+a.symbol} style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 0', borderBottom:`1px solid ${C.border}` }}>
@@ -534,7 +635,7 @@ export default function PortfolioDashboard({ open, onClose, initialTab }:Props){
                       <span style={{ fontFamily:C.D, fontSize:16, fontWeight:600, color:C.text }}>Recent activity</span>
                       <span style={{ fontFamily:C.D, fontSize:12, color:C.dim, marginLeft:8 }}>{data?.activity?.length??0} tx</span>
                     </div>
-                    <button onClick={() => setTab('activity')} style={{ background:'none', border:'none', color:C.dim, fontFamily:C.D, fontSize:12, cursor:'pointer' }}>View all →</button>
+                    <button onClick={() => switchTab('activity')} style={{ background:'none', border:'none', color:C.dim, fontFamily:C.D, fontSize:12, cursor:'pointer' }}>View all →</button>
                   </div>
                   {(data?.activity??[]).slice(0,4).map((tx:Tx, i:number) => {
                     const isSend = tx.from?.toLowerCase() === address?.toLowerCase()
@@ -558,7 +659,7 @@ export default function PortfolioDashboard({ open, onClose, initialTab }:Props){
           )}
 
           {/* ═══ TOKENS ════════════════════════════════════ */}
-          {tab==='tokens' && (
+          {!tabLoading && tab==='tokens' && (
             ld ? (
               <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                 {[0,1,2,3,4,5].map(i => (
@@ -586,7 +687,7 @@ export default function PortfolioDashboard({ open, onClose, initialTab }:Props){
           )}
 
           {/* ═══ ACTIVITY ══════════════════════════════════ */}
-          {tab==='activity' && (
+          {!tabLoading && tab==='activity' && (
             ld ? (
               <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                 {[0,1,2,3,4,5,6].map(i => (
@@ -627,14 +728,14 @@ export default function PortfolioDashboard({ open, onClose, initialTab }:Props){
           )}
 
           {/* ═══ SWAP ══════════════════════════════════════ */}
-          {tab==='swap' && (
+          {!tabLoading && tab==='swap' && (
             <div style={{ maxWidth:440, margin:'0 auto' }}>
-              <SwapModule onSwapComplete={() => { refresh(); setTimeout(() => setTab('activity'), 1500) }} portfolioAssets={data?.assets} />
+              <SwapModule onSwapComplete={() => { refresh(); setTimeout(() => switchTab('activity'), 1500) }} portfolioAssets={data?.assets} />
             </div>
           )}
 
           {/* ═══ FORWARD ═══════════════════════════════════ */}
-          {tab==='forward' && (
+          {!tabLoading && tab==='forward' && (
             <div style={{ maxWidth:600, margin:'0 auto' }}>
               <AutoForward />
             </div>

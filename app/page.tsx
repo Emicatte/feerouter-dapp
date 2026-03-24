@@ -458,8 +458,8 @@ function NavPill({ view, setView }: { view: View; setView: (v:View) => void }) {
     <div style={{ display:'flex', gap:3, background:C.surface, borderRadius:14, padding:3, border:`1px solid ${C.border}` }}>
       {([
         { key:'send' as View, label:'↗ Send' },
-        { key:'swap' as View, label:'Swap' },
-        { key:'command' as View, label:'Command Center' },
+        { key:'swap' as View, label:'🔄 Swap' },
+        { key:'command' as View, label:'🎛 Command Center' },
       ]).map(v => (
         <button key={v.key} onClick={(e) => handleClick(v.key, e)} style={{
           position:'relative', overflow:'hidden',
@@ -529,12 +529,7 @@ export default function Home() {
 
       <main className="rp-content" style={{ minHeight:'100vh', padding:'24px 16px', display:'flex', flexDirection:'column', alignItems:'center', opacity:ready?1:0, transition:'opacity 0.8s ease' }}>
 
-        {/* Brand */}
-        <div className="rp-anim-0" style={{ display:'flex', alignItems:'center', gap:8, marginTop:20, marginBottom:28 }}>
-          <div style={{ width:32, height:32, borderRadius:8, background:'linear-gradient(135deg,#3B82F6,#8B5CF6)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16 }}>⚡</div>
-          <span style={{ fontFamily:C.D, fontSize:20, fontWeight:800, color:C.text, letterSpacing:'-0.03em' }}>RSend</span>
-          <span style={{ fontFamily:C.M, fontSize:8, color:C.dim, background:'rgba(255,255,255,0.04)', border:`1px solid ${C.border}`, borderRadius:4, padding:'2px 6px' }}>v4</span>
-        </div>
+      
 
         {/* Hero */}
         <div className="rp-anim-0" style={{ marginBottom:28 }}>
