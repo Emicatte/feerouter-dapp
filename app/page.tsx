@@ -459,7 +459,7 @@ function NavPill({ view, setView }: { view: View; setView: (v:View) => void }) {
       {([
         { key:'send' as View, label:'↗ Send' },
         { key:'swap' as View, label:'Swap' },
-        { key:'command' as View, label:'ommand Center' },
+        { key:'command' as View, label:'command Center' },
       ]).map(v => (
         <button key={v.key} onClick={(e) => handleClick(v.key, e)} style={{
           position:'relative', overflow:'hidden',
