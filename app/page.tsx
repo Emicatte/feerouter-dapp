@@ -551,7 +551,7 @@ function HeroTitle({ view, setView }: { view: View; setView: (v: View) => void }
         )}
         {view === 'command' && (
           <motion.div key="h-cmd" variants={heroV} initial="enter" animate="center" exit="exit" transition={cinematicT} style={{ gridArea: '1/1', width: '100%' }}>
-            <div style={{ ...base, fontSize: 'clamp(28px, 5vw, 44px)' }}>
+            <div style={{ ...base, fontSize: 'clamp(24px, 5vw, 70px)' }}>
               <span style={GRAD}>Command</span> Center
             </div>
           </motion.div>
@@ -678,9 +678,6 @@ export default function Home() {
         {/* Hero */}
         <div style={{ marginBottom: 32, width: '100%', maxWidth: 900 }}>
           <HeroTitle view={view} setView={setView} />
-          <p style={{ fontFamily: C.M, fontSize: 11, color: C.dim, marginTop: 14, textAlign: 'center' }}>
-            Multi-chain automation · <span style={{ color: C.blue }}>Base</span> · <span style={{ color: '#627EEA' }}>Ethereum</span> · <span style={{ color: '#28A0F0' }}>Arbitrum</span>
-          </p>
         </div>
 
         {/* === VIEW SWITCHER / GLASS BAR: Always visible after intro === */}
