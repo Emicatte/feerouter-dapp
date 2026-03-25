@@ -711,8 +711,8 @@ export default function Home() {
           >
             {([
               { key: 'send' as View, label: '↗ Send' },
-              { key: 'swap' as View, label: '🔄 Swap' },
-              { key: 'command' as View, label: '🎛 Command Center' },
+              { key: 'swap' as View, label: '↗ Swap' },
+              { key: 'command' as View, label: '↗ Command Center' },
             ]).map((v) => (
               <motion.button
                 key={v.key}
