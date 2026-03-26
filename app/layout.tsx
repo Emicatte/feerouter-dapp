@@ -18,7 +18,7 @@ const dmMono = DM_Mono({
 })
 
 export const metadata: Metadata = {
-  title:       'RSend — Smart Financial Routing on Base',
+  title:       'RSends',
   description: 'Automazione finanziaria Web3 non-custodial su Base L2 con split routing e compliance DAC8.',
   keywords:    ['Web3', 'Base', 'USDC', 'EURC', 'pagamenti', 'crypto', 'B2B', 'split routing', 'DAC8'],
 }

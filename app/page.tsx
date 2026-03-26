@@ -1,16 +1,7 @@
 'use client'
 
-/**
- * page.tsx — RSend v5
- *
- * - Liquid Glass navbar (fixed, blur, saturate)
- * - Overlay system: About / How it works / Security
- * - Security overlay with animated on-chain diagram
- * - Particle intro (first visit)
- * - Cinematic hero cross-fade (Send ↔ Swap)
- * - 3 views: Send | Swap | Command Center
- * - Gas Guard, Smart Route, Activity Feed
- */
+
+
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAccount, useChainId } from 'wagmi'
@@ -227,7 +218,7 @@ function Navbar({
           </defs>
         </svg>
         <span style={{ fontFamily: C.D, fontSize: 16, fontWeight: 800, color: C.text, letterSpacing: '-0.03em' }}>
-          RSend
+          RSends
         </span>
       </button>
 
@@ -364,7 +355,7 @@ function AboutOverlay() {
         Chi <span style={GRAD}>siamo</span>
       </h2>
       <p style={{ fontFamily: C.M, fontSize: 13, color: C.sub, lineHeight: 1.7, marginBottom: 16 }}>
-        RSend è un protocollo di automazione finanziaria non-custodial costruito su Base L2.
+        RSends è un protocollo di automazione finanziaria non-custodial costruito su Base L2.
         Consente trasferimenti programmabili, split routing automatico e compliance fiscale DAC8
         integrata nativamente nello smart contract.
       </p>
@@ -425,7 +416,7 @@ function SecurityOverlay() {
         <span style={GRAD}>Sicurezza</span> On-Chain
       </h2>
       <p style={{ fontFamily: C.M, fontSize: 12, color: C.dim, marginBottom: 24 }}>
-        Come RSendForwarder.sol protegge i tuoi fondi
+        Come RSendsForwarder.sol protegge i tuoi fondi
       </p>
 
       {/* Animated on-chain diagram */}
@@ -442,7 +433,7 @@ function SecurityOverlay() {
 
           {/* RSend Engine */}
           <rect x="230" y="60" width="140" height="80" rx="16" fill="#16161f" stroke="rgba(59,130,246,0.25)" strokeWidth="1.5" />
-          <text x="300" y="92" textAnchor="middle" fill="#3B82F6" fontFamily="var(--font-display)" fontSize="10" fontWeight="700">⚡ RSend Engine</text>
+          <text x="300" y="92" textAnchor="middle" fill="#3B82F6" fontFamily="var(--font-display)" fontSize="10" fontWeight="700">⚡ RSends Engine</text>
           <text x="300" y="108" textAnchor="middle" fill="#8A8FA8" fontFamily="var(--font-mono)" fontSize="8">FeeRouterV4.sol</text>
           <text x="300" y="124" textAnchor="middle" fill="#4A4E64" fontFamily="var(--font-mono)" fontSize="7">Non-custodial</text>
 
@@ -812,7 +803,7 @@ export default function Home() {
               >
                 <div style={{ fontSize: 28, marginBottom: 10 }}>🔌</div>
                 <div style={{ fontFamily: C.D, fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 4 }}>Connect wallet</div>
-                <div style={{ fontFamily: C.M, fontSize: 11, color: C.dim }}>To access RSend Command Center</div>
+                <div style={{ fontFamily: C.M, fontSize: 11, color: C.dim }}>To access RSends Command Center</div>
               </motion.div>
             )}
           </AnimatePresence>
