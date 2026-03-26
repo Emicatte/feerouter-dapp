@@ -21,11 +21,17 @@ export const metadata: Metadata = {
   title:       'RSends',
   description: 'Automazione finanziaria Web3 non-custodial su Base L2 con split routing e compliance DAC8.',
   keywords:    ['Web3', 'Base', 'USDC', 'EURC', 'pagamenti', 'crypto', 'B2B', 'split routing', 'DAC8'],
+  icons: {
+    icon: '/favicon.svg',
+  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="it" className={`${syne.variable} ${dmMono.variable}`}>
+      <head>
+        <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+      </head>
       <body style={{ background: '#0a0a0f' }}>
         <Providers>
           {children}
