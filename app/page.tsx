@@ -13,6 +13,8 @@ import TransferForm from './TransferForm'
 import SwapModule from './SwapModule'
 import AccountHeader from './AccountHeader'
 
+
+
 const SkeletonLoader = () => (
   <div style={{
     minHeight: 400, width: '100%',
@@ -512,45 +514,99 @@ function SecurityOverlay() {
 // ═══════════════════════════════════════════════════════════
 //  HERO TITLE — AnimatePresence mode="wait" for no overlap
 // ═══════════════════════════════════════════════════════════
+
 function HeroTitle({ view, setView }: { view: View; setView: (v: View) => void }) {
   const base: React.CSSProperties = {
-    fontFamily: C.D, fontSize: 'clamp(40px, 7vw, 72px)',
+    fontFamily: C.D, fontSize: 'clamp(40px, 7vw, 65px)',
     fontWeight: 800, lineHeight: 1.05, letterSpacing: '-0.04em',
     textAlign: 'center', color: C.text,
   }
 
+  const tagline: React.CSSProperties = {
+    fontFamily: C.D,
+    fontSize: 'clamp(36px, 6vw, 58px)',
+    fontWeight: 700,
+    letterSpacing: '-0.02em',
+    textAlign: 'center',
+    marginBottom: 8,
+    background: 'linear-gradient(135deg, #FFB547 0%, #8B5CF6 50%, #3B82F6 100%)',
+    WebkitBackgroundClip: 'text',
+    WebkitTextFillColor: 'transparent',
+    backgroundClip: 'text',
+    lineHeight: 1.2,
+    wordSpacing: '0.15em',
+  }
+
+  const subtitle: React.CSSProperties = {
+    fontFamily: C.M,
+    fontSize: 'clamp(11px, 1.5vw, 13px)',
+    fontWeight: 500,
+    letterSpacing: '0.05em',
+    textAlign: 'center',
+    color: C.sub,
+    marginBottom: 15,
+    textTransform: 'uppercase',
+  }
+
   return (
-    <div style={{ display: 'grid', placeItems: 'center', height: 160, position: 'relative' }}>
-      <AnimatePresence mode="wait">
-        {view === 'send' && (
-          <motion.div key="h-send" variants={heroV} initial="enter" animate="center" exit="exit" transition={cinematicT} style={{ gridArea: '1/1', width: '100%' }}>
-            <div style={base}>
-              <span style={{ cursor: 'pointer' }} onClick={() => setView('swap')}>Send</span>{' '}
-              <span style={{ ...GRAD, cursor: 'pointer' }} onClick={() => setView('swap')}>anywhere,</span>
-            </div>
-            <div style={base}>anytime.</div>
-          </motion.div>
-        )}
-        {view === 'swap' && (
-          <motion.div key="h-swap" variants={heroV} initial="enter" animate="center" exit="exit" transition={cinematicT} style={{ gridArea: '1/1', width: '100%' }}>
-            <div style={base}>
-              <span style={{ cursor: 'pointer' }} onClick={() => setView('send')}>Swap</span>{' '}
-              <span style={{ ...GRAD, cursor: 'pointer' }} onClick={() => setView('send')}>anytime,</span>
-            </div>
-            <div style={base}>anywhere.</div>
-          </motion.div>
-        )}
-        {view === 'command' && (
-          <motion.div key="h-cmd" variants={heroV} initial="enter" animate="center" exit="exit" transition={cinematicT} style={{ gridArea: '1/1', width: '100%' }}>
-            <div style={{ ...base, fontSize: 'clamp(24px, 5vw, 70px)' }}>
-              <span style={GRAD}>Command</span> Center
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+    <div style={{ display: 'grid', placeItems: 'center', position: 'relative', width: '100%' }}>
+      {/* Tagline with gradient */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: EASE }}
+        style={tagline}
+      >
+        Crypto payments. Fully compliant.
+      </motion.div>
+
+      {/* Subtitle */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: EASE, delay: 0.1 }}
+        style={subtitle}
+      >
+        Built for European businesses.
+      </motion.div>
+
+      {/* Main Hero */}
+      <div style={{ display: 'grid', placeItems: 'center', height: 160, position: 'relative', width: '100%' }}>
+        <AnimatePresence mode="wait">
+          {view === 'send' && (
+            <motion.div key="h-send" variants={heroV} initial="enter" animate="center" exit="exit" transition={cinematicT} style={{ gridArea: '1/1', width: '100%' }}>
+              <div style={base}>
+                <span style={{ cursor: 'pointer' }} onClick={() => setView('swap')}>Send</span>{' '}
+                <span style={{ ...GRAD, cursor: 'pointer' }} onClick={() => setView('swap')}>anywhere,</span>
+              </div>
+              <div style={base}>anytime.</div>
+            </motion.div>
+          )}
+          {view === 'swap' && (
+            <motion.div key="h-swap" variants={heroV} initial="enter" animate="center" exit="exit" transition={cinematicT} style={{ gridArea: '1/1', width: '100%' }}>
+              <div style={base}>
+                <span style={{ cursor: 'pointer' }} onClick={() => setView('send')}>Swap</span>{' '}
+                <span style={{ ...GRAD, cursor: 'pointer' }} onClick={() => setView('send')}>anytime,</span>
+              </div>
+              <div style={base}>anywhere.</div>
+            </motion.div>
+          )}
+          {view === 'command' && (
+            <motion.div key="h-cmd" variants={heroV} initial="enter" animate="center" exit="exit" transition={cinematicT} style={{ gridArea: '1/1', width: '100%' }}>
+              <div style={{ ...base, fontSize: 'clamp(24px, 5vw, 65px)' }}>
+                <span style={GRAD}>Command</span> Center
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   )
 }
+
+
+
+
 
 // ═══════════════════════════════════════════════════════════
 //  COMMAND CENTER COMPONENTS
