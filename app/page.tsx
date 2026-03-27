@@ -517,7 +517,7 @@ function SecurityOverlay() {
 
 function HeroTitle({ view, setView }: { view: View; setView: (v: View) => void }) {
   const base: React.CSSProperties = {
-    fontFamily: C.D, fontSize: 'clamp(40px, 7vw, 65px)',
+    fontFamily: C.D, fontSize: 'clamp(40px, 7vw, 62px)',
     fontWeight: 800, lineHeight: 1.05, letterSpacing: '-0.04em',
     textAlign: 'center', color: C.text,
   }
@@ -544,7 +544,7 @@ function HeroTitle({ view, setView }: { view: View; setView: (v: View) => void }
     letterSpacing: '0.05em',
     textAlign: 'center',
     color: C.sub,
-    marginBottom: 15,
+    marginBottom: 1,
     textTransform: 'uppercase',
   }
 
@@ -593,7 +593,7 @@ function HeroTitle({ view, setView }: { view: View; setView: (v: View) => void }
           )}
           {view === 'command' && (
             <motion.div key="h-cmd" variants={heroV} initial="enter" animate="center" exit="exit" transition={cinematicT} style={{ gridArea: '1/1', width: '100%' }}>
-              <div style={{ ...base, fontSize: 'clamp(24px, 5vw, 65px)' }}>
+              <div style={{ ...base, fontSize: 'clamp(24px, 5vw, 62px)' }}>
                 <span style={GRAD}>Command</span> Center
               </div>
             </motion.div>
