@@ -71,11 +71,17 @@ if settings.debug:
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=[
+        "http://localhost:3000",
+        "https://fee-router-dapp.vercel.app",
+        "https://rsends.io",
+        "https://www.rsends.io",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # ── Rate Limiting Middleware ─────────────────────────────
 from app.middleware.rate_limit import RateLimitMiddleware
