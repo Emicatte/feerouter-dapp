@@ -569,41 +569,12 @@ function HeroTitle({ view, setView }: { view: View; setView: (v: View) => void }
       >
         Built for European businesses.
       </motion.div>
-
-      {/* Main Hero */}
-      <div style={{ display: 'grid', placeItems: 'center', height: 160, position: 'relative', width: '100%' }}>
-        <AnimatePresence mode="wait">
-          {view === 'send' && (
-            <motion.div key="h-send" variants={heroV} initial="enter" animate="center" exit="exit" transition={cinematicT} style={{ gridArea: '1/1', width: '100%' }}>
-              <div style={base}>
-                <span style={{ cursor: 'pointer' }} onClick={() => setView('swap')}>Send</span>{' '}
-                <span style={{ ...GRAD, cursor: 'pointer' }} onClick={() => setView('swap')}>anywhere,</span>
-              </div>
-              <div style={base}>anytime.</div>
-            </motion.div>
-          )}
-          {view === 'swap' && (
-            <motion.div key="h-swap" variants={heroV} initial="enter" animate="center" exit="exit" transition={cinematicT} style={{ gridArea: '1/1', width: '100%' }}>
-              <div style={base}>
-                <span style={{ cursor: 'pointer' }} onClick={() => setView('send')}>Swap</span>{' '}
-                <span style={{ ...GRAD, cursor: 'pointer' }} onClick={() => setView('send')}>anytime,</span>
-              </div>
-              <div style={base}>anywhere.</div>
-            </motion.div>
-          )}
-          {view === 'command' && (
-            <motion.div key="h-cmd" variants={heroV} initial="enter" animate="center" exit="exit" transition={cinematicT} style={{ gridArea: '1/1', width: '100%' }}>
-              <div style={{ ...base, fontSize: 'clamp(24px, 5vw, 62px)' }}>
-                <span style={GRAD}>Command</span> Center
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
     </div>
   )
 }
 
+
+      
 
 
 
