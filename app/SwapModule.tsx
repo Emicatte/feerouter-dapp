@@ -20,18 +20,20 @@ const BACKEND = process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:
 //  PALETTE
 // ═══════════════════════════════════════════════════════════
 const C = {
-  bg:      '#131313',
-  surface: '#1b1b1b',
-  card:    '#1e1e1e',
-  input:   '#141414',
-  border:  'rgba(255,255,255,0.07)',
-  text:    '#FFFFFF',
-  sub:     '#9B9B9B',
-  dim:     '#5E5E5E',
-  pink:    '#FC74FE',
-  green:   '#40B66B',
-  red:     '#FD766B',
-  blue:    '#4C82FB',
+  bg:      '#080810',
+  surface: '#0d0d1a',
+  card:    '#0c0c1e',
+  input:   '#080810',
+  border:  'rgba(255,255,255,0.06)',
+  text:    '#e2e2f0',
+  sub:     '#8A8FA8',
+  dim:     '#4a4a6a',
+  pink:    '#ff007a',
+  green:   '#00ffa3',
+  red:     '#ff2d55',
+  blue:    '#3B82F6',
+  purple:  '#a78bfa',
+  amber:   '#ffb800',
   D:       'var(--font-display)',
   M:       'var(--font-mono)',
 }
@@ -341,318 +343,306 @@ export default function SwapModule({ onSwapComplete, portfolioAssets }: SwapModu
   if (!isConnected || !reg) return null
 
   return (
-    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 20, padding: 20 }}>
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, overflow: 'hidden', boxShadow: '0 16px 60px rgba(0,0,0,0.6)' }}>
+      <div style={{ padding: '10px 10px 10px' }}>
 
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-        <span style={{ fontFamily: C.D, fontSize: 16, fontWeight: 600, color: C.text }}>Swap</span>
-        <button onClick={() => setShowSettings(s => !s)} style={{
-          width: 28, height: 28, borderRadius: 8,
-          background: showSettings ? 'rgba(255,255,255,0.08)' : 'transparent',
-          border: `1px solid ${C.border}`, color: C.dim, cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14,
-        }}>⚙</button>
-      </div>
+        {/* ── SELL ─────────────────────────────────────────────── */}
+        <div className="rp-anim-1">
+          <div style={{
+            borderRadius: 14, background: 'rgba(255,255,255,0.025)', padding: '14px',
+            border: `1.5px solid ${C.border}`,
+          }}>
+            {/* Top row: label + balance */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <span style={{ fontFamily: C.D, fontSize: 13, fontWeight: 600, color: C.dim }}>Sell</span>
+              {tokenIn && (
+                <span style={{ fontFamily: C.M, fontSize: 12, color: C.dim }}>
+                  {inBalFmt.toFixed(4)} {tokenIn.symbol}
+                </span>
+              )}
+            </div>
+            {/* Bottom row: token pill LEFT — amount RIGHT */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button onClick={() => setSelectingFor('in')} style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '9px 13px 9px 9px', borderRadius: 18,
+                background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)',
+                cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0,
+              }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.07)'}
+              >
+                {tokenIn && <TIcon symbol={tokenIn.symbol} size={22} />}
+                <span style={{ fontFamily: C.D, fontSize: 15, fontWeight: 700, color: C.text }}>{tokenIn?.symbol ?? '—'}</span>
+                <span style={{ color: C.dim, fontSize: 9 }}>▾</span>
+              </button>
+              <div style={{ flex: 1, textAlign: 'right' as const }}>
+                <input
+                  type="number" placeholder="0.00" min="0" step="any"
+                  value={amount} onChange={e => { setAmount(e.target.value); setPhase('idle') }}
+                  disabled={busy}
+                  style={{
+                    fontFamily: C.D, fontSize: 30, fontWeight: 400, letterSpacing: '-0.02em',
+                    width: '100%', background: 'transparent', border: 'none', outline: 'none',
+                    color: busy ? C.dim : C.text, textAlign: 'right' as const,
+                  }}
+                />
+              </div>
+            </div>
+            {/* Percentage buttons */}
+            <div style={{ display: 'flex', gap: 4, marginTop: 10 }}>
+              {[25, 50, 75, 100].map(p => (
+                <button key={p} onClick={() => setPercentage(p)} style={{
+                  padding: '4px 10px', borderRadius: 8,
+                  background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`,
+                  color: C.dim, fontFamily: C.M, fontSize: 10, fontWeight: 600,
+                  cursor: 'pointer', transition: 'all 0.15s',
+                }}
+                  onMouseEnter={e => { e.currentTarget.style.color = C.text; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)' }}
+                  onMouseLeave={e => { e.currentTarget.style.color = C.dim; e.currentTarget.style.borderColor = C.border }}
+                >{p === 100 ? 'Max' : `${p}%`}</button>
+              ))}
+            </div>
+          </div>
+        </div>
 
-      {/* Compliance advantage */}
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 6,
-        padding: '6px 10px', borderRadius: 8,
-        background: 'rgba(64,182,107,0.05)', border: '1px solid rgba(64,182,107,0.1)',
-        marginBottom: 14,
-      }}>
-        <span style={{ fontSize: 10 }}>🛡</span>
-        <span style={{ fontFamily: C.M, fontSize: 9, color: '#40B66B', letterSpacing: '0.02em' }}>
-          Zero-Hop Swap · Registrato automaticamente per il report fiscale DAC8
-        </span>
-      </div>
+        {/* ── Swap arrow ───────────────────────────────────────── */}
+        <div className="rp-anim-2" style={{ display: 'flex', justifyContent: 'center', margin: '-4px 0', position: 'relative', zIndex: 2 }}>
+          <button onClick={flip} disabled={busy} style={{
+            width: 34, height: 34, borderRadius: 10,
+            background: C.card, border: `1.5px solid ${C.border}`,
+            color: C.dim, fontSize: 16, cursor: busy ? 'default' : 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'all 0.2s ease', boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+          }}
+            onMouseEnter={e => { if (!busy) { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = C.text } }}
+            onMouseLeave={e => { e.currentTarget.style.background = C.card; e.currentTarget.style.color = C.dim }}
+          >⇅</button>
+        </div>
 
-      {/* Slippage settings */}
-      {showSettings && (
-        <div style={{ marginBottom: 14, padding: '12px 14px', background: C.bg, borderRadius: 14, border: `1px solid ${C.border}` }}>
-          <div style={{ fontFamily: C.D, fontSize: 11, color: C.dim, marginBottom: 8 }}>Slippage tolerance</div>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {[0.1, 0.5, 1.0].map(s => (
-              <button key={s} onClick={() => setSlippage(s)} style={{
-                padding: '6px 14px', borderRadius: 10,
-                background: slippage === s ? `${C.pink}15` : C.surface,
-                border: `1px solid ${slippage === s ? `${C.pink}30` : C.border}`,
-                color: slippage === s ? C.pink : C.sub,
-                fontFamily: C.M, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-              }}>{s}%</button>
+        {/* ── BUY / RECEIVE ────────────────────────────────────── */}
+        <div className="rp-anim-2">
+          <div style={{
+            borderRadius: 14, background: 'rgba(255,255,255,0.025)', padding: '14px',
+            border: `1.5px solid ${C.border}`,
+          }}>
+            {/* Top row: label + pool fee */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <span style={{ fontFamily: C.D, fontSize: 13, fontWeight: 600, color: C.dim }}>Buy</span>
+              {quote?.poolFee && (
+                <span style={{ fontFamily: C.M, fontSize: 10, color: C.dim }}>
+                  Pool: {quote.poolFee === 100 ? '0.01%' : quote.poolFee === 500 ? '0.05%' : quote.poolFee === 3000 ? '0.3%' : '1%'}
+                </span>
+              )}
+            </div>
+            {/* Bottom row: token pill LEFT — amount RIGHT */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <button onClick={() => setSelectingFor('out')} style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '9px 13px 9px 9px', borderRadius: 18,
+                background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)',
+                cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0,
+              }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.07)'}
+              >
+                {tokenOut && <TIcon symbol={tokenOut.symbol} size={22} />}
+                <span style={{ fontFamily: C.D, fontSize: 15, fontWeight: 700, color: C.text }}>{tokenOut?.symbol ?? '—'}</span>
+                <span style={{ color: C.dim, fontSize: 9 }}>▾</span>
+              </button>
+              <div style={{ flex: 1, textAlign: 'right' as const }}>
+                <span style={{
+                  fontFamily: C.D, fontSize: 30, fontWeight: 400, letterSpacing: '-0.02em',
+                  color: quote?.status === 'loading' ? C.dim : C.text, display: 'block',
+                }}>
+                  {quote?.status === 'loading' ? '…'
+                    : quote?.status === 'success' ? quote.netAmountFmt
+                    : '0'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Quote details (collapsible) ────────────────────── */}
+        {quote?.status === 'success' && tokenOut && (
+          <div className="rp-anim-3" style={{ marginTop: 6, padding: '10px 14px', background: 'rgba(255,255,255,0.02)', borderRadius: 12, border: `1px solid ${C.border}` }}>
+            {[
+              { l: 'Fee (0.5%)', v: `${quote.feeFmt} ${tokenOut.symbol}` },
+              { l: 'Min. received', v: `${formatUnits(quote.minAmountOut, tokenOut.decimals).slice(0, 10)} ${tokenOut.symbol}` },
+              { l: 'Slippage', v: `${slippage}%` },
+              ...(priceImpact !== null && priceImpact > 1 ? [{ l: 'Price impact', v: `~${priceImpact.toFixed(2)}%` }] : []),
+              ...(quote.gasEstimate ? [{ l: 'Gas estimate', v: `~${quote.gasEstimate.toString()} units` }] : []),
+            ].map((r, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: i < 4 ? 4 : 0 }}>
+                <span style={{ fontFamily: C.M, fontSize: 10, color: r.l === 'Price impact' && priceImpact && priceImpact > 5 ? C.red : C.dim }}>{r.l}</span>
+                <span style={{ fontFamily: C.M, fontSize: 10, color: r.l === 'Price impact' && priceImpact && priceImpact > 5 ? C.red : C.sub }}>{r.v}</span>
+              </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* PAY field */}
-      <div style={{ background: C.bg, borderRadius: 16, padding: '16px 16px 12px', marginBottom: 4, border: `1px solid ${C.border}` }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ fontFamily: C.D, fontSize: 12, color: C.dim }}>You pay</span>
-          <span style={{ fontFamily: C.M, fontSize: 11, color: C.dim }}>
-            Balance: {inBalFmt.toFixed(4)}
-          </span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <input
-            type="number" placeholder="0" min="0" step="any"
-            value={amount} onChange={e => { setAmount(e.target.value); setPhase('idle') }}
-            disabled={busy}
-            style={{
-              flex: 1, background: 'transparent', border: 'none', outline: 'none',
-              fontFamily: C.D, fontSize: 28, fontWeight: 500, color: C.text,
-              minWidth: 0,
-            }}
-          />
-          <button onClick={() => setSelectingFor('in')} style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '6px 12px 6px 6px', borderRadius: 20,
-            background: C.surface, border: `1px solid ${C.border}`,
-            cursor: 'pointer',
-          }}>
-            {tokenIn && <TIcon symbol={tokenIn.symbol} size={24} />}
-            <span style={{ fontFamily: C.D, fontSize: 14, fontWeight: 600, color: C.text }}>
-              {tokenIn?.symbol ?? 'Select'}
-            </span>
-            <span style={{ color: C.dim, fontSize: 10 }}>▾</span>
-          </button>
-        </div>
-        {/* Percentage buttons */}
-        <div style={{ display: 'flex', gap: 4, marginTop: 10 }}>
-          {[25, 50, 75, 100].map(p => (
-            <button key={p} onClick={() => setPercentage(p)} style={{
-              padding: '4px 10px', borderRadius: 8,
-              background: C.surface, border: `1px solid ${C.border}`,
-              color: C.dim, fontFamily: C.M, fontSize: 10, fontWeight: 600,
-              cursor: 'pointer', transition: 'all 0.1s',
-            }}
-            onMouseEnter={e => { e.currentTarget.style.color = C.text; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)' }}
-            onMouseLeave={e => { e.currentTarget.style.color = C.dim; e.currentTarget.style.borderColor = C.border }}
-            >{p === 100 ? 'Max' : `${p}%`}</button>
-          ))}
-        </div>
-      </div>
-
-      {/* Flip button */}
-      <div style={{ display: 'flex', justifyContent: 'center', margin: '-8px 0', position: 'relative', zIndex: 2 }}>
-        <button onClick={flip} disabled={busy} style={{
-          width: 36, height: 36, borderRadius: 10,
-          background: C.surface, border: `2px solid ${C.bg}`,
-          color: C.sub, cursor: busy ? 'default' : 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 16, transition: 'transform 0.3s ease',
-        }}
-        onMouseEnter={e => { if (!busy) e.currentTarget.style.transform = 'rotate(180deg)' }}
-        onMouseLeave={e => e.currentTarget.style.transform = 'rotate(0)'}
-        >↓</button>
-      </div>
-
-      {/* RECEIVE field */}
-      <div style={{ background: C.bg, borderRadius: 16, padding: '16px 16px 14px', marginTop: 4, border: `1px solid ${C.border}` }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ fontFamily: C.D, fontSize: 12, color: C.dim }}>You receive</span>
-          {quote?.poolFee && (
-            <span style={{ fontFamily: C.M, fontSize: 10, color: C.dim }}>
-              Pool: {quote.poolFee === 100 ? '0.01%' : quote.poolFee === 500 ? '0.05%' : quote.poolFee === 3000 ? '0.3%' : '1%'}
-            </span>
-          )}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{
-            flex: 1, fontFamily: C.D, fontSize: 28, fontWeight: 500,
-            color: quote?.status === 'loading' ? C.dim : C.text,
-            minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>
-            {quote?.status === 'loading' ? '…'
-              : quote?.status === 'success' ? quote.netAmountFmt
-              : '0'}
-          </span>
-          <button onClick={() => setSelectingFor('out')} style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '6px 12px 6px 6px', borderRadius: 20,
-            background: C.surface, border: `1px solid ${C.border}`,
-            cursor: 'pointer',
-          }}>
-            {tokenOut && <TIcon symbol={tokenOut.symbol} size={24} />}
-            <span style={{ fontFamily: C.D, fontSize: 14, fontWeight: 600, color: C.text }}>
-              {tokenOut?.symbol ?? 'Select'}
-            </span>
-            <span style={{ color: C.dim, fontSize: 10 }}>▾</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Quote details */}
-      {quote?.status === 'success' && tokenOut && (
-        <div style={{ marginTop: 12, padding: '10px 14px', background: C.bg, borderRadius: 12, border: `1px solid ${C.border}` }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span style={{ fontFamily: C.M, fontSize: 10, color: C.dim }}>Fee (0.5%)</span>
-            <span style={{ fontFamily: C.M, fontSize: 10, color: C.sub }}>{quote.feeFmt} {tokenOut.symbol}</span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span style={{ fontFamily: C.M, fontSize: 10, color: C.dim }}>Min. received</span>
-            <span style={{ fontFamily: C.M, fontSize: 10, color: C.sub }}>
-              {formatUnits(quote.minAmountOut, tokenOut.decimals).slice(0, 10)} {tokenOut.symbol}
-            </span>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-            <span style={{ fontFamily: C.M, fontSize: 10, color: C.dim }}>Slippage</span>
-            <span style={{ fontFamily: C.M, fontSize: 10, color: C.sub }}>{slippage}%</span>
-          </div>
-          {priceImpact !== null && priceImpact > 1 && (
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ fontFamily: C.M, fontSize: 10, color: priceImpact > 5 ? C.red : C.dim }}>Price impact</span>
-              <span style={{ fontFamily: C.M, fontSize: 10, color: priceImpact > 5 ? C.red : C.sub }}>~{priceImpact.toFixed(2)}%</span>
+        {/* ── Slippage settings (inline, toggled) ────────────── */}
+        {showSettings && (
+          <div className="rp-anim-3" style={{ marginTop: 6, padding: '12px 14px', background: 'rgba(255,255,255,0.025)', borderRadius: 14, border: `1px solid ${C.border}` }}>
+            <div style={{ fontFamily: C.D, fontSize: 10, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: C.dim, marginBottom: 8 }}>Slippage</div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {[0.1, 0.5, 1.0].map(s => (
+                <button key={s} onClick={() => setSlippage(s)} style={{
+                  padding: '6px 14px', borderRadius: 10,
+                  background: slippage === s ? `${C.purple}15` : 'rgba(255,255,255,0.03)',
+                  border: `1px solid ${slippage === s ? `${C.purple}30` : C.border}`,
+                  color: slippage === s ? C.purple : C.sub,
+                  fontFamily: C.M, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  transition: 'all 0.15s',
+                }}>{s}%</button>
+              ))}
             </div>
-          )}
-          {quote.gasEstimate && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
-              <span style={{ fontFamily: C.M, fontSize: 10, color: C.dim }}>Gas estimate</span>
-              <span style={{ fontFamily: C.M, fontSize: 10, color: C.sub }}>~{quote.gasEstimate.toString()} units</span>
+          </div>
+        )}
+
+        {/* ── Errors / warnings ──────────────────────────────── */}
+        {noLiquidity && (
+          <div style={{ marginTop: 6, padding: '10px 12px', borderRadius: 12, background: `${C.red}08`, border: `1px solid ${C.red}20` }}>
+            <span style={{ fontFamily: C.D, fontSize: 11, color: C.red }}>{quote?.errorMessage ?? 'Liquidità insufficiente'}</span>
+          </div>
+        )}
+        {phase === 'error' && error && (
+          <div style={{ marginTop: 6, padding: '10px 12px', borderRadius: 12, background: `${C.red}08`, border: `1px solid ${C.red}20` }}>
+            <span style={{ fontFamily: C.D, fontSize: 11, color: C.red }}>{error}</span>
+          </div>
+        )}
+
+        {/* ── Success ────────────────────────────────────────── */}
+        {phase === 'success' && txHash && (
+          <div style={{ marginTop: 6, padding: '14px', borderRadius: 14, background: `${C.green}08`, border: `1px solid ${C.green}20`, textAlign: 'center' as const }}>
+            <div style={{ fontFamily: C.D, fontSize: 13, fontWeight: 600, color: C.green, marginBottom: 6 }}>Swap completato ✓</div>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 6, background: `${C.purple}08`, border: `1px solid ${C.purple}15`, marginBottom: 8 }}>
+              <span style={{ fontFamily: C.M, fontSize: 9, color: C.purple }}>DAC8 — Registrato nel report fiscale</span>
             </div>
-          )}
-        </div>
-      )}
+            <div>
+              <a href={`${reg?.blockExplorer ?? 'https://basescan.org'}/tx/${txHash}`} target="_blank" rel="noopener noreferrer"
+                style={{ fontFamily: C.M, fontSize: 10, color: C.sub, textDecoration: 'underline' }}>
+                Vedi su Explorer ↗
+              </a>
+            </div>
+            <div style={{ marginTop: 8 }}>
+              <button onClick={reset} style={{
+                padding: '8px 20px', borderRadius: 12,
+                background: 'rgba(255,255,255,0.04)', border: `1px solid ${C.border}`,
+                color: C.text, fontFamily: C.D, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}>Nuovo Swap</button>
+            </div>
+          </div>
+        )}
 
-      {/* Error / Liquidity warning */}
-      {noLiquidity && (
-        <div style={{ marginTop: 10, padding: '10px 14px', borderRadius: 12, background: `${C.red}08`, border: `1px solid ${C.red}20` }}>
-          <span style={{ fontFamily: C.D, fontSize: 11, color: C.red }}>{quote?.errorMessage ?? 'Liquidità insufficiente'}</span>
-        </div>
-      )}
-      {phase === 'error' && error && (
-        <div style={{ marginTop: 10, padding: '10px 14px', borderRadius: 12, background: `${C.red}08`, border: `1px solid ${C.red}20` }}>
-          <span style={{ fontFamily: C.D, fontSize: 11, color: C.red }}>{error}</span>
-        </div>
-      )}
-
-      {/* Success */}
-      {phase === 'success' && txHash && (
-        <div style={{ marginTop: 10, padding: '14px', borderRadius: 14, background: `${C.green}08`, border: `1px solid ${C.green}20`, textAlign: 'center' as const }}>
-          <div style={{ fontFamily: C.D, fontSize: 13, fontWeight: 600, color: C.green, marginBottom: 4 }}>Swap completato ✓</div>
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: 5,
-            padding: '3px 10px', borderRadius: 6,
-            background: 'rgba(252,116,254,0.06)', border: '1px solid rgba(252,116,254,0.12)',
-            marginBottom: 8,
+        {/* ── CTA BUTTON ─────────────────────────────────────── */}
+        {phase !== 'success' && (
+          <button onClick={handleSwap} disabled={!canSwap} style={{
+            width: '100%', marginTop: 8, padding: '18px',
+            borderRadius: 14, border: 'none',
+            background: canSwap
+              ? `linear-gradient(135deg, ${C.purple}, #c084fc)`
+              : 'rgba(255,255,255,0.04)',
+            color: canSwap ? '#fff' : `${C.dim}80`,
+            fontFamily: C.D, fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em',
+            cursor: canSwap ? 'pointer' : 'not-allowed',
+            transition: 'all 0.2s',
+            boxShadow: canSwap ? `0 4px 20px ${C.purple}25` : 'none',
           }}>
-            <span style={{ fontFamily: C.M, fontSize: 9, color: C.pink }}>📋 DAC8 Verified — Registrato nel report fiscale</span>
-          </div>
-          <div>
-            <a href={`${reg?.blockExplorer ?? 'https://basescan.org'}/tx/${txHash}`} target="_blank" rel="noopener noreferrer"
-              style={{ fontFamily: C.M, fontSize: 10, color: C.sub, textDecoration: 'underline' }}>
-              Vedi su Explorer ↗
-            </a>
-          </div>
-          <div style={{ marginTop: 8 }}>
-            <button onClick={reset} style={{
-              padding: '8px 20px', borderRadius: 12,
-              background: C.surface, border: `1px solid ${C.border}`,
-              color: C.text, fontFamily: C.D, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-            }}>Nuovo Swap</button>
-          </div>
-        </div>
-      )}
+            {busy ? (
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <span className="rp-spinner" style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.2)', borderTopColor: '#fff', borderRadius: '50%' }} />
+                {phase === 'signing_oracle' ? 'AML Check…'
+                  : phase === 'approving' ? 'Approvazione…'
+                  : 'Swapping…'}
+              </span>
+            ) : insufficient ? 'Saldo insufficiente'
+              : sameToken ? 'Seleziona token diversi'
+              : noLiquidity ? 'Liquidità insufficiente'
+              : !parsedAmount ? 'Inserisci importo'
+              : `Swap ${tokenIn?.symbol} → ${tokenOut?.symbol}`}
+          </button>
+        )}
 
-      {/* CTA Button */}
-      {phase !== 'success' && (
-        <button onClick={handleSwap} disabled={!canSwap} style={{
-          width: '100%', marginTop: 14, padding: '16px',
-          borderRadius: 16, border: 'none',
-          background: !canSwap
-            ? 'rgba(255,255,255,0.04)'
-            : `linear-gradient(135deg, ${C.pink}, #c850c0)`,
-          color: !canSwap ? C.dim : '#fff',
-          fontFamily: C.D, fontSize: 16, fontWeight: 700,
-          cursor: canSwap ? 'pointer' : 'not-allowed',
-          transition: 'all 0.2s',
-          boxShadow: canSwap ? `0 4px 20px ${C.pink}30` : 'none',
-        }}>
-          {busy ? (
-            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-              <span className="rp-spinner" style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%' }} />
-              {phase === 'signing_oracle' ? 'AML Check…'
-                : phase === 'approving' ? 'Approvazione…'
-                : 'Swapping…'}
-            </span>
-          ) : insufficient ? 'Saldo insufficiente'
-            : sameToken ? 'Seleziona token diversi'
-            : noLiquidity ? 'Liquidità insufficiente'
-            : !parsedAmount ? 'Inserisci importo'
-            : 'Swap'}
-        </button>
-      )}
-
-      {/* Trust Signals */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        gap: 12, marginTop: 12, flexWrap: 'wrap' as const,
-      }}>
-        {[
-          { icon: '🔒', label: 'Non-Custodial' },
-          { icon: '📋', label: 'DAC8 Verified' },
-          { icon: '⚡', label: 'Base L2' },
-        ].map(b => (
-          <div key={b.label} style={{
+        {/* ── Settings toggle (bottom-right, subtle) ─────────── */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginTop: 8, paddingRight: 2 }}>
+          <button onClick={() => setShowSettings(s => !s)} style={{
             display: 'flex', alignItems: 'center', gap: 4,
-            fontFamily: C.M, fontSize: 9, color: C.dim,
-          }}>
-            <span style={{ fontSize: 9 }}>{b.icon}</span>
-            <span>{b.label}</span>
-          </div>
-        ))}
+            background: 'none', border: 'none', cursor: 'pointer',
+            fontFamily: C.M, fontSize: 10, color: showSettings ? C.purple : C.dim,
+            transition: 'color 0.15s', padding: '2px 0',
+          }}
+            onMouseEnter={e => e.currentTarget.style.color = C.text}
+            onMouseLeave={e => e.currentTarget.style.color = showSettings ? C.purple : C.dim}
+          >
+            ⚙ {slippage}% slippage
+          </button>
+        </div>
       </div>
 
-      {/* Token Selector Modal */}
+      {/* ── Token Selector Modal ───────────────────────────── */}
       {selectingFor && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div onClick={() => setSelectingFor(null)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)' }} />
+          <div onClick={() => setSelectingFor(null)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)' }} />
           <div style={{
-            position: 'relative', width: 340, maxHeight: 400,
-            background: C.bg, border: `1px solid ${C.border}`, borderRadius: 20,
-            boxShadow: '0 20px 60px rgba(0,0,0,0.8)', overflow: 'hidden',
+            position: 'relative', width: 380, maxHeight: 420,
+            background: '#111120', border: '1px solid rgba(255,255,255,0.10)',
+            borderRadius: 20, boxShadow: '0 24px 80px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.04)',
+            overflow: 'hidden',
           }}>
-            <div style={{ padding: '14px 18px', borderBottom: `1px solid ${C.border}`, fontFamily: C.D, fontSize: 14, fontWeight: 600, color: C.text }}>
-              Select token
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '16px 18px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)',
+            }}>
+              <span style={{ fontFamily: C.D, fontSize: 15, fontWeight: 800, color: C.text }}>Seleziona token</span>
+              <button onClick={() => setSelectingFor(null)} style={{
+                width: 30, height: 30, borderRadius: 8, background: 'rgba(255,255,255,0.06)',
+                border: 'none', color: C.dim, cursor: 'pointer', fontSize: 16,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>✕</button>
             </div>
-            <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+            <div style={{ maxHeight: 360, overflowY: 'auto' }}>
               {[...tokens]
                 .sort((a, b) => {
                   const bA = Number(getBalance(a)) / (10 ** a.decimals)
                   const bB = Number(getBalance(b)) / (10 ** b.decimals)
                   return bB - bA
                 })
-                .map(t => {
-                const bal = getBalance(t)
-                const balFmt = parseFloat(formatUnits(bal, t.decimals))
-                const pa = portfolioAssets?.find(a => a.symbol === t.symbol)
-                return (
-                <button key={t.symbol} onClick={() => {
-                  if (selectingFor === 'in') setTokenIn(t)
-                  else setTokenOut(t)
-                  setSelectingFor(null)
-                  setAmount('')
-                }} style={{
-                  width: '100%', display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '12px 18px', background: 'transparent', border: 'none',
-                  borderBottom: `1px solid ${C.border}`, cursor: 'pointer',
-                  textAlign: 'left' as const, transition: 'background 0.1s',
-                  opacity: balFmt > 0 ? 1 : 0.5,
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                >
-                  <TIcon symbol={t.symbol} size={32} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontFamily: C.D, fontSize: 14, fontWeight: 600, color: C.text }}>{t.symbol}</div>
-                    <div style={{ fontFamily: C.M, fontSize: 10, color: C.dim }}>{t.name}</div>
-                  </div>
-                  <span style={{ fontFamily: C.M, fontSize: 11, color: balFmt > 0 ? C.text : C.dim }}>
-                    {balFmt > 0 ? balFmt.toFixed(4) : '0'}
-                  </span>
-                </button>
-                )
-              })}
+                .map((t, i, arr) => {
+                  const bal = getBalance(t)
+                  const balFmt = parseFloat(formatUnits(bal, t.decimals))
+                  return (
+                    <button key={t.symbol} onClick={() => {
+                      if (selectingFor === 'in') setTokenIn(t)
+                      else setTokenOut(t)
+                      setSelectingFor(null)
+                      setAmount('')
+                    }} style={{
+                      width: '100%', display: 'flex', alignItems: 'center', gap: 14,
+                      padding: '13px 18px', background: 'transparent', border: 'none',
+                      borderBottom: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                      cursor: 'pointer', transition: 'background 0.12s', textAlign: 'left' as const,
+                      opacity: balFmt > 0 ? 1 : 0.5,
+                    }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <TIcon symbol={t.symbol} size={36} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontFamily: C.D, fontSize: 15, fontWeight: 700, color: C.text }}>{t.symbol}</div>
+                        <div style={{ fontFamily: C.M, fontSize: 11, color: C.dim, marginTop: 2 }}>{t.name}</div>
+                      </div>
+                      <div style={{ textAlign: 'right' as const }}>
+                        <div style={{ fontFamily: C.M, fontSize: 13, fontWeight: 600, color: balFmt > 0 ? C.text : C.dim }}>
+                          {balFmt > 0 ? balFmt.toFixed(4) : '0'}
+                        </div>
+                        <div style={{ fontFamily: C.M, fontSize: 10, color: C.dim, marginTop: 1 }}>{t.symbol}</div>
+                      </div>
+                    </button>
+                  )
+                })}
             </div>
           </div>
         </div>

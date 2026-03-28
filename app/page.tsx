@@ -501,8 +501,8 @@ function SecurityOverlay() {
           { icon: '🚨', title: 'Emergency Withdraw', desc: 'Ritiro di emergenza in caso di necessità' },
         ].map(f => (
           <div key={f.title} style={{ padding: '14px 16px', borderRadius: 14, background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}` }}>
-            <div style={{ fontSize: 16, marginBottom: 6 }}>{f.icon}</div>
-            <div style={{ fontFamily: C.D, fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 3 }}>{f.title}</div>
+            <div style={{ fontSize: 16, marginBottom: 3 }}>{f.icon}</div>
+            <div style={{ fontFamily: C.D, fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 1 }}>{f.title}</div>
             <div style={{ fontFamily: C.M, fontSize: 9, color: C.dim, lineHeight: 1.4 }}>{f.desc}</div>
           </div>
         ))}
@@ -528,7 +528,7 @@ function HeroTitle({ view, setView }: { view: View; setView: (v: View) => void }
     fontWeight: 700,
     letterSpacing: '-0.02em',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
     background: 'linear-gradient(135deg, #FFB547 0%, #8B5CF6 50%, #3B82F6 100%)',
     WebkitBackgroundClip: 'text',
     WebkitTextFillColor: 'transparent',
@@ -571,7 +571,7 @@ function HeroTitle({ view, setView }: { view: View; setView: (v: View) => void }
       </motion.div>
     </div>
   )
-}
+  }
 
 
       
@@ -712,7 +712,7 @@ export default function Home() {
               WebkitBackdropFilter: 'blur(10px)',
               border: '1px solid rgba(255,255,255,0.08)',
               borderRadius: 16,
-              marginBottom: 40,
+              marginBottom: 20,
               padding: '6px 8px',
               boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
               display: 'flex',
@@ -805,7 +805,7 @@ export default function Home() {
                 exit="exit"
                 style={{ width: '100%', maxWidth: 800 }}
               >
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 6 }}>
                   <GasGuard />
                   <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '16px 18px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                     <div style={{ fontFamily: C.M, fontSize: 9, fontWeight: 700, color: C.dim, textTransform: 'uppercase' as const, letterSpacing: '0.1em', marginBottom: 8 }}>Stats</div>
@@ -815,7 +815,7 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
-                <div style={{ marginBottom: 12 }}><SmartRouteConfig address={address} /></div>
+                <div style={{ marginBottom: 6 }}><SmartRouteConfig address={address} /></div>
                 <ActivityFeed address={address} />
               </motion.div>
             )}

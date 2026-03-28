@@ -13,7 +13,7 @@ import {
 } from 'viem'
 import { baseSepolia } from 'wagmi/chains'
 import {
-  TransactionStatusUI, GasTracker, AddressVerifier, BallisticProgress, MicroStateBadge,
+  TransactionStatusUI, AddressVerifier, BallisticProgress, MicroStateBadge,
 } from './TransactionStatus'
 import { useComplianceEngine, type ComplianceRecord } from '../lib/useComplianceEngine'
 import { useComplianceAPI }   from '../lib/useComplianceAPI'
@@ -23,7 +23,6 @@ import {
   type TokenConfig, type NetworkRegistry,
 } from '../lib/contractRegistry'
 import { useSwapQuote, useDirectQuote } from '../lib/useSwapQuote'
-import NetworkSelector from './NetworkSelector'
 import { useBackendCallback } from '../lib/useBackendCallback'
 
 // ── Theme ──────────────────────────────────────────────────────────────────
@@ -782,11 +781,11 @@ export default function TransferForm(): React.JSX.Element {
     :                                         'ready'
 
   const C = {
-    card:  { borderRadius:28, background:T.card, border:`1px solid ${T.border}`, overflow:'hidden' as const, boxShadow:`0 24px 80px rgba(0,0,0,0.8), 0 0 60px ${T.emerald}05` } satisfies React.CSSProperties,
-    box:   { borderRadius:18, background:focused?'rgba(255,255,255,0.04)':'rgba(255,255,255,0.025)', padding:'15px 16px', border:'1.5px solid', borderColor:focused?`${T.emerald}35`:`${T.border}`, transition:'all 0.2s ease', cursor:'text', boxShadow:focused?`0 0 0 3px ${T.emerald}08`:'none' } satisfies React.CSSProperties,
-    box2:  { borderRadius:18, background:'rgba(255,255,255,0.025)', padding:'15px 16px', border:`1.5px solid ${T.border}` } satisfies React.CSSProperties,
+    card:  { borderRadius:20, background:T.card, border:`1px solid ${T.border}`, overflow:'hidden' as const, boxShadow:`0 16px 60px rgba(0,0,0,0.6)` } satisfies React.CSSProperties,
+    box:   { borderRadius:14, background:focused?'rgba(255,255,255,0.04)':'rgba(255,255,255,0.025)', padding:'14px 14px', border:'1.5px solid', borderColor:focused?`${T.emerald}35`:`${T.border}`, transition:'all 0.2s ease', cursor:'text', boxShadow:focused?`0 0 0 3px ${T.emerald}08`:'none' } satisfies React.CSSProperties,
+    box2:  { borderRadius:14, background:'rgba(255,255,255,0.025)', padding:'14px 14px', border:`1.5px solid ${T.border}` } satisfies React.CSSProperties,
     row:   { display:'flex', alignItems:'center', justifyContent:'space-between' } satisfies React.CSSProperties,
-    input: { width:'100%', background:'rgba(0,0,0,0.3)', border:`1px solid ${T.border}`, borderRadius:11, padding:'11px 13px', color:T.text, fontSize:14, outline:'none', transition:'all 0.2s ease', fontFamily:T.M, boxSizing:'border-box' as const } satisfies React.CSSProperties,
+    input: { width:'100%', background:'rgba(0,0,0,0.3)', border:`1px solid ${T.border}`, borderRadius:10, padding:'10px 12px', color:T.text, fontSize:13, outline:'none', transition:'all 0.2s ease', fontFamily:T.M, boxSizing:'border-box' as const } satisfies React.CSSProperties,
   }
 
   // ── SUCCESS ───────────────────────────────────────────────────────────
@@ -825,206 +824,150 @@ export default function TransferForm(): React.JSX.Element {
     </>
   )
 
-  // ── MAIN FORM ─────────────────────────────────────────────────────────
+  // ── MAIN FORM — Jupiter-style: no header, direct Sell/Buy ──────────
   return (
     <>
       <div style={C.card}>
+        <div style={{ padding:'10px 10px 10px' }}>
 
-        {/* Header — niente mode toggle, solo info */}
-        <div className="rp-anim-0" style={{ ...C.row, padding:'16px 18px 10px' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-            <span style={{ fontFamily:T.D, fontSize:17, fontWeight:800, color:T.text, letterSpacing:'-0.02em' }}>
-              Invia
-            </span>
-            {/* Badge auto-detection */}
-            {isSwapMode && (
-              <span style={{ fontFamily:T.D, fontSize:10, fontWeight:700, color:T.purple, background:`${T.purple}12`, padding:'3px 8px', borderRadius:7, border:`1px solid ${T.purple}25` }}>
-                ⚡ Swap & Send
-              </span>
-            )}
-            {!isSwapMode && (
-              <span style={{ fontFamily:T.D, fontSize:10, fontWeight:700, color:T.emerald, background:`${T.emerald}0d`, padding:'3px 8px', borderRadius:7, border:`1px solid ${T.emerald}20` }}>
-                Direct
-              </span>
-            )}
-            {oracleChecking && (
-              <span style={{ fontFamily:T.D, fontSize:9, color:T.amber, background:`${T.amber}0d`, padding:'2px 7px', borderRadius:5, border:`1px solid ${T.amber}20` }}>
-                🛡 AML…
-              </span>
-            )}
-            {oracleData?.approved && !oracleChecking && (
-              <div style={{ display:'flex', alignItems:'center', gap:5 }}>
-                <div style={{ width:6, height:6, borderRadius:'50%', background:oracleData.riskLevel==='LOW'?T.emerald:T.amber, boxShadow:`0 0 5px ${oracleData.riskLevel==='LOW'?T.emerald:T.amber}` }} />
-                <span style={{ fontFamily:T.D, fontSize:10, color:oracleData.riskLevel==='LOW'?T.emerald:T.amber }}>
-                  AML {oracleData.riskLevel}
-                </span>
-              </div>
-            )}
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-            <GasTracker />
-            {isConnected && (
-              <div style={{ position:'relative' }}>
-                <NetworkSelector
-                  compact
-                  onNetworkChange={(newChainId) => {
-                    // Reset completo — il useEffect su [chainId] ricaricherà
-                    // registry + tokenList + tokenIn/tokenOut automaticamente
-                    setAmount('')
-                    setOracleData(null)
-                    setOracleDenied(false)
-                    setPhase('idle')
-                    setTxError('')
-                    setReport(null)
-                  }}
-                />
-              </div>
-            )}
-            {regChain && !isL2 && (
-              <span style={{ fontFamily:T.D, fontSize:10, color:T.amber, background:`${T.amber}0d`, padding:'2px 7px', borderRadius:5 }}>⛽ L1</span>
-            )}
-            <button
-              onClick={() => setShowExtras(p => !p)}
-              style={{ width:32, height:32, borderRadius:10, background:showExtras?`${T.emerald}15`:'transparent', border:'none', color:showExtras?T.emerald:T.muted, cursor:'pointer', fontSize:14, transition:'all 0.25s' }}
-              onMouseEnter={e => { if (!showExtras) e.currentTarget.style.transform='rotate(45deg)' }}
-              onMouseLeave={e => { if (!showExtras) e.currentTarget.style.transform='rotate(0)' }}
-            >⚙</button>
-          </div>
-        </div>
-
-        <div style={{ padding:'0 8px 8px' }}>
-
-          {/* Gas warning L1 */}
+          {/* Gas warning L1 — only when needed */}
           {!isL2 && isConnected && (
-            <div style={{ margin:'0 0 8px', padding:'8px 12px', borderRadius:10, background:`${T.amber}08`, border:`1px solid ${T.amber}20`, fontFamily:T.D, fontSize:11, color:T.amber, display:'flex', alignItems:'center', gap:8 }}>
-              <span>⚠</span>
-              <span>Gas su Ethereum L1 è più costoso. Considera Base per micro-pagamenti.</span>
+            <div style={{ margin:'0 0 6px', padding:'7px 11px', borderRadius:10, background:`${T.amber}08`, border:`1px solid ${T.amber}20`, fontFamily:T.D, fontSize:11, color:T.amber, display:'flex', alignItems:'center', gap:6 }}>
+              ⚠ <span>Gas L1 elevato — considera Base.</span>
             </div>
           )}
 
-          {/* SELL — rp-anim-1 */}
+          {/* ── SELL ─────────────────────────────────────────────── */}
           <div className="rp-anim-1">
             <div style={C.box} onClick={() => inputRef.current?.focus()}>
-              <div style={{ ...C.row, marginBottom:8 }}>
-                <span style={{ fontFamily:T.D, fontSize:13, fontWeight:700, color:T.muted }}>
-                  {isSwapMode ? 'Stai inviando' : 'Sell'}
+              {/* Top row: label + balance */}
+              <div style={{ ...C.row, marginBottom:10 }}>
+                <span style={{ fontFamily:T.D, fontSize:13, fontWeight:600, color:T.muted }}>
+                  Sell
                 </span>
-                <button
-                  onClick={e => { e.stopPropagation(); handleMax() }}
-                  style={{ fontFamily:T.D, fontSize:12, fontWeight:700, color:T.emerald, background:'none', border:'none', cursor:'pointer', padding:0, transition:'opacity 0.15s' }}
-                  onMouseEnter={e => e.currentTarget.style.opacity='0.7'}
-                  onMouseLeave={e => e.currentTarget.style.opacity='1'}
-                >
-                  {isConnected && tokenIn ? `Saldo: ${fmtBal(tokenIn)} MAX` : 'MAX'}
-                </button>
-              </div>
-              <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-                <input
-                  ref={inputRef} type="number" placeholder="0" min="0" step="any"
-                  value={amount} onChange={e => setAmount(e.target.value)}
-                  onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
-                  disabled={busy}
-                  style={{ fontFamily:T.D, fontSize:'2.3rem', fontWeight:300, letterSpacing:'-0.03em', flex:1, background:'transparent', border:'none', outline:'none', color:busy?T.muted:T.text, minWidth:0 }}
-                />
-                <div onClick={e => e.stopPropagation()}>
-                  <TokenPill
-                    token={tokenIn}
-                    busy={busy}
-                    onClick={() => setSelectingToken('in')}
-                  />
-                </div>
-              </div>
-              <div style={{ ...C.row, marginTop:6 }}>
-                <span style={{ fontFamily:T.D, fontSize:13, fontWeight:500, color:T.muted }}>
-                  {amount && tokenIn ? `≈ ${(parseFloat(amount) * (EUR_RATES[tokenIn.symbol] ?? 1)).toFixed(2)} EUR` : '$0'}
-                </span>
-                {hasInsuf && (
-                  <span style={{ fontFamily:T.D, fontSize:12, fontWeight:600, color:T.red }}>Saldo insufficiente</span>
+                {isConnected && tokenIn && (
+                  <button
+                    onClick={e => { e.stopPropagation(); handleMax() }}
+                    style={{ fontFamily:T.M, fontSize:12, color:T.muted, background:'none', border:'none', cursor:'pointer', padding:0, transition:'color 0.15s' }}
+                    onMouseEnter={e => e.currentTarget.style.color=T.emerald}
+                    onMouseLeave={e => e.currentTarget.style.color=T.muted}
+                  >
+                    {fmtBal(tokenIn)} {sym}
+                  </button>
                 )}
+              </div>
+              {/* Bottom row: token pill LEFT — amount RIGHT */}
+              <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                <div onClick={e => e.stopPropagation()}>
+                  <TokenPill token={tokenIn} busy={busy} onClick={() => setSelectingToken('in')} />
+                </div>
+                <div style={{ flex:1, textAlign:'right' as const }}>
+                  <input
+                    ref={inputRef} type="number" placeholder="0.00" min="0" step="any"
+                    value={amount} onChange={e => setAmount(e.target.value)}
+                    onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
+                    disabled={busy}
+                    style={{ fontFamily:T.D, fontSize:30, fontWeight:400, letterSpacing:'-0.02em', width:'100%', background:'transparent', border:'none', outline:'none', color:busy?T.muted:T.text, textAlign:'right' as const }}
+                  />
+                  <div style={{ fontFamily:T.M, fontSize:12, color:T.muted, marginTop:2 }}>
+                    {amount && tokenIn ? `$${(parseFloat(amount) * (EUR_RATES[tokenIn.symbol] ?? 1)).toFixed(2)}` : '$0'}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Arrow — ⇅ se swap, ↓ se direct, cliccabile per invertire */}
-          <div className="rp-anim-2" style={{ display:'flex', justifyContent:'center', margin:'5px 0' }}>
+          {/* ── Swap arrow ───────────────────────────────────────── */}
+          <div className="rp-anim-2" style={{ display:'flex', justifyContent:'center', margin:'-4px 0', position:'relative', zIndex:2 }}>
             <button
               onClick={() => {
                 if (isSwapMode && tokenIn && tokenOut) {
                   const tmp = tokenIn; setTokenIn(tokenOut); setTokenOut(tmp); setAmount('')
                 }
               }}
-              style={{ width:36, height:36, borderRadius:12, background:isSwapMode?`${T.purple}15`:'rgba(255,255,255,0.04)', border:`1.5px solid ${isSwapMode?`${T.purple}40`:T.border}`, color:isSwapMode?T.purple:T.muted, fontSize:15, cursor:isSwapMode?'pointer':'default', display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.25s ease' }}
-              onMouseEnter={e => { if (isSwapMode) { e.currentTarget.style.transform='rotate(180deg)'; e.currentTarget.style.color=T.purple } }}
-              onMouseLeave={e => { e.currentTarget.style.transform='rotate(0)'; e.currentTarget.style.color=isSwapMode?T.purple:T.muted }}
+              style={{
+                width:34, height:34, borderRadius:10,
+                background: T.card,
+                border:`1.5px solid ${T.border}`,
+                color: T.muted, fontSize:16,
+                cursor: isSwapMode ? 'pointer' : 'default',
+                display:'flex', alignItems:'center', justifyContent:'center',
+                transition:'all 0.2s ease',
+                boxShadow:'0 2px 8px rgba(0,0,0,0.4)',
+              }}
+              onMouseEnter={e => { if (isSwapMode) { e.currentTarget.style.background='rgba(255,255,255,0.06)'; e.currentTarget.style.color=T.text } }}
+              onMouseLeave={e => { e.currentTarget.style.background=T.card; e.currentTarget.style.color=T.muted }}
             >
-              {isSwapMode ? '⇅' : '↓'}
+              ⇅
             </button>
           </div>
 
-          {/* RECEIVE — rp-anim-2 */}
+          {/* ── BUY / RECEIVE ────────────────────────────────────── */}
           <div className="rp-anim-2">
             <div style={C.box2}>
-              <div style={{ ...C.row, marginBottom:8 }}>
-                <span style={{ fontFamily:T.D, fontSize:13, fontWeight:700, color:T.muted }}>
-                  {isSwapMode ? 'Il destinatario riceverà' : 'Receive'}
+              {/* Top row: label + balance */}
+              <div style={{ ...C.row, marginBottom:5 }}>
+                <span style={{ fontFamily:T.D, fontSize:13, fontWeight:600, color:T.muted }}>
+                  Buy
                 </span>
-                <span style={{ fontFamily:T.D, fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:20, background:`${isSwapMode?T.purple:T.emerald}10`, color:isSwapMode?T.purple:T.emerald, border:`1px solid ${isSwapMode?T.purple:T.emerald}25` }}>
-                  {isSwapMode ? '⚡ Uniswap V3' : 'Auto · 0.5% fee'}
-                </span>
+                {isConnected && (isSwapMode ? tokenOut : tokenIn) && (
+                  <span style={{ fontFamily:T.M, fontSize:12, color:T.muted }}>
+                    {fmtBal(isSwapMode ? tokenOut! : tokenIn!)} {symOut}
+                  </span>
+                )}
               </div>
+              {/* Bottom row: token pill LEFT — amount RIGHT */}
               <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-                <span style={{ fontFamily:T.D, fontSize:'2.3rem', fontWeight:300, letterSpacing:'-0.03em', flex:1, color:T.text, transition:'color 0.3s' }}>
-                  {isSwapMode
-                    ? (swapQuote?.status === 'success' ? swapQuote.netAmountFmt
-                       : swapQuote?.status === 'loading' ? '…' : '0')
-                    : (directQuote ? directQuote.netFmt : '0')
-                  }
-                </span>
-                {/* TokenPill sempre cliccabile — apre modal output */}
-                {/* Scegliere token diverso da tokenIn → isSwapMode=true auto */}
                 <div onClick={e => e.stopPropagation()}>
                   <TokenPill
                     token={isSwapMode ? tokenOut : tokenIn}
                     busy={busy}
-                    accentColor={isSwapMode ? T.purple : T.emerald}
+                    accentColor={isSwapMode ? T.purple : undefined}
                     onClick={() => setSelectingToken('out')}
                   />
                 </div>
-              </div>
-              <div style={{ fontFamily:T.D, fontSize:13, fontWeight:500, color:T.muted, marginTop:6 }}>
-                {isSwapMode
-                  ? (swapQuote?.status === 'success'
-                     ? `Fee gateway: ${swapQuote.feeFmt} ${symOut} (0.5%)`
-                     : 'Inserisci un importo per la quotazione')
-                  : (directQuote ? `Fee: ${directQuote.feeFmt} ${sym} (0.5%)` : 'Inserisci un importo')
-                }
+                <div style={{ flex:1, textAlign:'right' as const }}>
+                  <span style={{ fontFamily:T.D, fontSize:30, fontWeight:400, letterSpacing:'-0.02em', color:T.text, display:'block' }}>
+                    {isSwapMode
+                      ? (swapQuote?.status === 'success' ? swapQuote.netAmountFmt
+                         : swapQuote?.status === 'loading' ? '…' : '0')
+                      : (directQuote ? directQuote.netFmt : '0')
+                    }
+                  </span>
+                  <div style={{ fontFamily:T.M, fontSize:12, color:T.muted, marginTop:2 }}>
+                    {isSwapMode
+                      ? (swapQuote?.status === 'success' ? `$${(parseFloat(swapQuote.netAmountFmt) * (EUR_RATES[symOut] ?? 1)).toFixed(2)}` : '$0')
+                      : (directQuote ? `$${(parseFloat(directQuote.netFmt) * (EUR_RATES[sym] ?? 1)).toFixed(2)}` : '$0')
+                    }
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
           {/* Quote panel — solo in swap mode */}
           {isSwapMode && swapQuote && (
-            <div style={{ marginTop:8 }}>
+            <div style={{ marginTop:6 }}>
               <QuotePanel quote={swapQuote} tokenOut={tokenOut} isSwap={isSwapMode} />
             </div>
           )}
 
-          {/* Recipient — rp-anim-3 */}
-          <div className="rp-anim-3" style={{ margin:'8px 0' }}>
-            <div style={{ padding:'13px 15px', borderRadius:16, background:'rgba(255,255,255,0.025)', border:`1px solid ${T.border}` }}>
-              <div style={{ ...C.row, marginBottom:8 }}>
-                <span style={{ fontFamily:T.D, fontSize:11, fontWeight:700, textTransform:'uppercase' as const, letterSpacing:'0.1em', color:T.muted }}>
-                  Destinatario
+          {/* ── RECIPIENT ────────────────────────────────────────── */}
+          <div className="rp-anim-3" style={{ marginTop:6 }}>
+            <div style={{ padding:'12px 14px', borderRadius:14, background:'rgba(255,255,255,0.025)', border:`1px solid ${T.border}` }}>
+              <div style={{ ...C.row, marginBottom:6 }}>
+                <span style={{ fontFamily:T.D, fontSize:11, fontWeight:700, textTransform:'uppercase' as const, letterSpacing:'0.08em', color:T.muted }}>
+                  To
                 </span>
                 {recipient && !addrError && (
-                  <span style={{ fontFamily:T.D, fontSize:11, fontWeight:600, color:T.emerald }}>✓ Valido</span>
+                  <span style={{ fontFamily:T.M, fontSize:10, color:T.emerald }}>✓</span>
                 )}
                 {addrError && (
-                  <span style={{ fontFamily:T.D, fontSize:11, fontWeight:600, color:T.red }}>⚠ {addrError}</span>
+                  <span style={{ fontFamily:T.D, fontSize:10, fontWeight:600, color:T.red }}>{addrError}</span>
                 )}
               </div>
               <input
-                type="text" placeholder="0x..."
+                type="text" placeholder="0x... o ENS"
                 value={recipient}
                 onChange={e => { setRecipient(e.target.value); validateAddr(e.target.value); setOracleData(null); setOracleDenied(false) }}
                 disabled={busy}
@@ -1036,42 +979,38 @@ export default function TransferForm(): React.JSX.Element {
 
           {/* Oracle denial */}
           {oracleDenied && oracleData && !busy && (
-            <div style={{ marginBottom:8, padding:'12px 14px', borderRadius:12, background:`${T.red}0d`, border:`1px solid ${T.red}30` }}>
-              <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
-                <span>🚫</span>
-                <span style={{ fontFamily:T.D, fontSize:12, fontWeight:700, color:T.red }}>
-                  Transazione negata per policy di conformità AML
+            <div style={{ marginTop:6, padding:'10px 12px', borderRadius:12, background:`${T.red}0d`, border:`1px solid ${T.red}30` }}>
+              <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                <span style={{ fontFamily:T.D, fontSize:11, fontWeight:700, color:T.red }}>
+                  🚫 Bloccata — AML
                 </span>
               </div>
-              <div style={{ fontFamily:T.D, fontSize:11, color:T.muted, paddingLeft:22 }}>
-                {oracleData.rejectionReason}
-              </div>
-            </div>
-          )}
-
-          {/* Extras DAC8 */}
-          {showExtras && (
-            <div style={{ margin:'0 0 8px', padding:'13px 15px', borderRadius:16, background:'rgba(255,255,255,0.025)', border:`1px solid ${T.border}`, animation:'rpFadeUp 0.25s var(--ease-spring) both' }}>
-              <div style={{ fontFamily:T.D, fontSize:11, fontWeight:700, textTransform:'uppercase' as const, letterSpacing:'0.1em', color:T.muted, marginBottom:10 }}>
-                payment_ref & fiscal_ref (MiCA/DAC8)
-              </div>
-              <input type="text" placeholder="Rif. pagamento (es. INV-001)" value={paymentRef} onChange={e => setPaymentRef(e.target.value)} disabled={busy} style={{ ...C.input, marginBottom:8 }} />
-              <input type="text" placeholder="ID Fiscale" value={fiscalRef} onChange={e => setFiscalRef(e.target.value)} disabled={busy} style={C.input} />
-              {oracleData?.dac8Reportable && (
-                <div style={{ fontFamily:T.D, fontSize:10, color:T.amber, marginTop:6 }}>⚠ DAC8 reportable (≥ €1.000)</div>
-              )}
-              {oracleData?.sourceChain && (
-                <div style={{ fontFamily:T.M, fontSize:10, color:T.muted, marginTop:4 }}>
-                  sourceChain: {oracleData.sourceChain} · isSwap: {String(oracleData.isSwap)}
+              {oracleData.rejectionReason && (
+                <div style={{ fontFamily:T.M, fontSize:10, color:T.muted, marginTop:3 }}>
+                  {oracleData.rejectionReason}
                 </div>
               )}
             </div>
           )}
 
+          {/* Extras DAC8 — collapsed by default */}
+          {showExtras && (
+            <div style={{ marginTop:6, padding:'12px 14px', borderRadius:14, background:'rgba(255,255,255,0.025)', border:`1px solid ${T.border}`, animation:'rpFadeUp 0.2s var(--ease-spring) both' }}>
+              <div style={{ fontFamily:T.D, fontSize:10, fontWeight:700, textTransform:'uppercase' as const, letterSpacing:'0.08em', color:T.muted, marginBottom:8 }}>
+                MiCA/DAC8
+              </div>
+              <input type="text" placeholder="Rif. pagamento (es. INV-001)" value={paymentRef} onChange={e => setPaymentRef(e.target.value)} disabled={busy} style={{ ...C.input, marginBottom:6 }} />
+              <input type="text" placeholder="ID Fiscale" value={fiscalRef} onChange={e => setFiscalRef(e.target.value)} disabled={busy} style={C.input} />
+              {oracleData?.dac8Reportable && (
+                <div style={{ fontFamily:T.D, fontSize:10, color:T.amber, marginTop:5 }}>⚠ DAC8 reportable (≥ €1.000)</div>
+              )}
+            </div>
+          )}
+
           {/* Progress */}
-          {phase === 'wait_send' && <div style={{ margin:'0 0 8px' }}><BallisticProgress active={true} /></div>}
+          {phase === 'wait_send' && <div style={{ marginTop:6 }}><BallisticProgress active={true} /></div>}
           {(busy || phase === 'error') && (
-            <div style={{ marginBottom:8 }}>
+            <div style={{ marginTop:6 }}>
               {busy && <MicroStateBadge phase={phase} silent={false} />}
               {phase === 'error' && (
                 <TransactionStatusUI phase="error" error={txError} isTestnet={chainId === baseSepolia.id} onReset={reset} />
@@ -1079,15 +1018,15 @@ export default function TransferForm(): React.JSX.Element {
             </div>
           )}
 
-          {/* Smart CTA — rp-anim-4 */}
-          <div className="rp-anim-4" style={{ padding:'2px 0 4px' }}>
+          {/* ── CTA BUTTON ───────────────────────────────────────── */}
+          <div className="rp-anim-4" style={{ marginTop:8 }}>
             {ctaState === 'disconnected' ? (
               <ConnectButton.Custom>
                 {({ openConnectModal }) => (
                   <button
                     onClick={openConnectModal}
-                    className="rp-btn-primary rp-btn-glow-pink"
-                    style={{ width:'100%', padding:'17px', borderRadius:22, border:'none', fontFamily:T.D, fontSize:17, fontWeight:700, letterSpacing:'-0.02em', background:`linear-gradient(135deg, ${T.pink}, #ff6b9d)`, color:'#fff', cursor:'pointer' }}
+                    className="rp-btn-primary"
+                    style={{ width:'100%', padding:'18px', borderRadius:14, border:'none', fontFamily:T.D, fontSize:16, fontWeight:700, letterSpacing:'-0.01em', background:'rgba(255,255,255,0.06)', color:T.text, cursor:'pointer', transition:'all 0.15s' }}
                   >
                     Connetti wallet
                   </button>
@@ -1101,64 +1040,48 @@ export default function TransferForm(): React.JSX.Element {
                   : undefined
                 }
                 disabled={['busy','insufficient','no_recipient','no_amount','oracle_denied','no_liquidity'].includes(ctaState)}
-                className={ctaState === 'ready' ? `rp-btn-primary ${isSwapMode?'':'rp-btn-glow'}` : 'rp-btn-primary'}
+                className={ctaState === 'ready' ? 'rp-btn-primary' : ''}
                 style={{
-                  width:'100%', padding:'17px', borderRadius:22, border:'none',
-                  fontFamily:T.D, fontSize:17, fontWeight:700, letterSpacing:'-0.02em',
+                  width:'100%', padding:'18px', borderRadius:14, border:'none',
+                  fontFamily:T.D, fontSize:16, fontWeight:700, letterSpacing:'-0.01em',
                   cursor:['busy','insufficient','no_recipient','no_amount','oracle_denied','no_liquidity'].includes(ctaState)?'not-allowed':'pointer',
                   background:
-                    ctaState==='oracle_denied'  ? `${T.red}15`
-                    : ctaState==='no_liquidity' ? `${T.amber}15`
-                    : ctaState==='busy'||ctaState==='no_recipient'||ctaState==='no_amount' ? `${T.emerald}08`
-                    : ctaState==='insufficient' ? `${T.red}15`
-                    : ctaState==='wrong_network'? `linear-gradient(135deg, ${T.amber}, #ffcc00)`
-                    : isSwapMode                ? `linear-gradient(135deg, ${T.purple}, #c084fc)`
-                    :                             `linear-gradient(135deg, ${T.emerald}, #00cc80)`,
+                    ctaState==='ready' && isSwapMode  ? `linear-gradient(135deg, ${T.purple}, #c084fc)`
+                    : ctaState==='ready'              ? `linear-gradient(135deg, ${T.emerald}, #00cc80)`
+                    : ctaState==='wrong_network'      ? `linear-gradient(135deg, ${T.amber}, #ffcc00)`
+                    : ctaState==='oracle_denied'      ? `${T.red}15`
+                    : ctaState==='insufficient'       ? `${T.red}15`
+                    :                                   'rgba(255,255,255,0.04)',
                   color:
-                    ctaState==='oracle_denied'  ? `${T.red}60`
-                    : ctaState==='no_liquidity' ? `${T.amber}60`
-                    : ctaState==='busy'||ctaState==='no_recipient'||ctaState==='no_amount' ? `${T.emerald}30`
-                    : ctaState==='insufficient' ? `${T.red}60`
-                    : isSwapMode&&ctaState==='ready' ? '#fff'
-                    : '#000',
-                  boxShadow: ctaState==='ready' ? `0 4px 28px ${isSwapMode?T.purple:T.emerald}35` : 'none',
+                    ctaState==='ready'                ? (isSwapMode ? '#fff' : '#000')
+                    : ctaState==='wrong_network'      ? '#000'
+                    : ctaState==='oracle_denied'      ? `${T.red}60`
+                    : ctaState==='insufficient'       ? `${T.red}60`
+                    :                                   `${T.muted}80`,
+                  boxShadow: ctaState==='ready' ? `0 4px 20px ${isSwapMode?T.purple:T.emerald}25` : 'none',
                   transition:'all 0.2s ease',
                 }}
               >
                 {busy ? (
-                  <span style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:10 }}>
-                    <span className="rp-spinner" style={{ width:16, height:16, border:`2px solid ${T.emerald}25`, borderTopColor:'transparent', borderRadius:'50%', display:'inline-block' }} />
-                    <span style={{ fontFamily:T.D }}>
-                      {phase==='preflight'               ? '🛡 AML Check…'
+                  <span style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+                    <span className="rp-spinner" style={{ width:14, height:14, border:`2px solid rgba(255,255,255,0.2)`, borderTopColor:'transparent', borderRadius:'50%', display:'inline-block' }} />
+                    <span>
+                      {phase==='preflight'               ? 'AML Check…'
                        : phase==='approving'||phase==='wait_approve' ? 'Approvazione…'
-                       :                                   'Finalizzazione su chain…'}
+                       :                                   'Finalizzazione…'}
                     </span>
                   </span>
-                ) : ctaState==='oracle_denied'  ? '🚫 Transazione Bloccata'
-                  : ctaState==='no_liquidity'   ? '⚠ Liquidità insufficiente'
-                  : ctaState==='wrong_network'  ? (noContract ? `⚠ ${regChain?.chainName ?? 'Rete'} non disponibile` : 'Cambia rete ↑')
+                ) : ctaState==='oracle_denied'  ? 'Transazione Bloccata'
+                  : ctaState==='no_liquidity'   ? 'Liquidità insufficiente'
+                  : ctaState==='wrong_network'  ? (noContract ? `${regChain?.chainName ?? 'Rete'} non disponibile` : 'Cambia rete')
                   : ctaState==='insufficient'   ? 'Saldo insufficiente'
                   : ctaState==='no_recipient'   ? 'Inserisci destinatario'
-                  : ctaState==='no_amount'      ? 'Inserisci importo'
+                  : ctaState==='no_amount'      ? 'Inserisci un importo'
                   : needsApproval && !tokenIn?.isNative ? `Approva ${sym}`
-                  : isSwapMode                  ? `⚡ Swap & Invia ${sym} → ${symOut}`
+                  : isSwapMode                  ? `Swap & Invia ${sym} → ${symOut}`
                   :                               `Invia ${sym}`}
               </button>
             )}
-          </div>
-
-          {/* Footer — rp-anim-5 */}
-          <div className="rp-anim-5" style={{ display:'flex', justifyContent:'center', gap:12, padding:'10px 0 12px', flexWrap:'wrap' }}>
-            {[
-              { t:'🔒 FeeRouterV4',                c:T.muted+'60' },
-              { t:`⚡ ${regChain?.chainName ?? 'Base'}`, c:T.muted+'60' },
-              { t:'📋 DAC8/MiCA',                  c:T.muted+'60' },
-              { t:'🛡 AML Oracle',                  c:T.muted+'60' },
-              ...(isSwapMode ? [{ t:'🦄 Uniswap V3', c:T.purple+'80' }] : []),
-              ...(isConnected ? [{ t:'VASP ✓', c:T.emerald+'50' }] : []),
-            ].map(b => (
-              <span key={b.t} style={{ fontFamily:T.D, fontSize:10, fontWeight:600, color:b.c, letterSpacing:'0.02em' }}>{b.t}</span>
-            ))}
           </div>
         </div>
       </div>
