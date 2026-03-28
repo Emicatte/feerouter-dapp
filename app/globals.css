@@ -361,54 +361,59 @@ body {
 @keyframes rpFadeUp {
   from {
     opacity: 0;
-    transform: translate3d(0, 20px, 0);
+    transform: translate3d(0, 16px, 0);
+    filter: blur(6px);
   }
   to {
     opacity: 1;
     transform: translate3d(0, 0, 0);
+    filter: blur(0px);
   }
 }
 
 @keyframes rpFadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+  from { opacity: 0; filter: blur(4px); }
+  to   { opacity: 1; filter: blur(0px); }
 }
 
 @keyframes rpScaleIn {
   from {
     opacity: 0;
-    transform: translate3d(0, 12px, 0) scale3d(0.97, 0.97, 1);
+    transform: translate3d(0, 10px, 0) scale3d(0.97, 0.97, 1);
+    filter: blur(4px);
   }
   to {
     opacity: 1;
     transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
+    filter: blur(0px);
   }
 }
 
-/* Classi applicabili ai blocchi del TransferForm */
+/* Staggered fade-in — spring ease + blur cinematografico
+   Si attivano una sola volta al mount iniziale (tutti i pannelli sono always-mounted) */
 .rp-anim-0 {
-  animation: rpFadeUp 0.6s var(--ease-spring) both;
+  animation: rpFadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
   animation-delay: 0ms;
 }
 .rp-anim-1 {
-  animation: rpFadeUp 0.6s var(--ease-spring) both;
-  animation-delay: 80ms;
+  animation: rpFadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 70ms;
 }
 .rp-anim-2 {
-  animation: rpFadeUp 0.6s var(--ease-spring) both;
-  animation-delay: 160ms;
+  animation: rpFadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 140ms;
 }
 .rp-anim-3 {
-  animation: rpFadeUp 0.6s var(--ease-spring) both;
-  animation-delay: 240ms;
+  animation: rpFadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 210ms;
 }
 .rp-anim-4 {
-  animation: rpFadeUp 0.6s var(--ease-spring) both;
-  animation-delay: 320ms;
+  animation: rpFadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 280ms;
 }
 .rp-anim-5 {
-  animation: rpFadeUp 0.6s var(--ease-spring) both;
-  animation-delay: 400ms;
+  animation: rpFadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 350ms;
 }
 
 /* ============================================================
@@ -654,29 +659,6 @@ body {
     transform: none;
   }
 }
-/* ============================================================
-   WIDGET CONTAINER — disabilita le rp-anim-* interne
-   così solo il fade del parent (tabV) anima il contenuto,
-   eliminando scatti e flicker al cambio tab
-   ============================================================ */
-.widget-container .rp-anim-0,
-.widget-container .rp-anim-1,
-.widget-container .rp-anim-2,
-.widget-container .rp-anim-3,
-.widget-container .rp-anim-4,
-.widget-container .rp-anim-5 {
-  animation: none !important;
-  opacity: 1 !important;
-  transform: none !important;
-}
-
-/* Blocca rpFadeUp anche sui div con animazione inline diretta */
-.widget-container [style*="rpFadeUp"] {
-  animation: none !important;
-  opacity: 1 !important;
-  transform: none !important;
-}
-
 /* ============================================================
    FORM LABELS — Bold display font per Sell / Receive / Invia
    ============================================================ */
