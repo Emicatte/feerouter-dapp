@@ -17,8 +17,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy app code
 COPY . .
 
-# Create reports directory
-RUN mkdir -p /app/reports && chown -R rpagos:rpagos /app
+# Create reports directory and tmp for SQLite
+RUN mkdir -p /app/reports /tmp/data && chown -R rpagos:rpagos /app /tmp/data
 
 USER rpagos
 
@@ -28,4 +28,4 @@ HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
