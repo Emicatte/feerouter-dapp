@@ -12,6 +12,9 @@ import type { Variants, Transition } from 'framer-motion'
 import TransferForm from './TransferForm'
 import SwapModule from './SwapModule'
 import AccountHeader from './AccountHeader'
+import ComplianceOverlay from './ComplianceOverlay'
+import DevelopersOverlay from './DevelopersOverlay'
+import PricingOverlay from './PricingOverlay'
 
 
 
@@ -59,10 +62,10 @@ const C = {
 }
 
 type View = 'send' | 'swap' | 'command'
-type Overlay = null | 'about' | 'how' | 'security'
+type Overlay = null | 'about' | 'how' | 'security' | 'compliance' | 'developers' | 'pricing'
 
 const GRAD: React.CSSProperties = {
-  background: 'linear-gradient(135deg, #FF4C6A 0%, #8B5CF6 100%)',
+  background: 'linear-gradient(135deg, #FFFFFF 0%, #60A5FA 60%, #1D4ED8 100%)',
   WebkitBackgroundClip: 'text',
   WebkitTextFillColor: 'transparent',
 }
@@ -362,9 +365,12 @@ function Navbar({
 }) {
   const [hoveredLink, setHoveredLink] = useState<string | null>(null)
   const links: { key: Overlay; label: string }[] = [
-    { key: 'about',    label: 'Chi siamo' },
-    { key: 'how',      label: 'Come funziona' },
-    { key: 'security', label: 'Sicurezza' },
+    { key: 'about',      label: 'About' },
+    { key: 'how',        label: 'How It Works' },
+    { key: 'security',   label: 'Security' },
+    { key: 'compliance', label: 'Compliance' },
+    { key: 'developers', label: 'Developers' },
+    { key: 'pricing',    label: 'Pricing' },
   ]
 
   return (
@@ -531,23 +537,125 @@ function OverlayShell({ active, onClose, children }: { active: boolean; onClose:
 }
 
 function AboutOverlay() {
+  const stats = [
+    { label: 'Mainnet Contracts', value: 2 },
+    { label: 'Basescan Verified', value: 100, suffix: '%' },
+    { label: 'Chains Supported', value: 3, suffix: '+' },
+    { label: 'API Endpoints', value: 8, suffix: '+' },
+  ]
+
   return (
     <div>
-      <h2 style={{ fontFamily: C.D, fontSize: 24, fontWeight: 800, color: C.text, marginBottom: 16 }}>
-        Chi <span style={GRAD}>siamo</span>
-      </h2>
-      <p style={{ fontFamily: C.M, fontSize: 13, color: C.sub, lineHeight: 1.7, marginBottom: 16 }}>
-        RSends è un protocollo di automazione finanziaria non-custodial costruito su Base L2.
-        Consente trasferimenti programmabili, split routing automatico e compliance fiscale DAC8
-        integrata nativamente nello smart contract.
-      </p>
-      <p style={{ fontFamily: C.M, fontSize: 13, color: C.sub, lineHeight: 1.7, marginBottom: 16 }}>
-        Ogni transazione passa attraverso un Oracle AML/KYC prima di essere eseguita on-chain,
-        garantendo conformità MiCA e VASP senza sacrificare la decentralizzazione.
-      </p>
-      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' as const, marginTop: 20 }}>
-        {['Non-Custodial', 'DAC8 Compliant', 'MiCA Ready', 'Open Source', 'Base L2'].map(b => (
-          <span key={b} style={{ fontFamily: C.M, fontSize: 9, color: C.dim, padding: '4px 10px', borderRadius: 6, background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}` }}>{b}</span>
+      {/* ═══ A) Animated Headline ═══ */}
+      <motion.h2
+        style={{ fontFamily: C.D, fontSize: 26, fontWeight: 800, color: C.text, marginBottom: 24, lineHeight: 1.3 }}
+      >
+        {'Built by one. Trusted by design.'.split('').map((char, i) => (
+          <motion.span
+            key={i}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: i * 0.025, duration: 0.3, ease: EASE }}
+          >
+            {char}
+          </motion.span>
+        ))}
+      </motion.h2>
+
+      {/* ═══ B) Mission Block ═══ */}
+      <div style={{ marginBottom: 28 }}>
+        {[
+          'RSend exists because B2B Web3 payments shouldn\'t have to choose between speed and compliance. We believe on-chain finance deserves institutional-grade safeguards without sacrificing the decentralization that makes it powerful.',
+          'Every single transaction passes through a compliance Oracle before touching the blockchain. This isn\'t a post-hoc audit — it\'s pre-execution verification baked into the protocol\'s DNA.',
+          'Built on Base L2 for minimal costs and instant settlement, with a multi-chain architecture designed for global scale. One contract, many chains, zero compromise.',
+        ].map((p, i) => (
+          <motion.p
+            key={i}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.8 + i * 0.15, duration: 0.5, ease: EASE }}
+            style={{ fontFamily: C.M, fontSize: 12, color: C.sub, lineHeight: 1.7, marginBottom: 14 }}
+          >
+            {p}
+          </motion.p>
+        ))}
+      </div>
+
+      {/* ═══ C) Founder Card ═══ */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 1.3, duration: 0.5, ease: EASE }}
+        style={{
+          padding: '22px 20px', borderRadius: 16, marginBottom: 28,
+          background: 'linear-gradient(135deg, rgba(59,130,246,0.06) 0%, rgba(139,92,246,0.06) 50%, rgba(255,76,106,0.04) 100%)',
+          border: `1px solid ${C.border}`, position: 'relative', overflow: 'hidden',
+        }}
+      >
+        {/* Mesh gradient background */}
+        <div style={{
+          position: 'absolute', top: -40, right: -40, width: 120, height: 120,
+          background: 'radial-gradient(circle, rgba(59,130,246,0.12) 0%, transparent 70%)',
+          borderRadius: '50%', pointerEvents: 'none',
+        }} />
+        <div style={{ position: 'relative' }}>
+          <div style={{ fontFamily: C.M, fontSize: 9, fontWeight: 700, color: C.blue, textTransform: 'uppercase' as const, letterSpacing: '0.1em', marginBottom: 6 }}>
+            Founder & Solo Developer
+          </div>
+          <div style={{ fontFamily: C.M, fontSize: 12, color: C.sub, lineHeight: 1.6, marginBottom: 14 }}>
+            Designed, built, and deployed end-to-end — from Solidity contracts to React frontend to FastAPI backend. Every line of code written with compliance-first architecture in mind.
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const }}>
+            {['Solidity', 'Next.js', 'FastAPI', 'Foundry'].map((tech, i) => (
+              <motion.span
+                key={tech}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: 1.6 + i * 0.1, duration: 0.3 }}
+                style={{
+                  padding: '4px 10px', borderRadius: 6,
+                  background: 'rgba(255,255,255,0.04)', border: `1px solid ${C.border}`,
+                  fontFamily: C.M, fontSize: 9, color: C.dim,
+                }}
+              >
+                {tech}
+              </motion.span>
+            ))}
+            <a
+              href="https://github.com/Emicatte/feerouter-dapp"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: 'flex', alignItems: 'center', marginLeft: 4 }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill={C.dim}>
+                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z" />
+              </svg>
+            </a>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* ═══ D) Stats Counters ═══ */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+        {stats.map((s, i) => (
+          <motion.div
+            key={s.label}
+            initial={{ opacity: 0, y: 10 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: i * 0.1, duration: 0.4, ease: EASE }}
+            style={{
+              padding: '16px 10px', borderRadius: 14, textAlign: 'center' as const,
+              background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}`,
+            }}
+          >
+            <div style={{ fontFamily: C.D, fontSize: 24, fontWeight: 800, color: C.text }}>
+              {s.value}{s.suffix || ''}
+            </div>
+            <div style={{ fontFamily: C.M, fontSize: 9, color: C.dim, marginTop: 4 }}>
+              {s.label}
+            </div>
+          </motion.div>
         ))}
       </div>
     </div>
@@ -555,137 +663,337 @@ function AboutOverlay() {
 }
 
 function HowOverlay() {
+  const [expandedStep, setExpandedStep] = useState<number | null>(null)
+
   const steps = [
-    { n: '01', title: 'Connetti il wallet', desc: 'MetaMask, WalletConnect o qualsiasi wallet EVM-compatibile.', icon: '🔌' },
-    { n: '02', title: 'Configura la Smart Route', desc: 'Scegli destinazione, split percentuali e soglia minima.', icon: '🔀' },
-    { n: '03', title: 'Oracle AML Check', desc: 'Ogni transazione viene verificata in tempo reale dal nostro Oracle.', icon: '🛡' },
-    { n: '04', title: 'Esecuzione on-chain', desc: 'Lo smart contract FeeRouterV4 esegue lo split e il forwarding.', icon: '⚡' },
-    { n: '05', title: 'Compliance DAC8', desc: 'Il report fiscale viene generato automaticamente per ogni operazione.', icon: '📋' },
+    {
+      n: '01', title: 'Connect', desc: 'Link your wallet via RainbowKit — supports MetaMask, WalletConnect, Coinbase Wallet, and all major EVM wallets.', icon: '🔌',
+      detail: 'RSend uses wagmi v2 with RainbowKit for seamless wallet connections. Once connected, the app detects your chain (Base, Ethereum, Arbitrum) and configures the contract interface automatically. No API keys or registration required.',
+    },
+    {
+      n: '02', title: 'Verify', desc: 'The compliance Oracle screens the transaction and issues an EIP-712 cryptographic attestation.', icon: '🛡',
+      detail: 'Before any funds move, the Oracle performs AML screening, DAC8 reporting checks, and MiCA compliance verification. It returns a typed EIP-712 signature that the smart contract will independently verify. This ensures compliance is enforced at the protocol level, not just the API level.',
+    },
+    {
+      n: '03', title: 'Execute', desc: 'FeeRouterV4 verifies the signature, splits the payment (99.5% recipient, 0.5% fee), and settles instantly.', icon: '⚡',
+      detail: 'The smart contract checks the Oracle signature on-chain, executes the split routing according to your configuration, and emits events for the DAC8 reporting engine. Settlement is final in ~2 seconds on Base L2 with gas costs under $0.05.',
+    },
+  ]
+
+  const advancedFlows = [
+    { title: 'Swap & Forward', desc: 'Pay in ETH, recipient gets USDC. Automatic DEX routing with compliance.', icon: '🔄' },
+    { title: 'Auto-Split', desc: 'Programmable treasury routing — split payments across multiple destinations.', icon: '📊' },
+    { title: 'Sweeper', desc: 'Auto-forward incoming funds to configured destinations based on rules.', icon: '🧹' },
+    { title: 'DAC8 Reports', desc: 'Generate fiscal XML reports on demand for any transaction period.', icon: '📋' },
   ]
 
   return (
     <div>
-      <h2 style={{ fontFamily: C.D, fontSize: 24, fontWeight: 800, color: C.text, marginBottom: 24 }}>
-        Come <span style={GRAD}>funziona</span>
+      <h2 style={{ fontFamily: C.D, fontSize: 24, fontWeight: 800, color: C.text, marginBottom: 4 }}>
+        How It <span style={GRAD}>Works</span>
       </h2>
-      {steps.map((s, i) => (
-        <div key={s.n} style={{
-          display: 'flex', gap: 16, padding: '16px 0',
-          borderBottom: i < steps.length - 1 ? `1px solid ${C.border}` : 'none',
-        }}>
-          <div style={{
-            width: 42, height: 42, borderRadius: 12, flexShrink: 0,
-            background: `${C.blue}10`, border: `1px solid ${C.blue}15`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
-          }}>{s.icon}</div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-              <span style={{ fontFamily: C.M, fontSize: 9, color: C.purple, fontWeight: 700 }}>{s.n}</span>
-              <span style={{ fontFamily: C.D, fontSize: 14, fontWeight: 700, color: C.text }}>{s.title}</span>
+      <p style={{ fontFamily: C.M, fontSize: 12, color: C.dim, marginBottom: 28 }}>
+        Three steps from intent to settlement
+      </p>
+
+      {/* ═══ A) 3-Step Journey ═══ */}
+      <div style={{ marginBottom: 32 }}>
+        {steps.map((s, i) => (
+          <motion.div
+            key={s.n}
+            initial={{ opacity: 0, y: 16 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: i * 0.15, duration: 0.5, ease: EASE }}
+            style={{ position: 'relative', paddingLeft: 32, marginBottom: i < steps.length - 1 ? 0 : 0 }}
+          >
+            {/* Connecting line */}
+            {i < steps.length - 1 && (
+              <motion.div
+                initial={{ scaleY: 0 }}
+                whileInView={{ scaleY: 1 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.15 + 0.3, duration: 0.4 }}
+                style={{
+                  position: 'absolute', left: 14, top: 46, width: 2, height: 'calc(100% - 20px)',
+                  background: `linear-gradient(180deg, ${C.blue}40, ${C.blue}10)`,
+                  transformOrigin: 'top',
+                }}
+              />
+            )}
+
+            <div style={{ display: 'flex', gap: 14, padding: '16px 0' }}>
+              {/* Number badge */}
+              <div style={{
+                position: 'absolute', left: 0, top: 18,
+                width: 30, height: 30, borderRadius: 10, flexShrink: 0,
+                background: 'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(139,92,246,0.15))',
+                border: `1px solid ${C.blue}30`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontFamily: C.M, fontSize: 10, fontWeight: 700, color: C.blue,
+              }}>
+                {s.n}
+              </div>
+
+              {/* Content */}
+              <div style={{ flex: 1, marginLeft: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <span style={{ fontSize: 16 }}>{s.icon}</span>
+                  <span style={{ fontFamily: C.D, fontSize: 16, fontWeight: 700, color: C.text }}>{s.title}</span>
+                </div>
+                <p style={{ fontFamily: C.M, fontSize: 11, color: C.sub, lineHeight: 1.6, marginBottom: 8 }}>{s.desc}</p>
+
+                {/* Technical details toggle */}
+                <button
+                  onClick={() => setExpandedStep(expandedStep === i ? null : i)}
+                  style={{
+                    padding: '4px 10px', borderRadius: 6, border: `1px solid ${C.border}`,
+                    background: expandedStep === i ? 'rgba(59,130,246,0.08)' : 'transparent',
+                    color: expandedStep === i ? C.blue : C.dim,
+                    fontFamily: C.M, fontSize: 9, cursor: 'pointer', transition: 'all 0.2s',
+                  }}
+                >
+                  {expandedStep === i ? '▾ Hide details' : '▸ Technical details'}
+                </button>
+                <motion.div
+                  initial={false}
+                  animate={{ height: expandedStep === i ? 'auto' : 0, opacity: expandedStep === i ? 1 : 0 }}
+                  transition={{ duration: 0.3, ease: EASE }}
+                  style={{ overflow: 'hidden' }}
+                >
+                  <div style={{
+                    marginTop: 8, padding: '12px 14px', borderRadius: 10,
+                    background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}`,
+                    fontFamily: C.M, fontSize: 10, color: C.dim, lineHeight: 1.6,
+                  }}>
+                    {s.detail}
+                  </div>
+                </motion.div>
+              </div>
             </div>
-            <p style={{ fontFamily: C.M, fontSize: 11, color: C.dim, lineHeight: 1.5 }}>{s.desc}</p>
-          </div>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* ═══ B) Advanced Flows ═══ */}
+      <div>
+        <div style={{ fontFamily: C.M, fontSize: 9, fontWeight: 700, color: C.dim, textTransform: 'uppercase' as const, letterSpacing: '0.1em', marginBottom: 14 }}>
+          Advanced Flows
         </div>
-      ))}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          {advancedFlows.map((f, i) => (
+            <motion.div
+              key={f.title}
+              initial={{ opacity: 0, y: 10 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: i * 0.08, duration: 0.35, ease: EASE }}
+              whileHover={{ y: -3, rotateX: 2, boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}
+              style={{
+                padding: '16px', borderRadius: 14,
+                background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}`,
+                cursor: 'default', transition: 'all 0.3s ease',
+              }}
+            >
+              <div style={{ fontSize: 20, marginBottom: 8 }}>{f.icon}</div>
+              <div style={{ fontFamily: C.D, fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>{f.title}</div>
+              <div style={{ fontFamily: C.M, fontSize: 10, color: C.dim, lineHeight: 1.5 }}>{f.desc}</div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
 
 function SecurityOverlay() {
+  const [expandedLayer, setExpandedLayer] = useState<number | null>(null)
+  const [threatDone, setThreatDone] = useState(false)
+
+  useEffect(() => {
+    const t = setTimeout(() => setThreatDone(true), 3200)
+    return () => clearTimeout(t)
+  }, [])
+
+  const layers = [
+    { title: 'Blockchain Foundation', desc: 'Base L2 with Ethereum settlement finality', icon: '⛓', color: C.blue, detail: 'Transactions execute on Base L2 for minimal gas costs (~$0.01), with full security inherited from Ethereum L1. Settlement finality is guaranteed through the Optimism Bedrock architecture.' },
+    { title: 'Infrastructure', desc: 'HMAC-SHA256, rate limiting, Nginx SSL termination', icon: '🏗', color: C.amber, detail: 'All API requests are authenticated via HMAC-SHA256 signatures. Rate limiting prevents abuse. SSL termination at the edge with Nginx provides encrypted transport. Infrastructure is monitored 24/7.' },
+    { title: 'Smart Contract', desc: 'ReentrancyGuard, OpenZeppelin, FeeRouterV4', icon: '📝', color: C.purple, detail: 'FeeRouterV4.sol inherits from OpenZeppelin\'s battle-tested ReentrancyGuard and Ownable contracts. All state-changing functions are protected against re-entrancy attacks. The contract is verified on Basescan.' },
+    { title: 'Compliance Engine', desc: 'EIP-712 Oracle, AML/DAC8/MiCA screening', icon: '🛡', color: C.green, detail: 'Every transaction requires a valid EIP-712 typed signature from the compliance Oracle. The Oracle screens against AML databases, verifies DAC8 reporting requirements, and ensures MiCA compliance before any funds move.' },
+    { title: 'Monitoring', desc: 'Sentry, Prometheus, Z-score anomaly detection', icon: '📡', color: '#FF4C6A', detail: 'Real-time monitoring with Sentry for error tracking, Prometheus for metrics, and custom Z-score anomaly detection that flags unusual transaction patterns. Alerts are dispatched instantly for any deviation.' },
+  ]
+
+  const features = [
+    { icon: '🔮', title: 'Oracle-Gated TX', desc: 'Every transaction requires cryptographic approval from the compliance Oracle before execution.' },
+    { icon: '✅', title: 'On-Chain Verification', desc: 'Smart contract independently verifies Oracle signatures. No trust assumptions — verify, don\'t trust.' },
+    { icon: '📊', title: 'Anomaly Detection', desc: 'Z-score statistical analysis flags transactions deviating from normal patterns in real-time.' },
+    { icon: '🚦', title: 'Rate Limiting', desc: 'API and transaction-level rate limiting prevents abuse and protects infrastructure from attacks.' },
+    { icon: '🔐', title: 'HMAC Integrity', desc: 'All backend communications are HMAC-SHA256 signed, preventing request tampering and replay attacks.' },
+    { icon: '🏰', title: 'Infrastructure Security', desc: 'Nginx SSL termination, Docker isolation, automated backups, and least-privilege access controls.' },
+  ]
+
   return (
     <div>
-      <h2 style={{ fontFamily: C.D, fontSize: 24, fontWeight: 800, color: C.text, marginBottom: 8 }}>
-        <span style={GRAD}>Sicurezza</span> On-Chain
+      {/* ═══ A) Threat Landscape Intro ═══ */}
+      <motion.div
+        animate={{ opacity: threatDone ? 0 : 1, y: threatDone ? -20 : 0, height: threatDone ? 0 : 'auto' }}
+        transition={{ duration: 0.6, ease: EASE }}
+        style={{ overflow: 'hidden', marginBottom: threatDone ? 0 : 24 }}
+      >
+        <div style={{ textAlign: 'center', padding: '24px 0' }}>
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.6, ease: EASE }}
+            style={{ fontFamily: C.D, fontSize: 32, fontWeight: 800, color: C.red, marginBottom: 8 }}
+          >
+            $5.8 billion
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.4, duration: 0.5 }}
+            style={{ fontFamily: C.M, fontSize: 12, color: C.dim, marginBottom: 16 }}
+          >
+            lost to DeFi exploits and hacks since 2020
+          </motion.div>
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1.2, duration: 0.6, ease: EASE }}
+            style={{ fontFamily: C.D, fontSize: 18, fontWeight: 700, color: C.text }}
+          >
+            RSend was built differently.
+          </motion.div>
+        </div>
+      </motion.div>
+
+      <h2 style={{ fontFamily: C.D, fontSize: 24, fontWeight: 800, color: C.text, marginBottom: 4 }}>
+        <span style={GRAD}>Security</span> Architecture
       </h2>
-      <p style={{ fontFamily: C.M, fontSize: 12, color: C.dim, marginBottom: 24 }}>
-        Come RSendsForwarder.sol protegge i tuoi fondi
+      <p style={{ fontFamily: C.M, fontSize: 12, color: C.dim, marginBottom: 28 }}>
+        Five layers of defense protecting every transaction
       </p>
 
-      {/* Animated on-chain diagram */}
-      <div style={{
-        background: C.bg, borderRadius: 16, padding: '28px 20px',
-        border: `1px solid ${C.border}`, position: 'relative', overflow: 'hidden',
-      }}>
-        <svg width="100%" height="200" viewBox="0 0 600 200">
-          {/* Nodes */}
-          {/* User Wallet */}
-          <rect x="20" y="70" width="120" height="60" rx="14" fill="#111118" stroke="rgba(255,255,255,0.1)" strokeWidth="1" />
-          <text x="80" y="96" textAnchor="middle" fill="#E2E2F0" fontFamily="var(--font-display)" fontSize="11" fontWeight="700">User Wallet</text>
-          <text x="80" y="115" textAnchor="middle" fill="#4A4E64" fontFamily="var(--font-mono)" fontSize="8">MetaMask / WC</text>
+      {/* ═══ B) Security Layer Stack ═══ */}
+      <div style={{ marginBottom: 32 }}>
+        <div style={{ fontFamily: C.M, fontSize: 9, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14 }}>
+          Security Layer Stack
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column-reverse', gap: 6 }}>
+          {layers.map((layer, i) => (
+            <motion.div
+              key={layer.title}
+              initial={{ opacity: 0, x: -20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: i * 0.12, duration: 0.4, ease: EASE }}
+            >
+              <motion.button
+                onClick={() => setExpandedLayer(expandedLayer === i ? null : i)}
+                whileHover={{ y: -1 }}
+                style={{
+                  width: '100%', padding: '14px 16px', borderRadius: 14, cursor: 'pointer',
+                  background: expandedLayer === i ? `${layer.color}10` : 'rgba(255,255,255,0.02)',
+                  border: `1px solid ${expandedLayer === i ? `${layer.color}40` : C.border}`,
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  transition: 'all 0.25s ease', textAlign: 'left',
+                  boxShadow: expandedLayer === i ? `0 0 20px ${layer.color}15, inset 0 0 20px ${layer.color}05` : 'none',
+                }}
+              >
+                <div style={{
+                  width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                  background: `${layer.color}12`, border: `1px solid ${layer.color}25`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
+                }}>
+                  {layer.icon}
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontFamily: C.D, fontSize: 13, fontWeight: 700, color: C.text }}>{layer.title}</div>
+                  <div style={{ fontFamily: C.M, fontSize: 10, color: C.dim }}>{layer.desc}</div>
+                </div>
+                <div style={{ fontFamily: C.M, fontSize: 9, color: C.dim, padding: '2px 6px', borderRadius: 4, background: 'rgba(255,255,255,0.04)' }}>
+                  L{i + 1}
+                </div>
+              </motion.button>
+              <motion.div
+                initial={false}
+                animate={{ height: expandedLayer === i ? 'auto' : 0, opacity: expandedLayer === i ? 1 : 0 }}
+                transition={{ duration: 0.3, ease: EASE }}
+                style={{ overflow: 'hidden' }}
+              >
+                <div style={{
+                  margin: '6px 0 0 48px', padding: '12px 14px', borderRadius: 10,
+                  background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}`,
+                  fontFamily: C.M, fontSize: 11, color: C.sub, lineHeight: 1.6,
+                }}>
+                  {layer.detail}
+                </div>
+              </motion.div>
+            </motion.div>
+          ))}
+        </div>
 
-          {/* RSend Engine */}
-          <rect x="230" y="60" width="140" height="80" rx="16" fill="#16161f" stroke="rgba(59,130,246,0.25)" strokeWidth="1.5" />
-          <text x="300" y="92" textAnchor="middle" fill="#3B82F6" fontFamily="var(--font-display)" fontSize="10" fontWeight="700">⚡ RSends Engine</text>
-          <text x="300" y="108" textAnchor="middle" fill="#8A8FA8" fontFamily="var(--font-mono)" fontSize="8">FeeRouterV4.sol</text>
-          <text x="300" y="124" textAnchor="middle" fill="#4A4E64" fontFamily="var(--font-mono)" fontSize="7">Non-custodial</text>
-
-          {/* Dest 1 */}
-          <rect x="460" y="35" width="120" height="50" rx="12" fill="#111118" stroke="rgba(0,214,143,0.2)" strokeWidth="1" />
-          <text x="520" y="57" textAnchor="middle" fill="#00D68F" fontFamily="var(--font-display)" fontSize="10" fontWeight="600">Dest 1 (70%)</text>
-          <text x="520" y="72" textAnchor="middle" fill="#4A4E64" fontFamily="var(--font-mono)" fontSize="7">Operativo</text>
-
-          {/* Dest 2 */}
-          <rect x="460" y="115" width="120" height="50" rx="12" fill="#111118" stroke="rgba(139,92,246,0.2)" strokeWidth="1" />
-          <text x="520" y="137" textAnchor="middle" fill="#8B5CF6" fontFamily="var(--font-display)" fontSize="10" fontWeight="600">Dest 2 (30%)</text>
-          <text x="520" y="152" textAnchor="middle" fill="#4A4E64" fontFamily="var(--font-mono)" fontSize="7">Tasse</text>
-
-          {/* Flow lines */}
-          <line x1="140" y1="100" x2="230" y2="100" stroke="rgba(255,255,255,0.08)" strokeWidth="2" strokeDasharray="6,4" />
-          <line x1="370" y1="90" x2="460" y2="60" stroke="rgba(0,214,143,0.15)" strokeWidth="2" strokeDasharray="6,4" />
-          <line x1="370" y1="110" x2="460" y2="140" stroke="rgba(139,92,246,0.15)" strokeWidth="2" strokeDasharray="6,4" />
-
-          {/* Animated particles — wallet to engine */}
-          <circle r="3" fill="#3B82F6">
-            <animateMotion dur="2s" repeatCount="indefinite" path="M145,100 L225,100" />
-          </circle>
-          <circle r="2.5" fill="#3B82F6" opacity="0.5">
-            <animateMotion dur="2s" repeatCount="indefinite" path="M145,100 L225,100" begin="0.7s" />
-          </circle>
-
-          {/* Engine to Dest 1 */}
-          <circle r="3" fill="#00D68F">
-            <animateMotion dur="1.8s" repeatCount="indefinite" path="M375,90 L455,60" />
-          </circle>
-          <circle r="2" fill="#00D68F" opacity="0.5">
-            <animateMotion dur="1.8s" repeatCount="indefinite" path="M375,90 L455,60" begin="0.5s" />
-          </circle>
-
-          {/* Engine to Dest 2 */}
-          <circle r="2.5" fill="#8B5CF6">
-            <animateMotion dur="2.2s" repeatCount="indefinite" path="M375,110 L455,140" />
-          </circle>
-          <circle r="2" fill="#8B5CF6" opacity="0.4">
-            <animateMotion dur="2.2s" repeatCount="indefinite" path="M375,110 L455,140" begin="0.6s" />
-          </circle>
-        </svg>
-
-        {/* Trust label */}
-        <div style={{
-          textAlign: 'center', marginTop: 16,
-          fontFamily: C.M, fontSize: 10, color: C.green,
-          padding: '8px 16px', borderRadius: 10,
-          background: `${C.green}06`, border: `1px solid ${C.green}12`,
-          display: 'inline-flex', alignItems: 'center', gap: 6,
-          margin: '16px auto 0', width: 'fit-content',
-        }}>
-          🔒 Funds are never stored. The contract only routes. Non-custodial by design.
+        {/* Animated particle rising through layers */}
+        <div style={{ position: 'relative', height: 4, margin: '12px 0', overflow: 'hidden', borderRadius: 2, background: 'rgba(255,255,255,0.03)' }}>
+          <div style={{
+            width: 40, height: '100%',
+            background: `linear-gradient(90deg, transparent, ${C.green}, transparent)`,
+            animation: 'rpShimmer 2.5s linear infinite',
+            backgroundSize: '200% 100%',
+          }} />
         </div>
       </div>
 
-      {/* Security features */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 20 }}>
-        {[
-          { icon: '🛡', title: 'ReentrancyGuard', desc: 'Protezione da attacchi di re-entrancy' },
-          { icon: '🔑', title: 'Owner-only Config', desc: 'Solo il proprietario può configurare le regole' },
-          { icon: '⛽', title: 'Gas Guard', desc: 'Sospende lo sweep se il gas supera la soglia' },
-          { icon: '🚨', title: 'Emergency Withdraw', desc: 'Ritiro di emergenza in caso di necessità' },
-        ].map(f => (
-          <div key={f.title} style={{ padding: '14px 16px', borderRadius: 14, background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}` }}>
-            <div style={{ fontSize: 16, marginBottom: 6 }}>{f.icon}</div>
-            <div style={{ fontFamily: C.D, fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 3 }}>{f.title}</div>
-            <div style={{ fontFamily: C.M, fontSize: 9, color: C.dim, lineHeight: 1.4 }}>{f.desc}</div>
+      {/* ═══ C) Security Features Grid ═══ */}
+      <div style={{ marginBottom: 32 }}>
+        <div style={{ fontFamily: C.M, fontSize: 9, fontWeight: 700, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14 }}>
+          Security Features
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          {features.map((f, i) => (
+            <motion.div
+              key={f.title}
+              initial={{ opacity: 0, y: 12 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: i * 0.08, duration: 0.35, ease: EASE }}
+              whileHover={{ y: -4, boxShadow: '0 8px 32px rgba(59,130,246,0.1), 0 0 0 1px rgba(59,130,246,0.15)' }}
+              style={{
+                padding: '16px', borderRadius: 14,
+                background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}`,
+                cursor: 'default', transition: 'box-shadow 0.3s ease, transform 0.3s ease',
+              }}
+            >
+              <div style={{ fontSize: 18, marginBottom: 8 }}>{f.icon}</div>
+              <div style={{ fontFamily: C.D, fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 4 }}>{f.title}</div>
+              <div style={{ fontFamily: C.M, fontSize: 10, color: C.dim, lineHeight: 1.5 }}>{f.desc}</div>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+
+      {/* ═══ D) System Status ═══ */}
+      <div style={{
+        padding: '14px 18px', borderRadius: 14,
+        background: 'rgba(0,214,143,0.04)', border: `1px solid ${C.green}15`,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ position: 'relative', width: 8, height: 8 }}>
+            <div style={{ width: 8, height: 8, borderRadius: '50%', background: C.green }} />
+            <div style={{ position: 'absolute', inset: -4, borderRadius: '50%', border: `2px solid ${C.green}`, animation: 'rsPulse 2s ease infinite' }} />
           </div>
-        ))}
+          <span style={{ fontFamily: C.D, fontSize: 12, fontWeight: 700, color: C.green }}>All Systems Operational</span>
+        </div>
+        <a
+          href="https://basescan.org/address/0xB2174c6B1359434B9d8004Ca5740bcDDF4C8691D"
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ fontFamily: C.M, fontSize: 10, color: C.sub, textDecoration: 'none' }}
+        >
+          Contract Verified on Basescan ✅
+        </a>
       </div>
     </div>
   )
@@ -695,13 +1003,7 @@ function SecurityOverlay() {
 //  HERO TITLE — AnimatePresence mode="wait" for no overlap
 // ═══════════════════════════════════════════════════════════
 
-function HeroTitle({ view, setView }: { view: View; setView: (v: View) => void }) {
-  const base: React.CSSProperties = {
-    fontFamily: C.D, fontSize: 'clamp(40px, 7vw, 62px)',
-    fontWeight: 800, lineHeight: 1.05, letterSpacing: '-0.04em',
-    textAlign: 'center', color: C.text,
-  }
-
+function HeroTitle({ view, setView, isConnected }: { view: View; setView: (v: View) => void; isConnected: boolean }) {
   return (
     <div style={{ display: 'grid', placeItems: 'center', position: 'relative', width: '100%' }}>
       {/* Tagline */}
@@ -746,9 +1048,30 @@ function HeroTitle({ view, setView }: { view: View; setView: (v: View) => void }
       >
         Built for European Businesses.
       </motion.div>
+
+      {/* CTA — only when wallet not connected */}
+      {!isConnected && (
+        <motion.button
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.65, duration: 0.5, ease: EASE }}
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.98 }}
+          style={{
+            padding: '12px 32px', borderRadius: 14, border: 'none',
+            background: 'linear-gradient(135deg, #3B82F6, #8B5CF6)',
+            color: '#fff', fontFamily: C.D, fontSize: 14, fontWeight: 700,
+            cursor: 'pointer', letterSpacing: '-0.01em',
+            boxShadow: '0 4px 24px rgba(59,130,246,0.3)',
+            animation: 'rpCtaPulse 3s ease-in-out infinite',
+          }}
+        >
+          Start Sending →
+        </motion.button>
+      )}
     </div>
   )
-  }
+}
 
 
       
@@ -905,6 +1228,15 @@ export default function Home() {
       <OverlayShell active={activeOverlay === 'security'} onClose={() => setActiveOverlay(null)}>
         <SecurityOverlay />
       </OverlayShell>
+      <OverlayShell active={activeOverlay === 'compliance'} onClose={() => setActiveOverlay(null)}>
+        <ComplianceOverlay />
+      </OverlayShell>
+      <OverlayShell active={activeOverlay === 'developers'} onClose={() => setActiveOverlay(null)}>
+        <DevelopersOverlay />
+      </OverlayShell>
+      <OverlayShell active={activeOverlay === 'pricing'} onClose={() => setActiveOverlay(null)}>
+        <PricingOverlay />
+      </OverlayShell>
 
       {/* Main content — padded below navbar */}
       <main style={{
@@ -917,7 +1249,7 @@ export default function Home() {
 
         {/* Hero */}
         <div style={{ marginBottom: 28, width: '100%', maxWidth: 900 }}>
-          <HeroTitle view={view} setView={setView} />
+          <HeroTitle view={view} setView={setView} isConnected={isConnected} />
         </div>
 
         {/* === TAB SWITCHER — sliding pill indicator === */}
@@ -1041,38 +1373,134 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Footer */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.8, delay: 0.6, ease: EASE }}
-          style={{ marginTop: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}
-        >
-          <div style={{ width: 40, height: 1, background: 'rgba(255,255,255,0.08)' }} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const, justifyContent: 'center' }}>
+      </main>
+
+      {/* ═══════════════════════════════════════════════════════════
+          FOOTER
+         ═══════════════════════════════════════════════════════════ */}
+      <footer style={{
+        position: 'relative', zIndex: 1,
+        borderTop: `1px solid ${C.border}`,
+        padding: '48px 24px 24px',
+        maxWidth: 960, margin: '0 auto',
+      }}>
+        {/* 4-column grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 32, marginBottom: 36 }}>
+          {/* Product */}
+          <div>
+            <div style={{ fontFamily: C.D, fontSize: 11, fontWeight: 700, color: C.text, textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 14 }}>
+              Product
+            </div>
+            {['Send', 'Swap', 'Auto-Forward', 'Dashboard'].map(item => (
+              <div key={item} style={{ fontFamily: C.M, fontSize: 11, color: C.dim, marginBottom: 8, cursor: 'default' }}>{item}</div>
+            ))}
+          </div>
+
+          {/* Security */}
+          <div>
+            <div style={{ fontFamily: C.D, fontSize: 11, fontWeight: 700, color: C.text, textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 14 }}>
+              Security
+            </div>
             {[
-              { label: 'Base L2' },
-              { label: 'Ethereum' },
-              { label: 'Non-Custodial' },
-              { label: 'DAC8 Compliant' },
-              { label: 'Split Routing' },
-            ].map((b, i) => (
-              <div key={b.label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: C.M, fontSize: 9, letterSpacing: '0.06em', textTransform: 'uppercase' as const, color: 'rgba(255,255,255,0.28)' }}>
-                {i > 0 && <span style={{ width: 3, height: 3, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', display: 'inline-block' }} />}
-                {b.label}
+              { label: 'Architecture', action: () => setActiveOverlay('security') },
+              { label: 'Compliance', action: () => setActiveOverlay('compliance') },
+              { label: 'Audit Trail', action: undefined },
+            ].map(item => (
+              <div
+                key={item.label}
+                onClick={item.action}
+                style={{
+                  fontFamily: C.M, fontSize: 11, color: C.dim, marginBottom: 8,
+                  cursor: item.action ? 'pointer' : 'default',
+                  transition: 'color 0.15s',
+                }}
+                onMouseEnter={e => { if (item.action) e.currentTarget.style.color = C.sub }}
+                onMouseLeave={e => e.currentTarget.style.color = C.dim}
+              >
+                {item.label}
               </div>
             ))}
           </div>
-          <div style={{ fontFamily: C.M, fontSize: 9, color: 'rgba(255,255,255,0.16)', letterSpacing: '0.04em' }}>
-            RSends Protocol · Non-custodial · Audited
+
+          {/* Legal */}
+          <div>
+            <div style={{ fontFamily: C.D, fontSize: 11, fontWeight: 700, color: C.text, textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 14 }}>
+              Legal
+            </div>
+            {['Terms of Service', 'Privacy Policy'].map(item => (
+              <a key={item} href="#" style={{ display: 'block', fontFamily: C.M, fontSize: 11, color: C.dim, marginBottom: 8, textDecoration: 'none', transition: 'color 0.15s' }}
+                onMouseEnter={e => e.currentTarget.style.color = C.sub}
+                onMouseLeave={e => e.currentTarget.style.color = C.dim}
+              >
+                {item}
+              </a>
+            ))}
           </div>
-        </motion.div>
-      </main>
+
+          {/* Connect */}
+          <div>
+            <div style={{ fontFamily: C.D, fontSize: 11, fontWeight: 700, color: C.text, textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 14 }}>
+              Connect
+            </div>
+            <a href="https://github.com/Emicatte/feerouter-dapp" target="_blank" rel="noopener noreferrer"
+              style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: C.M, fontSize: 11, color: C.dim, marginBottom: 8, textDecoration: 'none', transition: 'color 0.15s' }}
+              onMouseEnter={e => e.currentTarget.style.color = C.sub}
+              onMouseLeave={e => e.currentTarget.style.color = C.dim}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+              GitHub
+            </a>
+            {['Twitter', 'Discord'].map(item => (
+              <a key={item} href="#" style={{ display: 'block', fontFamily: C.M, fontSize: 11, color: C.dim, marginBottom: 8, textDecoration: 'none', transition: 'color 0.15s' }}
+                onMouseEnter={e => e.currentTarget.style.color = C.sub}
+                onMouseLeave={e => e.currentTarget.style.color = C.dim}
+              >
+                {item}
+              </a>
+            ))}
+          </div>
+        </div>
+
+        {/* Compliance badge strip */}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, justifyContent: 'center', marginBottom: 20 }}>
+          {['MiCA', 'DAC8', 'EIP-712', 'Base L2'].map(badge => (
+            <span key={badge} style={{
+              padding: '4px 10px', borderRadius: 6,
+              background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`,
+              fontFamily: C.M, fontSize: 9, color: C.dim,
+            }}>
+              {badge}
+            </span>
+          ))}
+        </div>
+
+        {/* Bottom bar */}
+        <div style={{
+          borderTop: `1px solid ${C.border}`, paddingTop: 16,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexWrap: 'wrap' as const, gap: 6,
+          fontFamily: C.M, fontSize: 9, color: 'rgba(255,255,255,0.2)', letterSpacing: '0.02em',
+        }}>
+          <span>Built on Base L2</span>
+          <span style={{ opacity: 0.4 }}>·</span>
+          <span>&copy; 2026 RSend</span>
+          <span style={{ opacity: 0.4 }}>·</span>
+          <span>Contract: 0xB217...691D</span>
+          <a
+            href="https://basescan.org/address/0xB2174c6B1359434B9d8004Ca5740bcDDF4C8691D"
+            target="_blank" rel="noopener noreferrer"
+            style={{ color: C.green, textDecoration: 'none', fontSize: 9 }}
+          >
+            Verified ✅
+          </a>
+        </div>
+      </footer>
 
       <style>{`
         @keyframes rsPulse{0%{transform:scale(1);opacity:.8}50%{transform:scale(1.8);opacity:0}100%{transform:scale(1);opacity:0}}
         @keyframes holoShift{0%{background-position:0% 50%}100%{background-position:200% 50%}}
         @keyframes rsSpin{100%{transform:rotate(360deg)}}
+        @keyframes rpCtaPulse{0%,100%{transform:scale(1);box-shadow:0 4px 24px rgba(59,130,246,0.3)}50%{transform:scale(1.02);box-shadow:0 6px 32px rgba(59,130,246,0.45)}}
       `}</style>
     </>
   )
