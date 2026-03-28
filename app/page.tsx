@@ -4,7 +4,7 @@
 
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { useAccount, useChainId } from 'wagmi'
+import { useAccount, useChainId, useSwitchChain } from 'wagmi'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { Variants, Transition } from 'framer-motion'
 
@@ -71,6 +71,8 @@ const GRAD: React.CSSProperties = {
 //  MOTION CONFIG — Faster, more responsive transitions
 // ═══════════════════════════════════════════════════════════
 const EASE: [number, number, number, number] = [0.4, 0, 0.2, 1]
+// Apple/Linear-style spring easing — leggero overshooting, settle morbido
+const SPRING: [number, number, number, number] = [0.16, 1, 0.3, 1]
 
 const cinematicT: Transition = { duration: 0.45, ease: EASE }
 
@@ -84,6 +86,19 @@ const formV: Variants = {
   enter:  { opacity: 0, y: 12, scale: 0.97 },
   center: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.45, ease: EASE } },
   exit:   { opacity: 0, y: -8, scale: 0.97, transition: { duration: 0.3, ease: EASE } },
+}
+
+// Cross-fade CSS puro — tutti i pannelli sempre montati, zero mount/unmount
+const FADE_MS = 380
+const panelBase: React.CSSProperties = {
+  transition: `opacity ${FADE_MS}ms cubic-bezier(0.16,1,0.3,1)`,
+  willChange: 'opacity',
+}
+const panelActive: React.CSSProperties = {
+  ...panelBase, position: 'relative', opacity: 1, pointerEvents: 'auto', zIndex: 1,
+}
+const panelHidden: React.CSSProperties = {
+  ...panelBase, position: 'absolute', top: 0, left: 0, right: 0, opacity: 0, pointerEvents: 'none', zIndex: 0,
 }
 
 const overlayV: Variants = {
@@ -165,6 +180,171 @@ function ParticleIntro({ onDone }: { onDone: () => void }) {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
+//  NETWORK + GAS WIDGET — fixed top-right, below navbar
+// ═══════════════════════════════════════════════════════════
+const CHAINS = [
+  { id: 8453,  name: 'Base',         short: 'Base',     color: '#0052FF', rpc: 'https://mainnet.base.org' },
+  { id: 84532, name: 'Base Sepolia', short: 'Sepolia',  color: '#ffb800', rpc: 'https://sepolia.base.org', testnet: true },
+  { id: 1,     name: 'Ethereum',     short: 'Ethereum', color: '#627EEA', rpc: 'https://eth.llamarpc.com' },
+  { id: 42161, name: 'Arbitrum',     short: 'Arbitrum', color: '#28A0F0', rpc: 'https://arb1.arbitrum.io/rpc' },
+]
+
+function NetworkGasWidget() {
+  const chainId = useChainId()
+  const { switchChain } = useSwitchChain()
+  const { isConnected } = useAccount()
+  const [gas, setGas] = useState<number | null>(null)
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  const chain = CHAINS.find(c => c.id === chainId) ?? CHAINS[0]
+  const isTestnet = !!(chain as typeof CHAINS[number] & { testnet?: boolean }).testnet
+
+  // Gas polling
+  useEffect(() => {
+    const rpc = chain.rpc
+    const f = async () => {
+      try {
+        const r = await fetch(rpc, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_gasPrice', params: [] }) })
+        setGas(parseInt((await r.json()).result, 16) / 1e9)
+      } catch { /* */ }
+    }
+    f(); const iv = setInterval(f, 15000); return () => clearInterval(iv)
+  }, [chain.rpc])
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    const t = setTimeout(() => document.addEventListener('mousedown', h), 30)
+    return () => { clearTimeout(t); document.removeEventListener('mousedown', h) }
+  }, [open])
+
+  const gasLevel = gas === null ? 'unknown' : gas < 0.02 ? 'low' : gas < 0.1 ? 'med' : 'high'
+  const gasColor = gasLevel === 'low' ? C.green : gasLevel === 'med' ? '#ffb800' : gasLevel === 'high' ? '#FF4C6A' : C.dim
+
+  if (!isConnected) return null
+
+  return (
+    <div ref={ref} style={{
+      position: 'fixed', top: 68, right: 24, zIndex: 999,
+    }}>
+      {/* Trigger pill */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 0,
+          padding: 0, cursor: 'pointer',
+          background: 'rgba(12,12,30,0.85)',
+          backdropFilter: 'blur(16px)',
+          WebkitBackdropFilter: 'blur(16px)',
+          borderRadius: 12,
+          border: `1px solid ${open ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)'}`,
+          transition: 'all 0.2s ease',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Network section */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '7px 10px 7px 10px',
+          borderRight: '1px solid rgba(255,255,255,0.06)',
+        }}>
+          <div style={{ width: 7, height: 7, borderRadius: '50%', background: chain.color, boxShadow: `0 0 6px ${chain.color}60` }} />
+          <span style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.text }}>{chain.short}</span>
+          {isTestnet && (
+            <span style={{ fontFamily: C.M, fontSize: 8, fontWeight: 700, color: '#ffb800', background: 'rgba(255,184,0,0.1)', padding: '1px 4px', borderRadius: 3, lineHeight: '1.2' }}>TEST</span>
+          )}
+          <span style={{ color: C.dim, fontSize: 8, marginLeft: -2 }}>▾</span>
+        </div>
+
+        {/* Gas section */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 5,
+          padding: '7px 10px 7px 8px',
+        }}>
+          <div style={{ width: 5, height: 5, borderRadius: '50%', background: gasColor, boxShadow: `0 0 4px ${gasColor}50` }} />
+          <span style={{ fontFamily: C.M, fontSize: 10, color: gasColor, fontWeight: 600 }}>
+            {gas !== null ? gas.toFixed(4) : '—'}
+          </span>
+          <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>Gwei</span>
+        </div>
+      </button>
+
+      {/* Dropdown */}
+      {open && (
+        <motion.div
+          initial={{ opacity: 0, y: -6, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
+          style={{
+            position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 100,
+            minWidth: 220, background: '#111120',
+            border: '1px solid rgba(255,255,255,0.10)',
+            borderRadius: 14, overflow: 'hidden',
+            boxShadow: '0 16px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.03)',
+          }}
+        >
+          {/* Header */}
+          <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <span style={{ fontFamily: C.D, fontSize: 10, fontWeight: 700, color: C.dim, textTransform: 'uppercase' as const, letterSpacing: '0.08em' }}>Network</span>
+          </div>
+
+          {/* Chain list */}
+          {CHAINS.map(c => {
+            const active = chainId === c.id
+            const test = !!(c as typeof c & { testnet?: boolean }).testnet
+            return (
+              <button
+                key={c.id}
+                onClick={() => { switchChain({ chainId: c.id }); setOpen(false) }}
+                style={{
+                  width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                  padding: '10px 14px', background: active ? 'rgba(255,255,255,0.04)' : 'transparent',
+                  border: 'none', cursor: 'pointer', transition: 'background 0.12s',
+                  borderBottom: '1px solid rgba(255,255,255,0.04)',
+                }}
+                onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
+                onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
+              >
+                <div style={{ width: 8, height: 8, borderRadius: '50%', background: c.color, boxShadow: `0 0 6px ${c.color}40` }} />
+                <div style={{ flex: 1, textAlign: 'left' as const }}>
+                  <span style={{ fontFamily: C.D, fontSize: 12, fontWeight: 600, color: active ? C.text : C.sub }}>{c.name}</span>
+                  {test && (
+                    <span style={{ fontFamily: C.M, fontSize: 8, color: '#ffb800', marginLeft: 6 }}>testnet</span>
+                  )}
+                </div>
+                {active && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontFamily: C.M, fontSize: 10, color: gasColor }}>{gas !== null ? `${gas.toFixed(4)}` : '—'}</span>
+                    <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>gwei</span>
+                    <div style={{ width: 5, height: 5, borderRadius: '50%', background: C.green }} />
+                  </div>
+                )}
+              </button>
+            )
+          })}
+
+          {/* Gas legend */}
+          <div style={{ padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+            {[
+              { l: 'Low', c: C.green },
+              { l: 'Med', c: '#ffb800' },
+              { l: 'High', c: '#FF4C6A' },
+            ].map(g => (
+              <div key={g.l} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <div style={{ width: 4, height: 4, borderRadius: '50%', background: g.c }} />
+                <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>{g.l}</span>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
     </div>
   )
 }
@@ -501,8 +681,8 @@ function SecurityOverlay() {
           { icon: '🚨', title: 'Emergency Withdraw', desc: 'Ritiro di emergenza in caso di necessità' },
         ].map(f => (
           <div key={f.title} style={{ padding: '14px 16px', borderRadius: 14, background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}` }}>
-            <div style={{ fontSize: 16, marginBottom: 3 }}>{f.icon}</div>
-            <div style={{ fontFamily: C.D, fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 1 }}>{f.title}</div>
+            <div style={{ fontSize: 16, marginBottom: 6 }}>{f.icon}</div>
+            <div style={{ fontFamily: C.D, fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 3 }}>{f.title}</div>
             <div style={{ fontFamily: C.M, fontSize: 9, color: C.dim, lineHeight: 1.4 }}>{f.desc}</div>
           </div>
         ))}
@@ -522,42 +702,30 @@ function HeroTitle({ view, setView }: { view: View; setView: (v: View) => void }
     textAlign: 'center', color: C.text,
   }
 
-  const tagline: React.CSSProperties = {
-    fontFamily: C.D,
-    fontSize: 'clamp(36px, 6vw, 58px)',
-    fontWeight: 700,
-    letterSpacing: '-0.02em',
-    textAlign: 'center',
-    marginBottom: 4,
-    background: 'linear-gradient(135deg, #FFB547 0%, #8B5CF6 50%, #3B82F6 100%)',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-    backgroundClip: 'text',
-    lineHeight: 1.2,
-    wordSpacing: '0.15em',
-  }
-
-  const subtitle: React.CSSProperties = {
-    fontFamily: C.M,
-    fontSize: 'clamp(11px, 1.5vw, 13px)',
-    fontWeight: 500,
-    letterSpacing: '0.05em',
-    textAlign: 'center',
-    color: C.sub,
-    marginBottom: 1,
-    textTransform: 'uppercase',
-  }
-
   return (
     <div style={{ display: 'grid', placeItems: 'center', position: 'relative', width: '100%' }}>
-      {/* Tagline with gradient */}
+      {/* Tagline */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: EASE }}
-        style={tagline}
+        style={{
+          fontFamily: C.D,
+          fontSize: 'clamp(36px, 6vw, 58px)',
+          fontWeight: 700,
+          letterSpacing: '-0.02em',
+          textAlign: 'center',
+          marginBottom: 8,
+          lineHeight: 1.2,
+          wordSpacing: '0.15em',
+        }}
       >
-        Crypto payments. Fully compliant.
+        <span style={{
+          background: 'linear-gradient(135deg, #FFFFFF 0%, #60A5FA 60%, #1D4ED8 100%)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          backgroundClip: 'text',
+        }}>Crypto Payments. Fully Compliant.</span>
       </motion.div>
 
       {/* Subtitle */}
@@ -565,9 +733,18 @@ function HeroTitle({ view, setView }: { view: View; setView: (v: View) => void }
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: EASE, delay: 0.1 }}
-        style={subtitle}
+        style={{
+          fontFamily: C.M,
+          fontSize: 'clamp(11px, 1.5vw, 13px)',
+          fontWeight: 500,
+          letterSpacing: '0.05em',
+          textAlign: 'center',
+          color: C.sub,
+          marginBottom: 1,
+          textTransform: 'uppercase' as const,
+        }}
       >
-        Built for European businesses.
+        Built for European Businesses.
       </motion.div>
     </div>
   )
@@ -580,7 +757,7 @@ function HeroTitle({ view, setView }: { view: View; setView: (v: View) => void }
 
 
 // ═══════════════════════════════════════════════════════════
-//  COMMAND CENTER COMPONENTS
+//  COMMAND CENTER COMPONENTS — Jupiter-style compact
 // ═══════════════════════════════════════════════════════════
 function GasGuard() {
   const [gas, setGas] = useState<number | null>(null)
@@ -589,17 +766,16 @@ function GasGuard() {
     f(); const iv = setInterval(f, 15000); return () => clearInterval(iv)
   }, [])
   const lv = gas === null ? 'unknown' : gas < 0.01 ? 'optimal' : gas < 0.1 ? 'normal' : 'high'
-  const cfg: Record<string, { l: string; c: string; i: string }> = { optimal: { l: 'Optimal', c: C.green, i: '⚡' }, normal: { l: 'Normal', c: C.amber, i: '⚠' }, high: { l: 'Suspended', c: C.red, i: '⛔' }, unknown: { l: '—', c: C.dim, i: '?' } }
+  const cfg: Record<string, { l: string; c: string }> = { optimal: { l: 'Optimal', c: C.green }, normal: { l: 'Normal', c: C.amber }, high: { l: 'High', c: C.red }, unknown: { l: '—', c: C.dim } }
   const g = cfg[lv]
   return (
-    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '16px 18px' }}>
-      <div style={{ fontFamily: C.M, fontSize: 9, fontWeight: 700, color: C.dim, textTransform: 'uppercase' as const, letterSpacing: '0.1em', marginBottom: 10 }}>Gas Guard</div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ width: 38, height: 38, borderRadius: 10, background: `${g.c}10`, border: `1px solid ${g.c}20`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>{g.i}</div>
-        <div>
-          <span style={{ fontFamily: C.D, fontSize: 16, fontWeight: 700, color: g.c }}>{gas !== null ? `${gas.toFixed(4)} Gwei` : '—'}</span>
-          <span style={{ fontFamily: C.M, fontSize: 8, fontWeight: 600, color: g.c, background: `${g.c}12`, padding: '2px 6px', borderRadius: 4, marginLeft: 6 }}>{g.l}</span>
+    <div style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', borderRadius: 14, padding: '14px 16px', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.07)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: g.c, boxShadow: `0 0 6px ${g.c}60` }} />
+          <span style={{ fontFamily: C.M, fontSize: 12, fontWeight: 600, color: g.c }}>{gas !== null ? `${gas.toFixed(4)} Gwei` : '—'}</span>
         </div>
+        <span style={{ fontFamily: C.M, fontSize: 10, color: `${g.c}80` }}>{g.l}</span>
       </div>
     </div>
   )
@@ -609,23 +785,50 @@ function SmartRouteConfig({ address }: { address: string | undefined }) {
   const [dest, setDest] = useState(''); const [split, setSplit] = useState(false)
   const [pct, setPct] = useState('70'); const [dest2, setDest2] = useState('')
   const [thr, setThr] = useState('0.001'); const [saving, setSaving] = useState(false); const [saved, setSaved] = useState(false)
-  const inp: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 10, background: C.bg, border: `1px solid ${C.border}`, color: C.text, fontFamily: C.M, fontSize: 11, outline: 'none' }
+  const inp: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 10, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.14)', color: C.text, fontFamily: C.M, fontSize: 12, outline: 'none', boxSizing: 'border-box' as const }
   const save = async () => {
     if (!address || !dest.startsWith('0x')) return; setSaving(true)
     try { await fetch(`${BACKEND}/api/v1/forwarding/rules`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source_wallet: address, destination_wallet: dest, min_threshold: parseFloat(thr), gas_strategy: 'normal', max_gas_percent: 10, token_symbol: 'ETH', chain_id: 8453, split_enabled: split, split_percent: split ? parseInt(pct) : 100, split_destination: split ? dest2 : null }) }); setSaved(true); setTimeout(() => setSaved(false), 3000) } catch { /* */ }; setSaving(false)
   }
   const ok = dest.startsWith('0x') && !saving
   return (
-    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '18px 20px' }}>
-      <div style={{ fontFamily: C.M, fontSize: 9, fontWeight: 700, color: C.dim, textTransform: 'uppercase' as const, letterSpacing: '0.1em', marginBottom: 12 }}>Smart Route</div>
-      <div style={{ marginBottom: 10 }}><label style={{ fontFamily: C.M, fontSize: 9, color: C.dim, display: 'block', marginBottom: 3 }}>Destination {split && `(${pct}%)`}</label><input value={dest} onChange={e => setDest(e.target.value)} placeholder="0x..." style={inp} /></div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', marginBottom: split ? 10 : 0 }}>
-        <span style={{ fontFamily: C.D, fontSize: 11, color: C.sub }}>Split Routing</span>
-        <button onClick={() => setSplit(s => !s)} style={{ width: 36, height: 20, borderRadius: 10, background: split ? C.green : 'rgba(255,255,255,0.08)', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s' }}><div style={{ width: 14, height: 14, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: split ? 19 : 3, transition: 'left 0.2s' }} /></button>
+    <div className="rp-anim-2" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', borderRadius: 14, padding: '14px 16px', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.07)' }}>
+      {/* Destination */}
+      <div style={{ marginBottom: 10 }}>
+        <label style={{ fontFamily: C.D, fontSize: 11, fontWeight: 700, color: C.dim, textTransform: 'uppercase' as const, letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Destination {split && `(${pct}%)`}</label>
+        <input value={dest} onChange={e => setDest(e.target.value)} placeholder="0x..." style={inp} />
       </div>
-      {split && <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: 6, marginBottom: 10 }}><input type="number" value={pct} onChange={e => setPct(e.target.value)} min="1" max="99" style={{ ...inp, textAlign: 'center' as const, fontSize: 10, padding: '8px' }} /><input value={dest2} onChange={e => setDest2(e.target.value)} placeholder={`Dest 2 (${100 - parseInt(pct || '70')}%)`} style={{ ...inp, fontSize: 10, padding: '8px 10px' }} /></div>}
-      <div style={{ marginBottom: 12 }}><label style={{ fontFamily: C.M, fontSize: 9, color: C.dim, display: 'block', marginBottom: 3 }}>Min threshold (ETH)</label><input type="number" value={thr} onChange={e => setThr(e.target.value)} step="0.001" style={inp} /></div>
-      <button onClick={save} disabled={!ok} style={{ width: '100%', padding: '12px', borderRadius: 10, border: 'none', background: saved ? C.green : ok ? 'linear-gradient(135deg,#3B82F6,#8B5CF6)' : 'rgba(255,255,255,0.04)', color: saved ? '#000' : ok ? '#fff' : C.dim, fontFamily: C.D, fontSize: 13, fontWeight: 700, cursor: ok ? 'pointer' : 'not-allowed', transition: 'all 0.2s' }}>{saving ? '...' : saved ? '✓ Saved' : 'Activate Route'}</button>
+
+      {/* Split toggle */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: split ? 10 : 8 }}>
+        <span style={{ fontFamily: C.D, fontSize: 12, color: C.sub }}>Split Routing</span>
+        <button onClick={() => setSplit(s => !s)} style={{ width: 36, height: 20, borderRadius: 10, background: split ? C.green : 'rgba(255,255,255,0.08)', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s' }}>
+          <div style={{ width: 14, height: 14, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: split ? 19 : 3, transition: 'left 0.2s' }} />
+        </button>
+      </div>
+
+      {split && (
+        <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: 6, marginBottom: 10 }}>
+          <input type="number" value={pct} onChange={e => setPct(e.target.value)} min="1" max="99" style={{ ...inp, textAlign: 'center' as const, fontSize: 11 }} />
+          <input value={dest2} onChange={e => setDest2(e.target.value)} placeholder={`Dest 2 (${100 - parseInt(pct || '70')}%)`} style={{ ...inp, fontSize: 11 }} />
+        </div>
+      )}
+
+      {/* Threshold */}
+      <div style={{ marginBottom: 10 }}>
+        <label style={{ fontFamily: C.M, fontSize: 10, color: C.dim, display: 'block', marginBottom: 4 }}>Min threshold (ETH)</label>
+        <input type="number" value={thr} onChange={e => setThr(e.target.value)} step="0.001" style={inp} />
+      </div>
+
+      {/* CTA */}
+      <button onClick={save} disabled={!ok} style={{
+        width: '100%', padding: '14px', borderRadius: 14, border: 'none',
+        background: saved ? C.green : ok ? `linear-gradient(135deg, ${C.purple}, #c084fc)` : 'rgba(255,255,255,0.04)',
+        color: saved ? '#000' : ok ? '#fff' : 'rgba(255,255,255,0.35)',
+        fontFamily: C.D, fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em',
+        cursor: ok ? 'pointer' : 'not-allowed', transition: 'all 0.2s',
+        boxShadow: ok && !saved ? `0 4px 20px ${C.purple}25` : 'none',
+      }}>{saving ? '...' : saved ? '✓ Saved' : 'Activate Route'}</button>
     </div>
   )
 }
@@ -634,9 +837,25 @@ function ActivityFeed({ address }: { address: string | undefined }) {
   interface L { id: number; destination: string; amount: number; token: string; status: string; tx_hash: string | null; gas_percent: number | null }
   const [logs, setLogs] = useState<L[]>([])
   useEffect(() => { if (!address) return; const ld = () => fetch(`${BACKEND}/api/v1/forwarding/logs?wallet=${address}&limit=6`).then(r => r.ok ? r.json() : null).then(d => { if (d?.logs) setLogs(d.logs) }).catch(() => {}); ld(); const iv = setInterval(ld, 10000); return () => clearInterval(iv) }, [address])
-  const sc: Record<string, string> = { pending: C.amber, executing: C.blue, completed: C.green, failed: C.red, gas_too_high: '#FF8C00' }
-  if (!logs.length) return (<div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px', textAlign: 'center' as const }}><div style={{ fontSize: 20, marginBottom: 6 }}>📡</div><div style={{ fontFamily: C.D, fontSize: 12, color: C.dim }}>Waiting for transactions</div></div>)
-  return (<div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, overflow: 'hidden' }}><div style={{ padding: '12px 18px', borderBottom: `1px solid ${C.border}`, fontFamily: C.M, fontSize: 9, fontWeight: 700, color: C.dim, textTransform: 'uppercase' as const, letterSpacing: '0.1em' }}>Live Activity</div>{logs.map((l, i) => (<div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 18px', borderBottom: i < logs.length - 1 ? `1px solid ${C.border}` : 'none' }}><div style={{ width: 6, height: 6, borderRadius: '50%', background: sc[l.status] ?? C.dim, flexShrink: 0 }} /><div style={{ flex: 1, fontFamily: C.M, fontSize: 11, color: C.text }}>{l.amount?.toFixed(4)} {l.token} → {l.destination?.slice(0, 8)}…</div><span style={{ fontFamily: C.M, fontSize: 8, color: sc[l.status] ?? C.dim, textTransform: 'uppercase' as const }}>{l.status}</span>{l.tx_hash && <a href={`https://basescan.org/tx/${l.tx_hash}`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: C.M, fontSize: 9, color: C.sub, textDecoration: 'none' }}>↗</a>}</div>))}</div>)
+  const sc: Record<string, string> = { pending: '#ffb800', executing: C.blue, completed: C.green, failed: '#ff2d55', gas_too_high: '#FF8C00' }
+  if (!logs.length) return (
+    <div className="rp-anim-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: '28px 20px', textAlign: 'center' as const }}>
+      <div style={{ fontFamily: C.D, fontSize: 13, color: C.dim, marginBottom: 4 }}>Waiting for transactions</div>
+      <div style={{ fontFamily: C.M, fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>Activity will appear here</div>
+    </div>
+  )
+  return (
+    <div className="rp-anim-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, overflow: 'hidden' }}>
+      {logs.map((l, i) => (
+        <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderBottom: i < logs.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: sc[l.status] ?? C.dim, flexShrink: 0 }} />
+          <div style={{ flex: 1, fontFamily: C.M, fontSize: 12, color: C.text }}>{l.amount?.toFixed(4)} {l.token} → {l.destination?.slice(0, 8)}…</div>
+          <span style={{ fontFamily: C.M, fontSize: 9, color: sc[l.status] ?? C.dim, textTransform: 'uppercase' as const }}>{l.status}</span>
+          {l.tx_hash && <a href={`https://basescan.org/tx/${l.tx_hash}`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: C.M, fontSize: 9, color: C.sub, textDecoration: 'none' }}>↗</a>}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -673,6 +892,9 @@ export default function Home() {
       {/* Navbar */}
       <Navbar view={view} setView={setView} activeOverlay={activeOverlay} setActiveOverlay={setActiveOverlay} />
 
+      {/* Network + Gas — fixed top-right below navbar */}
+      {ready && <NetworkGasWidget />}
+
       {/* Overlays */}
       <OverlayShell active={activeOverlay === 'about'} onClose={() => setActiveOverlay(null)}>
         <AboutOverlay />
@@ -687,41 +909,38 @@ export default function Home() {
       {/* Main content — padded below navbar */}
       <main style={{
         minHeight: '100vh',
-        paddingTop: 'clamp(100px, 14vh, 160px)',
-        paddingBottom: 40, paddingLeft: 16, paddingRight: 16,
+        paddingTop: 'clamp(90px, 12vh, 140px)',
+        paddingBottom: 60, paddingLeft: 16, paddingRight: 16,
         display: 'flex', flexDirection: 'column', alignItems: 'center',
-        opacity: ready ? 1 : 0, transition: 'opacity 0.8s ease',
+        opacity: ready ? 1 : 0, transition: 'opacity 0.9s ease',
       }}>
 
         {/* Hero */}
-        <div style={{ marginBottom: 32, width: '100%', maxWidth: 900 }}>
+        <div style={{ marginBottom: 28, width: '100%', maxWidth: 900 }}>
           <HeroTitle view={view} setView={setView} />
         </div>
 
-        {/* === VIEW SWITCHER / GLASS BAR: Always visible after intro === */}
+        {/* === TAB SWITCHER — sliding pill indicator === */}
         {ready && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: EASE, delay: 0.1 }}
+            transition={{ duration: 0.5, ease: SPRING, delay: 0.15 }}
             style={{
               zIndex: 2,
               position: 'relative',
-              background: 'rgba(255,255,255,0.03)',
-              backdropFilter: 'blur(10px)',
-              WebkitBackdropFilter: 'blur(10px)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: 16,
-              marginBottom: 20,
-              padding: '6px 8px',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+              background: 'rgba(255,255,255,0.04)',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              border: '1px solid rgba(255,255,255,0.10)',
+              borderRadius: 18,
+              marginBottom: 28,
+              padding: '5px 6px',
+              boxShadow: '0 4px 24px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.06)',
               display: 'flex',
-              gap: 6,
+              gap: 2,
               alignItems: 'center',
               justifyContent: 'center',
-              flexWrap: 'wrap' as const,
-              minWidth: 'fit-content',
-              maxWidth: '100%',
             }}
           >
             {([
@@ -731,119 +950,123 @@ export default function Home() {
             ]).map((v) => (
               <motion.button
                 key={v.key}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+                whileTap={{ scale: 0.96 }}
                 onClick={() => setView(v.key)}
                 style={{
-                  padding: view === v.key ? '11px 24px' : '11px 20px',
-                  borderRadius: 12,
+                  position: 'relative',
+                  padding: '10px 22px',
+                  borderRadius: 13,
                   border: 'none',
-                  background: view === v.key
-                    ? `linear-gradient(135deg, ${C.purple} 0%, ${C.blue} 100%)`
-                    : 'rgba(255,255,255,0.02)',
-                  color: view === v.key ? '#fff' : C.text,
-                  opacity: view === v.key ? 1 : 0.6,
-                  boxShadow: view === v.key
-                    ? `0 4px 16px rgba(139,92,246,0.25)`
-                    : 'none',
+                  background: 'transparent',
+                  color: view === v.key ? '#fff' : 'rgba(255,255,255,0.45)',
                   fontFamily: C.D,
                   fontSize: 13,
                   fontWeight: 700,
                   letterSpacing: '-0.01em',
                   cursor: 'pointer',
-                  transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                  backdropFilter: 'blur(10px)',
                   outline: 'none',
+                  transition: 'color 0.22s ease',
+                  zIndex: 1,
                 }}
               >
-                {v.label}
+                {view === v.key && (
+                  <motion.div
+                    layoutId="tab-pill"
+                    style={{
+                      position: 'absolute', inset: 0,
+                      background: 'linear-gradient(135deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.07) 100%)',
+                      borderRadius: 13,
+                      border: '1px solid rgba(255,255,255,0.16)',
+                      boxShadow: '0 2px 10px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.12)',
+                    }}
+                    transition={{ type: 'spring', stiffness: 420, damping: 38 }}
+                  />
+                )}
+                <span style={{ position: 'relative', zIndex: 1 }}>{v.label}</span>
               </motion.button>
             ))}
           </motion.div>
         )}
 
-        {/* Content — STABLE CONTAINER with fixed sizing and AnimatePresence mode="wait" */}
-        <div style={{
+        {/* WidgetContainer — sempre montato, sfondo vetro fisso, cross-fade CSS puro */}
+        <div className="widget-container" style={{
           width: '100%',
-          minHeight: 440,
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'flex-start',
+          maxWidth: 480,
+          background: 'rgba(8,12,30,0.72)',
+          backdropFilter: 'blur(32px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(32px) saturate(180%)',
+          border: '1px solid rgba(255,255,255,0.18)',
+          borderRadius: 20,
+          boxShadow: '0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.15)',
+          overflow: 'hidden',
           position: 'relative',
         }}>
-          <AnimatePresence mode="wait">
-            {view === 'send' && (
-              <motion.div
-                key="c-send"
-                variants={formV}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                style={{ width: '100%', maxWidth: 480 }}
-              >
-                <TransferForm />
-              </motion.div>
-            )}
-            {view === 'swap' && (
-              <motion.div
-                key="c-swap"
-                variants={formV}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                style={{ width: '100%', maxWidth: 440 }}
-              >
-                <SwapModule onSwapComplete={() => {}} />
-              </motion.div>
-            )}
-            {view === 'command' && isConnected && (
-              <motion.div
-                key="c-cmd"
-                variants={formV}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                style={{ width: '100%', maxWidth: 800 }}
-              >
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 6 }}>
+          {/* Send — always mounted */}
+          <div style={view === 'send' ? panelActive : panelHidden}>
+            <TransferForm noCard />
+          </div>
+
+          {/* Swap — always mounted */}
+          <div style={view === 'swap' ? panelActive : panelHidden}>
+            <SwapModule noCard onSwapComplete={() => {}} />
+          </div>
+
+          {/* Command Center — always mounted */}
+          <div style={view === 'command' ? panelActive : panelHidden}>
+            {isConnected ? (
+              <div style={{ padding: '10px 10px 10px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
                   <GasGuard />
-                  <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '16px 18px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                    <div style={{ fontFamily: C.M, fontSize: 9, fontWeight: 700, color: C.dim, textTransform: 'uppercase' as const, letterSpacing: '0.1em', marginBottom: 8 }}>Stats</div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-                      <div><div style={{ fontFamily: C.D, fontSize: 18, fontWeight: 700, color: C.text }}>—</div><div style={{ fontFamily: C.M, fontSize: 8, color: C.dim }}>Sweeps today</div></div>
-                      <div><div style={{ fontFamily: C.D, fontSize: 18, fontWeight: 700, color: C.text }}>—</div><div style={{ fontFamily: C.M, fontSize: 8, color: C.dim }}>Volume 24h</div></div>
+                  <div style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', borderRadius: 14, padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-around' }}>
+                    <div style={{ textAlign: 'center' as const }}>
+                      <div style={{ fontFamily: C.D, fontSize: 18, fontWeight: 700, color: C.text }}>—</div>
+                      <div style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>Sweeps</div>
+                    </div>
+                    <div style={{ width: 1, height: 24, background: C.border }} />
+                    <div style={{ textAlign: 'center' as const }}>
+                      <div style={{ fontFamily: C.D, fontSize: 18, fontWeight: 700, color: C.text }}>—</div>
+                      <div style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>Vol 24h</div>
                     </div>
                   </div>
                 </div>
-                <div style={{ marginBottom: 6 }}><SmartRouteConfig address={address} /></div>
+                <div style={{ marginBottom: 8 }}><SmartRouteConfig address={address} /></div>
                 <ActivityFeed address={address} />
-              </motion.div>
-            )}
-            {view === 'command' && !isConnected && (
-              <motion.div
-                key="c-nocon"
-                variants={formV}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                style={{ textAlign: 'center', padding: 40, background: C.surface, borderRadius: 20, border: `1px solid ${C.border}`, maxWidth: 380 }}
-              >
-                <div style={{ fontSize: 28, marginBottom: 10 }}>🔌</div>
+              </div>
+            ) : (
+              <div style={{ textAlign: 'center', padding: 40 }}>
                 <div style={{ fontFamily: C.D, fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 4 }}>Connect wallet</div>
-                <div style={{ fontFamily: C.M, fontSize: 11, color: C.dim }}>To access RSends Command Center</div>
-              </motion.div>
+                <div style={{ fontFamily: C.M, fontSize: 11, color: C.dim }}>To access Command Center</div>
+              </div>
             )}
-          </AnimatePresence>
+          </div>
         </div>
 
         {/* Footer */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' as const, justifyContent: 'center', marginTop: 36 }}>
-          {[{ icon: '⚡', label: 'Base L2' }, { icon: '⟠', label: 'Ethereum' }, { icon: '🔷', label: 'Arbitrum' }, { icon: '🔒', label: 'Non-Custodial' }, { icon: '📋', label: 'DAC8' }, { icon: '🔀', label: 'Split Routing' }, { icon: '✓', label: 'VASP Ready', accent: true }].map(b => (
-            <div key={b.label} style={{ display: 'flex', alignItems: 'center', gap: 3, fontFamily: C.M, fontSize: 8, color: b.accent ? C.green : C.dim, background: b.accent ? `${C.green}06` : 'rgba(255,255,255,0.02)', border: `1px solid ${b.accent ? `${C.green}15` : C.border}`, borderRadius: 5, padding: '2px 7px' }}>
-              <span>{b.icon}</span><span>{b.label}</span>
-            </div>
-          ))}
-        </div>
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.8, delay: 0.6, ease: EASE }}
+          style={{ marginTop: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}
+        >
+          <div style={{ width: 40, height: 1, background: 'rgba(255,255,255,0.08)' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const, justifyContent: 'center' }}>
+            {[
+              { label: 'Base L2' },
+              { label: 'Ethereum' },
+              { label: 'Non-Custodial' },
+              { label: 'DAC8 Compliant' },
+              { label: 'Split Routing' },
+            ].map((b, i) => (
+              <div key={b.label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: C.M, fontSize: 9, letterSpacing: '0.06em', textTransform: 'uppercase' as const, color: 'rgba(255,255,255,0.28)' }}>
+                {i > 0 && <span style={{ width: 3, height: 3, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', display: 'inline-block' }} />}
+                {b.label}
+              </div>
+            ))}
+          </div>
+          <div style={{ fontFamily: C.M, fontSize: 9, color: 'rgba(255,255,255,0.16)', letterSpacing: '0.04em' }}>
+            RSends Protocol · Non-custodial · Audited
+          </div>
+        </motion.div>
       </main>
 
       <style>{`

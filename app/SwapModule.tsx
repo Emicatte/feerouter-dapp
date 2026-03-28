@@ -25,9 +25,9 @@ const C = {
   card:    '#0c0c1e',
   input:   '#080810',
   border:  'rgba(255,255,255,0.06)',
-  text:    '#e2e2f0',
-  sub:     '#8A8FA8',
-  dim:     '#4a4a6a',
+  text:    '#ffffff',
+  sub:     'rgba(255,255,255,0.80)',
+  dim:     'rgba(255,255,255,0.90)',
   pink:    '#ff007a',
   green:   '#00ffa3',
   red:     '#ff2d55',
@@ -96,9 +96,10 @@ interface PortfolioAsset {
 interface SwapModuleProps {
   onSwapComplete?: () => void
   portfolioAssets?: PortfolioAsset[]
+  noCard?: boolean
 }
 
-export default function SwapModule({ onSwapComplete, portfolioAssets }: SwapModuleProps) {
+export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: SwapModuleProps) {
   const { address, isConnected } = useAccount()
   const chainId = useChainId()
   const publicClient = usePublicClient()
@@ -342,15 +343,16 @@ export default function SwapModule({ onSwapComplete, portfolioAssets }: SwapModu
 
   if (!isConnected || !reg) return null
 
+  const cardStyle = noCard ? {} : { background: 'rgba(8,12,30,0.72)', backdropFilter: 'blur(32px) saturate(180%)', WebkitBackdropFilter: 'blur(32px) saturate(180%)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 20, overflow: 'hidden', boxShadow: '0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.15)' }
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 20, overflow: 'hidden', boxShadow: '0 16px 60px rgba(0,0,0,0.6)' }}>
+    <div style={cardStyle}>
       <div style={{ padding: '10px 10px 10px' }}>
 
         {/* ── SELL ─────────────────────────────────────────────── */}
         <div className="rp-anim-1">
           <div style={{
-            borderRadius: 14, background: 'rgba(255,255,255,0.025)', padding: '14px',
-            border: `1.5px solid ${C.border}`,
+            borderRadius: 14, background: 'rgba(255,255,255,0.05)', padding: '14px',
+            border: '1.5px solid rgba(255,255,255,0.14)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.07)',
           }}>
             {/* Top row: label + balance */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -410,21 +412,22 @@ export default function SwapModule({ onSwapComplete, portfolioAssets }: SwapModu
         <div className="rp-anim-2" style={{ display: 'flex', justifyContent: 'center', margin: '-4px 0', position: 'relative', zIndex: 2 }}>
           <button onClick={flip} disabled={busy} style={{
             width: 34, height: 34, borderRadius: 10,
-            background: C.card, border: `1.5px solid ${C.border}`,
+            background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+            border: '1.5px solid rgba(255,255,255,0.18)',
             color: C.dim, fontSize: 16, cursor: busy ? 'default' : 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'all 0.2s ease', boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+            transition: 'all 0.2s ease', boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.10)',
           }}
-            onMouseEnter={e => { if (!busy) { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; e.currentTarget.style.color = C.text } }}
-            onMouseLeave={e => { e.currentTarget.style.background = C.card; e.currentTarget.style.color = C.dim }}
+            onMouseEnter={e => { if (!busy) { e.currentTarget.style.background = 'rgba(255,255,255,0.14)'; e.currentTarget.style.color = C.text } }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = C.dim }}
           >⇅</button>
         </div>
 
         {/* ── BUY / RECEIVE ────────────────────────────────────── */}
         <div className="rp-anim-2">
           <div style={{
-            borderRadius: 14, background: 'rgba(255,255,255,0.025)', padding: '14px',
-            border: `1.5px solid ${C.border}`,
+            borderRadius: 14, background: 'rgba(255,255,255,0.05)', padding: '14px',
+            border: '1.5px solid rgba(255,255,255,0.14)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.07)',
           }}>
             {/* Top row: label + pool fee */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>

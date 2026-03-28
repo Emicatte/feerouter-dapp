@@ -14,10 +14,11 @@ import { motion, AnimatePresence } from 'framer-motion'
 const BACKEND = process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:8000'
 
 const C = {
-  bg:'#131313', surface:'#1b1b1b', card:'#1e1e1e',
-  border:'rgba(255,255,255,0.07)', text:'#E2E2F0',
-  sub:'#98A1C0', dim:'#5E5E5E', pink:'#FC74FE',
-  green:'#40B66B', red:'#FD766B', blue:'#4C82FB',
+  bg:'#080810', surface:'#0d0d1a', card:'rgba(8,12,30,0.72)',
+  border:'rgba(255,255,255,0.14)', text:'#ffffff',
+  sub:'rgba(255,255,255,0.80)', dim:'rgba(255,255,255,0.90)', pink:'#ff007a',
+  green:'#00ffa3', red:'#ff2d55', blue:'#3B82F6',
+  purple:'#a78bfa', amber:'#ffb800',
   D:'var(--font-display)', M:'var(--font-mono)',
 }
 
@@ -45,7 +46,7 @@ function ago(ts: string|null): string {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  pending: '#FFB800', executing: C.blue, completed: C.green,
+  pending: '#ffb800', executing: C.blue, completed: C.green,
   failed: C.red, gas_too_high: '#FF8C00',
 }
 
@@ -62,11 +63,11 @@ function Pipeline({ source, dest, status, amount, token }: {
     <div style={{ display:'flex', alignItems:'center', gap:0, padding:'16px 0' }}>
       {/* Source box */}
       <div style={{
-        padding:'12px 16px', borderRadius:14,
-        background:C.surface, border:`1px solid ${C.border}`,
-        minWidth:120, textAlign:'center' as const,
+        padding:'10px 14px', borderRadius:12,
+        background:C.card, border:`1px solid ${C.border}`,
+        minWidth:110, textAlign:'center' as const,
       }}>
-        <div style={{ fontFamily:C.M, fontSize:9, color:C.dim, marginBottom:4 }}>SOURCE</div>
+        <div style={{ fontFamily:C.M, fontSize:9, color:C.dim, marginBottom:3 }}>SOURCE</div>
         <div style={{ fontFamily:C.M, fontSize:11, fontWeight:600, color:C.text }}>{tr(source)}</div>
         {amount && <div style={{ fontFamily:C.M, fontSize:10, color:C.sub, marginTop:2 }}>{amount.toFixed(4)} {token}</div>}
       </div>
@@ -104,12 +105,12 @@ function Pipeline({ source, dest, status, amount, token }: {
 
       {/* Dest box */}
       <div style={{
-        padding:'12px 16px', borderRadius:14,
-        background: status === 'completed' ? `${C.green}08` : C.surface,
+        padding:'10px 14px', borderRadius:12,
+        background: status === 'completed' ? `${C.green}08` : C.card,
         border:`1px solid ${status === 'completed' ? `${C.green}20` : C.border}`,
-        minWidth:120, textAlign:'center' as const,
+        minWidth:110, textAlign:'center' as const,
       }}>
-        <div style={{ fontFamily:C.M, fontSize:9, color:C.dim, marginBottom:4 }}>DESTINATION</div>
+        <div style={{ fontFamily:C.M, fontSize:9, color:C.dim, marginBottom:3 }}>DEST</div>
         <div style={{ fontFamily:C.M, fontSize:11, fontWeight:600, color:C.text }}>{tr(dest)}</div>
       </div>
     </div>
@@ -190,20 +191,17 @@ export default function AutoForward({ onClose }: Props) {
 
   return (
     <div>
-      {/* Header */}
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20 }}>
-        <div>
-          <div style={{ fontFamily:C.D, fontSize:18, fontWeight:600, color:C.text }}>Auto-Forward</div>
-          <div style={{ fontFamily:C.M, fontSize:11, color:C.dim, marginTop:2 }}>
-            Trasferimento automatico dei fondi in entrata
-          </div>
-        </div>
+      {/* New Rule toggle — compact */}
+      <div className="rp-anim-1" style={{ display:'flex', alignItems:'center', justifyContent:'flex-end', marginBottom:10 }}>
         <button onClick={() => setShowCreate(s => !s)} style={{
-          padding:'8px 16px', borderRadius:12,
-          background:`${C.blue}10`, border:`1px solid ${C.blue}25`,
-          color:C.blue, fontFamily:C.D, fontSize:12, fontWeight:600, cursor:'pointer',
+          padding:'6px 14px', borderRadius:10,
+          background: showCreate ? 'rgba(255,255,255,0.06)' : `${C.purple}10`,
+          border:`1px solid ${showCreate ? C.border : `${C.purple}25`}`,
+          color: showCreate ? C.dim : C.purple,
+          fontFamily:C.D, fontSize:11, fontWeight:600, cursor:'pointer',
+          transition:'all 0.15s',
         }}>
-          {showCreate ? '✕ Chiudi' : '+ Nuova Regola'}
+          {showCreate ? '✕' : '+ Nuova Regola'}
         </button>
       </div>
 
@@ -213,36 +211,34 @@ export default function AutoForward({ onClose }: Props) {
           <motion.div
             initial={{ opacity:0, height:0 }} animate={{ opacity:1, height:'auto' }} exit={{ opacity:0, height:0 }}
             transition={{ type:'spring', bounce:0, duration:0.4 }}
-            style={{ overflow:'hidden', marginBottom:16 }}
+            style={{ overflow:'hidden', marginBottom:10 }}
           >
-            <div style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:16, padding:18 }}>
-              <div style={{ fontFamily:C.D, fontSize:13, fontWeight:600, color:C.text, marginBottom:12 }}>Nuova regola</div>
-
+            <div style={{ background:C.card, backdropFilter:'blur(32px) saturate(180%)', WebkitBackdropFilter:'blur(32px) saturate(180%)', border:'1px solid rgba(255,255,255,0.18)', borderRadius:14, padding:14, boxShadow:'0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.15)' }}>
               {/* Destination */}
-              <div style={{ marginBottom:10 }}>
-                <label style={{ fontFamily:C.M, fontSize:10, color:C.dim, display:'block', marginBottom:4 }}>Destinazione</label>
+              <div style={{ marginBottom:8 }}>
+                <label style={{ fontFamily:C.D, fontSize:10, fontWeight:700, color:C.dim, textTransform:'uppercase' as const, letterSpacing:'0.08em', display:'block', marginBottom:4 }}>Destinazione</label>
                 <input value={dest} onChange={e => setDest(e.target.value)} placeholder="0x..." style={{
-                  width:'100%', padding:'10px 14px', borderRadius:10,
-                  background:C.bg, border:`1px solid ${C.border}`, color:C.text,
+                  width:'100%', padding:'10px 12px', borderRadius:10, boxSizing:'border-box' as const,
+                  background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.14)', color:C.text,
                   fontFamily:C.M, fontSize:12, outline:'none',
                 }} />
               </div>
 
               {/* Threshold + Gas */}
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginBottom:12 }}>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:6, marginBottom:10 }}>
                 <div>
-                  <label style={{ fontFamily:C.M, fontSize:10, color:C.dim, display:'block', marginBottom:4 }}>Min ETH</label>
+                  <label style={{ fontFamily:C.M, fontSize:9, color:C.dim, display:'block', marginBottom:3 }}>Min ETH</label>
                   <input type="number" value={threshold} onChange={e => setThreshold(e.target.value)} style={{
-                    width:'100%', padding:'8px 10px', borderRadius:8,
-                    background:C.bg, border:`1px solid ${C.border}`, color:C.text,
+                    width:'100%', padding:'8px 10px', borderRadius:8, boxSizing:'border-box' as const,
+                    background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.14)', color:C.text,
                     fontFamily:C.M, fontSize:11, outline:'none',
                   }} />
                 </div>
                 <div>
-                  <label style={{ fontFamily:C.M, fontSize:10, color:C.dim, display:'block', marginBottom:4 }}>Gas Strategy</label>
+                  <label style={{ fontFamily:C.M, fontSize:9, color:C.dim, display:'block', marginBottom:3 }}>Gas</label>
                   <select value={gasStrategy} onChange={e => setGasStrategy(e.target.value)} style={{
-                    width:'100%', padding:'8px 10px', borderRadius:8,
-                    background:C.bg, border:`1px solid ${C.border}`, color:C.text,
+                    width:'100%', padding:'8px 10px', borderRadius:8, boxSizing:'border-box' as const,
+                    background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.14)', color:C.text,
                     fontFamily:C.M, fontSize:11, outline:'none',
                   }}>
                     <option value="fast">Fast</option>
@@ -251,20 +247,23 @@ export default function AutoForward({ onClose }: Props) {
                   </select>
                 </div>
                 <div>
-                  <label style={{ fontFamily:C.M, fontSize:10, color:C.dim, display:'block', marginBottom:4 }}>Max Gas %</label>
+                  <label style={{ fontFamily:C.M, fontSize:9, color:C.dim, display:'block', marginBottom:3 }}>Max %</label>
                   <input type="number" value={maxGas} onChange={e => setMaxGas(e.target.value)} style={{
-                    width:'100%', padding:'8px 10px', borderRadius:8,
-                    background:C.bg, border:`1px solid ${C.border}`, color:C.text,
+                    width:'100%', padding:'8px 10px', borderRadius:8, boxSizing:'border-box' as const,
+                    background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.14)', color:C.text,
                     fontFamily:C.M, fontSize:11, outline:'none',
                   }} />
                 </div>
               </div>
 
               <button onClick={createRule} disabled={!dest.startsWith('0x')} style={{
-                width:'100%', padding:'12px', borderRadius:12,
-                background: dest.startsWith('0x') ? C.blue : 'rgba(255,255,255,0.04)',
-                border:'none', color: dest.startsWith('0x') ? '#fff' : C.dim,
-                fontFamily:C.D, fontSize:13, fontWeight:600, cursor: dest.startsWith('0x') ? 'pointer' : 'not-allowed',
+                width:'100%', padding:'14px', borderRadius:14, border:'none',
+                background: dest.startsWith('0x') ? `linear-gradient(135deg, ${C.purple}, #c084fc)` : 'rgba(255,255,255,0.04)',
+                color: dest.startsWith('0x') ? '#fff' : 'rgba(255,255,255,0.35)',
+                fontFamily:C.D, fontSize:14, fontWeight:700, letterSpacing:'-0.01em',
+                cursor: dest.startsWith('0x') ? 'pointer' : 'not-allowed',
+                transition:'all 0.2s',
+                boxShadow: dest.startsWith('0x') ? `0 4px 20px ${C.purple}25` : 'none',
               }}>
                 Crea Regola
               </button>
@@ -275,27 +274,24 @@ export default function AutoForward({ onClose }: Props) {
 
       {/* Active Rules */}
       {rules.length > 0 && (
-        <div style={{ marginBottom:20 }}>
-          <div style={{ fontFamily:C.D, fontSize:13, fontWeight:600, color:C.sub, marginBottom:10 }}>
-            Regole attive ({rules.filter(r => r.is_active).length})
-          </div>
+        <div style={{ marginBottom:10 }}>
           {rules.map(r => (
             <div key={r.id} style={{
-              display:'flex', alignItems:'center', gap:12,
-              padding:'12px 14px', borderRadius:14,
-              background:C.surface, border:`1px solid ${C.border}`,
-              marginBottom:6, opacity: r.is_active ? 1 : 0.4,
+              display:'flex', alignItems:'center', gap:10,
+              padding:'11px 14px', borderRadius:12,
+              background:C.card, backdropFilter:'blur(24px) saturate(160%)', WebkitBackdropFilter:'blur(24px) saturate(160%)', border:'1px solid rgba(255,255,255,0.16)',
+              marginBottom:4, opacity: r.is_active ? 1 : 0.4, boxShadow:'inset 0 1px 0 rgba(255,255,255,0.10)',
             }}>
               <div style={{ flex:1 }}>
                 <div style={{ fontFamily:C.M, fontSize:11, color:C.text }}>
                   {tr(r.source_wallet)} → {tr(r.destination_wallet)}
                 </div>
                 <div style={{ fontFamily:C.M, fontSize:9, color:C.dim, marginTop:2 }}>
-                  Min: {r.min_threshold} {r.token_symbol} · Gas: {r.gas_strategy} · Max fee: {r.max_gas_percent}%
+                  Min: {r.min_threshold} {r.token_symbol} · {r.gas_strategy}
                 </div>
               </div>
               <button onClick={() => toggleRule(r.id, r.is_active)} style={{
-                padding:'5px 12px', borderRadius:8,
+                padding:'4px 10px', borderRadius:8,
                 background: r.is_active ? `${C.green}10` : 'rgba(255,255,255,0.04)',
                 border:`1px solid ${r.is_active ? `${C.green}25` : C.border}`,
                 color: r.is_active ? C.green : C.dim,
@@ -308,24 +304,19 @@ export default function AutoForward({ onClose }: Props) {
         </div>
       )}
 
-      {/* Recent Sweeps with Pipeline */}
+      {/* Recent Sweeps */}
       <div>
-        <div style={{ fontFamily:C.D, fontSize:13, fontWeight:600, color:C.sub, marginBottom:8 }}>
-          Sweep recenti
-        </div>
-
         {loading && logs.length === 0 ? (
-          <div style={{ padding:24, textAlign:'center' as const, fontFamily:C.D, fontSize:12, color:C.dim }}>
+          <div style={{ padding:20, textAlign:'center' as const, fontFamily:C.D, fontSize:12, color:C.dim }}>
             Caricamento…
           </div>
         ) : logs.length === 0 ? (
           <div style={{
-            padding:32, textAlign:'center' as const,
-            background:C.surface, borderRadius:16, border:`1px solid ${C.border}`,
+            padding:28, textAlign:'center' as const,
+            background:C.card, backdropFilter:'blur(32px) saturate(180%)', WebkitBackdropFilter:'blur(32px) saturate(180%)', borderRadius:14, border:'1px solid rgba(255,255,255,0.16)', boxShadow:'0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.12)',
           }}>
-            <div style={{ fontSize:24, marginBottom:8 }}>⚡</div>
-            <div style={{ fontFamily:C.D, fontSize:13, color:C.dim }}>Nessuno sweep ancora</div>
-            <div style={{ fontFamily:C.M, fontSize:10, color:C.dim, marginTop:4, opacity:0.6 }}>
+            <div style={{ fontFamily:C.D, fontSize:13, color:C.dim }}>Nessuno sweep</div>
+            <div style={{ fontFamily:C.M, fontSize:10, color:`${C.dim}60`, marginTop:4 }}>
               Crea una regola e invia fondi al wallet sorgente
             </div>
           </div>
@@ -338,45 +329,21 @@ export default function AutoForward({ onClose }: Props) {
                 animate={{ opacity:1, y:0 }}
                 transition={{ delay: i*0.05 }}
               >
-                <Pipeline
-                  source={address!}
-                  dest={log.destination}
-                  status={log.status}
-                  amount={log.amount}
-                  token={log.token}
-                />
-
-                {/* Status + Details row */}
+                <Pipeline source={address!} dest={log.destination} status={log.status} amount={log.amount} token={log.token} />
                 <div style={{
                   display:'flex', alignItems:'center', justifyContent:'space-between',
-                  padding:'0 8px 12px',
+                  padding:'0 8px 10px',
                   borderBottom: i < logs.length-1 ? `1px solid ${C.border}` : 'none',
                 }}>
                   <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                    <div style={{
-                      width:6, height:6, borderRadius:'50%',
-                      background: STATUS_COLORS[log.status] ?? C.dim,
-                      boxShadow: `0 0 4px ${STATUS_COLORS[log.status] ?? C.dim}40`,
-                    }} />
-                    <span style={{
-                      fontFamily:C.M, fontSize:10, fontWeight:600,
-                      color: STATUS_COLORS[log.status] ?? C.dim,
-                      textTransform:'uppercase' as const,
-                    }}>{log.status}</span>
-                    {log.gas_percent && (
-                      <span style={{ fontFamily:C.M, fontSize:9, color:C.dim }}>
-                        · Gas: {log.gas_percent.toFixed(1)}%
-                      </span>
-                    )}
+                    <div style={{ width:6, height:6, borderRadius:'50%', background: STATUS_COLORS[log.status] ?? C.dim }} />
+                    <span style={{ fontFamily:C.M, fontSize:10, fontWeight:600, color: STATUS_COLORS[log.status] ?? C.dim, textTransform:'uppercase' as const }}>{log.status}</span>
                   </div>
-
                   <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                     <span style={{ fontFamily:C.M, fontSize:9, color:C.dim }}>{ago(log.created_at)}</span>
                     {log.tx_hash && (
                       <a href={`https://basescan.org/tx/${log.tx_hash}`} target="_blank" rel="noopener noreferrer"
-                        style={{ fontFamily:C.M, fontSize:9, color:C.sub, textDecoration:'none' }}>
-                        ↗ TX
-                      </a>
+                        style={{ fontFamily:C.M, fontSize:9, color:C.sub, textDecoration:'none' }}>↗</a>
                     )}
                   </div>
                 </div>

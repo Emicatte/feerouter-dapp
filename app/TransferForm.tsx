@@ -36,8 +36,8 @@ const T = {
   amber:   '#ffb800',
   pink:    '#ff007a',
   purple:  '#a78bfa',
-  muted:   '#4a4a6a',
-  text:    '#e2e2f0',
+  muted:   'rgba(255,255,255,0.90)',
+  text:    '#ffffff',
   D:       'var(--font-display)',
   M:       'var(--font-mono)',
 }
@@ -357,7 +357,7 @@ function QuotePanel({ quote, tokenOut, isSwap }: {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-export default function TransferForm(): React.JSX.Element {
+export default function TransferForm({ noCard }: { noCard?: boolean }): React.JSX.Element {
   const { address, isConnected } = useAccount()
   const chainId                  = useChainId()
   const { switchChain }          = useSwitchChain()
@@ -781,17 +781,17 @@ export default function TransferForm(): React.JSX.Element {
     :                                         'ready'
 
   const C = {
-    card:  { borderRadius:20, background:T.card, border:`1px solid ${T.border}`, overflow:'hidden' as const, boxShadow:`0 16px 60px rgba(0,0,0,0.6)` } satisfies React.CSSProperties,
-    box:   { borderRadius:14, background:focused?'rgba(255,255,255,0.04)':'rgba(255,255,255,0.025)', padding:'14px 14px', border:'1.5px solid', borderColor:focused?`${T.emerald}35`:`${T.border}`, transition:'all 0.2s ease', cursor:'text', boxShadow:focused?`0 0 0 3px ${T.emerald}08`:'none' } satisfies React.CSSProperties,
-    box2:  { borderRadius:14, background:'rgba(255,255,255,0.025)', padding:'14px 14px', border:`1.5px solid ${T.border}` } satisfies React.CSSProperties,
+    card:  { borderRadius:20, background:'rgba(8,12,30,0.72)', backdropFilter:'blur(32px) saturate(180%)', WebkitBackdropFilter:'blur(32px) saturate(180%)', border:'1px solid rgba(255,255,255,0.18)', overflow:'hidden' as const, boxShadow:'0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.15)' } satisfies React.CSSProperties,
+    box:   { borderRadius:14, background:focused?'rgba(255,255,255,0.08)':'rgba(255,255,255,0.04)', padding:'14px 14px', border:'1.5px solid', borderColor:focused?`${T.emerald}60`:'rgba(255,255,255,0.14)', transition:'all 0.2s ease', cursor:'text', boxShadow:focused?`0 0 0 3px ${T.emerald}12`:'inset 0 1px 0 rgba(255,255,255,0.07)' } satisfies React.CSSProperties,
+    box2:  { borderRadius:14, background:'rgba(255,255,255,0.04)', padding:'14px 14px', border:'1.5px solid rgba(255,255,255,0.12)' } satisfies React.CSSProperties,
     row:   { display:'flex', alignItems:'center', justifyContent:'space-between' } satisfies React.CSSProperties,
-    input: { width:'100%', background:'rgba(0,0,0,0.3)', border:`1px solid ${T.border}`, borderRadius:10, padding:'10px 12px', color:T.text, fontSize:13, outline:'none', transition:'all 0.2s ease', fontFamily:T.M, boxSizing:'border-box' as const } satisfies React.CSSProperties,
+    input: { width:'100%', background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:10, padding:'10px 12px', color:T.text, fontSize:13, outline:'none', transition:'all 0.2s ease', fontFamily:T.M, boxSizing:'border-box' as const, backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)' } satisfies React.CSSProperties,
   }
 
   // ── SUCCESS ───────────────────────────────────────────────────────────
   if (phase === 'done' && report) return (
     <>
-      <div style={C.card} className="rp-anim-0">
+      <div style={noCard ? {} : C.card} className="rp-anim-0">
         <div style={{ padding:'18px 20px 16px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', gap:10 }}>
           <div style={{ width:9, height:9, borderRadius:'50%', background:T.emerald, boxShadow:`0 0 12px ${T.emerald}` }} />
           <span style={{ fontFamily:T.D, color:T.emerald, fontSize:13, fontWeight:700, textTransform:'uppercase' as const, letterSpacing:'0.06em' }}>Pagamento Confermato</span>
@@ -827,7 +827,7 @@ export default function TransferForm(): React.JSX.Element {
   // ── MAIN FORM — Jupiter-style: no header, direct Sell/Buy ──────────
   return (
     <>
-      <div style={C.card}>
+      <div style={noCard ? {} : C.card}>
         <div style={{ padding:'10px 10px 10px' }}>
 
           {/* Gas warning L1 — only when needed */}
@@ -887,16 +887,17 @@ export default function TransferForm(): React.JSX.Element {
               }}
               style={{
                 width:34, height:34, borderRadius:10,
-                background: T.card,
-                border:`1.5px solid ${T.border}`,
+                background: 'rgba(255,255,255,0.08)',
+                backdropFilter:'blur(16px)', WebkitBackdropFilter:'blur(16px)',
+                border:'1.5px solid rgba(255,255,255,0.14)',
                 color: T.muted, fontSize:16,
                 cursor: isSwapMode ? 'pointer' : 'default',
                 display:'flex', alignItems:'center', justifyContent:'center',
                 transition:'all 0.2s ease',
-                boxShadow:'0 2px 8px rgba(0,0,0,0.4)',
+                boxShadow:'0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.10)',
               }}
-              onMouseEnter={e => { if (isSwapMode) { e.currentTarget.style.background='rgba(255,255,255,0.06)'; e.currentTarget.style.color=T.text } }}
-              onMouseLeave={e => { e.currentTarget.style.background=T.card; e.currentTarget.style.color=T.muted }}
+              onMouseEnter={e => { if (isSwapMode) { e.currentTarget.style.background='rgba(255,255,255,0.14)'; e.currentTarget.style.color=T.text } }}
+              onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.08)'; e.currentTarget.style.color=T.muted }}
             >
               ⇅
             </button>
@@ -906,7 +907,7 @@ export default function TransferForm(): React.JSX.Element {
           <div className="rp-anim-2">
             <div style={C.box2}>
               {/* Top row: label + balance */}
-              <div style={{ ...C.row, marginBottom:5 }}>
+              <div style={{ ...C.row, marginBottom:10 }}>
                 <span style={{ fontFamily:T.D, fontSize:13, fontWeight:600, color:T.muted }}>
                   Buy
                 </span>
@@ -1057,7 +1058,7 @@ export default function TransferForm(): React.JSX.Element {
                     : ctaState==='wrong_network'      ? '#000'
                     : ctaState==='oracle_denied'      ? `${T.red}60`
                     : ctaState==='insufficient'       ? `${T.red}60`
-                    :                                   `${T.muted}80`,
+                    :                                   'rgba(255,255,255,0.35)',
                   boxShadow: ctaState==='ready' ? `0 4px 20px ${isSwapMode?T.purple:T.emerald}25` : 'none',
                   transition:'all 0.2s ease',
                 }}
