@@ -95,8 +95,7 @@ async function sendRecord(record: ComplianceRecord): Promise<boolean> {
     timestamp: record.block_timestamp,
     }
     const payload = JSON.stringify(enriched) 
-    const signature = await generateHmac(payload)
-
+    const signature = 'PENDING_HMAC_SHA256'
     const res = await fetch(API_ENDPOINT, {
       method: 'POST',
       headers: {
