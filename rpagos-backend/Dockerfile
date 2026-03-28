@@ -23,8 +23,8 @@ RUN mkdir -p /app/reports /tmp/data && chown -R rpagos:rpagos /app /tmp/data
 USER rpagos
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
+# HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+#   CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"
 
 EXPOSE 8000
 
