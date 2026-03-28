@@ -89,7 +89,12 @@ function addToQueue(record: ComplianceRecord) {
 // ── Invio singolo record ───────────────────────────────────────────────────
 async function sendRecord(record: ComplianceRecord): Promise<boolean> {
   try {
-    const payload   = JSON.stringify(record)
+   const enriched = {
+    ...record,
+    currency: record.asset,
+    timestamp: record.block_timestamp,
+    }
+    const payload = JSON.stringify(enriched) 
     const signature = await generateHmac(payload)
 
     const res = await fetch(API_ENDPOINT, {
