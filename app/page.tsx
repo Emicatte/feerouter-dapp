@@ -565,7 +565,7 @@ function AboutOverlay() {
       {/* ═══ B) Mission Block ═══ */}
       <div style={{ marginBottom: 28 }}>
         {[
-          'RSend exists because B2B Web3 payments shouldn\'t have to choose between speed and compliance. We believe on-chain finance deserves institutional-grade safeguards without sacrificing the decentralization that makes it powerful.',
+          'RSends exists because B2B Web3 payments shouldn\'t have to choose between speed and compliance. We believe on-chain finance deserves institutional-grade safeguards without sacrificing the decentralization that makes it powerful.',
           'Every single transaction passes through a compliance Oracle before touching the blockchain. This isn\'t a post-hoc audit — it\'s pre-execution verification baked into the protocol\'s DNA.',
           'Built on Base L2 for minimal costs and instant settlement, with a multi-chain architecture designed for global scale. One contract, many chains, zero compromise.',
         ].map((p, i) => (
@@ -668,7 +668,7 @@ function HowOverlay() {
   const steps = [
     {
       n: '01', title: 'Connect', desc: 'Link your wallet via RainbowKit — supports MetaMask, WalletConnect, Coinbase Wallet, and all major EVM wallets.', icon: '🔌',
-      detail: 'RSend uses wagmi v2 with RainbowKit for seamless wallet connections. Once connected, the app detects your chain (Base, Ethereum, Arbitrum) and configures the contract interface automatically. No API keys or registration required.',
+      detail: 'RSends uses wagmi v2 with RainbowKit for seamless wallet connections. Once connected, the app detects your chain (Base, Ethereum, Arbitrum) and configures the contract interface automatically. No API keys or registration required.',
     },
     {
       n: '02', title: 'Verify', desc: 'The compliance Oracle screens the transaction and issues an EIP-712 cryptographic attestation.', icon: '🛡',
@@ -863,7 +863,7 @@ function SecurityOverlay() {
             transition={{ delay: 1.2, duration: 0.6, ease: EASE }}
             style={{ fontFamily: C.D, fontSize: 18, fontWeight: 700, color: C.text }}
           >
-            RSend was built differently.
+            RSends was built differently.
           </motion.div>
         </div>
       </motion.div>
@@ -1193,8 +1193,8 @@ export default function Home() {
 
   useEffect(() => {
     try {
-      if (!sessionStorage.getItem('rsend_seen')) {
-        setShowIntro(true); sessionStorage.setItem('rsend_seen', '1')
+      if (!sessionStorage.getItem('RSends_seen')) {
+        setShowIntro(true); sessionStorage.setItem('RSends_seen', '1')
       } else { setReady(true) }
     } catch { setReady(true) }
   }, [])
@@ -1483,7 +1483,7 @@ export default function Home() {
         }}>
           <span>Built on Base L2</span>
           <span style={{ opacity: 0.4 }}>·</span>
-          <span>&copy; 2026 RSend</span>
+          <span>&copy; 2026 RSends</span>
           <span style={{ opacity: 0.4 }}>·</span>
           <span>Contract: 0xB217...691D</span>
           <a
