@@ -59,6 +59,7 @@ const C = {
   purple:  '#8B5CF6',
   D:       'var(--font-display)',
   M:       'var(--font-mono)',
+  S:       '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
 }
 
 type View = 'send' | 'swap' | 'command'
@@ -175,7 +176,9 @@ function ParticleIntro({ onDone }: { onDone: () => void }) {
       <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0 }} />
       <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center' }}>
         <div style={{ opacity: phase >= 2 ? 1 : 0, transition: 'opacity 0.6s ease', marginBottom: 16 }}>
-          <div style={{ width: 52, height: 52, borderRadius: 13, background: 'linear-gradient(135deg,#3B82F6,#8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, margin: '0 auto', boxShadow: phase >= 2 ? '0 0 50px rgba(139,92,246,0.4)' : 'none' }}>⚡</div>
+          <div style={{ width: 52, height: 52, borderRadius: 13, background: 'linear-gradient(135deg,#3B82F6,#8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', boxShadow: phase >= 2 ? '0 0 50px rgba(139,92,246,0.4)' : 'none' }}>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M13 2L4.5 12.5h5.5l-1 9.5 8.5-11.5h-5.5L13 2z" fill="white" fillOpacity="0.95"/></svg>
+          </div>
         </div>
         <div style={{ opacity: phase >= 3 ? 1 : 0, transform: phase >= 3 ? 'translateY(0)' : 'translateY(10px)', transition: 'all 0.8s cubic-bezier(.16,1,.3,1)' }}>
           <div style={{ fontFamily: C.M, fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase' as const, color: 'transparent', background: 'linear-gradient(90deg,#3B82F6,#8B5CF6,#FF4C6A,#FFB547,#3B82F6)', backgroundSize: '200% 100%', WebkitBackgroundClip: 'text', animation: phase >= 3 ? 'holoShift 3s linear infinite' : 'none' }}>
@@ -548,7 +551,7 @@ function AboutOverlay() {
     <div>
       {/* ═══ A) Animated Headline ═══ */}
       <motion.h2
-        style={{ fontFamily: C.D, fontSize: 26, fontWeight: 800, color: C.text, marginBottom: 24, lineHeight: 1.3 }}
+        style={{ fontFamily: C.D, fontSize: 24, fontWeight: 600, color: C.text, marginBottom: 24, lineHeight: 1.3 }}
       >
         {'Built by one. Trusted by design.'.split('').map((char, i) => (
           <motion.span
@@ -565,16 +568,16 @@ function AboutOverlay() {
       {/* ═══ B) Mission Block ═══ */}
       <div style={{ marginBottom: 28 }}>
         {[
-          'RSends exists because B2B Web3 payments shouldn\'t have to choose between speed and compliance. We believe on-chain finance deserves institutional-grade safeguards without sacrificing the decentralization that makes it powerful.',
-          'Every single transaction passes through a compliance Oracle before touching the blockchain. This isn\'t a post-hoc audit — it\'s pre-execution verification baked into the protocol\'s DNA.',
-          'Built on Base L2 for minimal costs and instant settlement, with a multi-chain architecture designed for global scale. One contract, many chains, zero compromise.',
+          'I built RSends because I got tired of watching European businesses struggle with crypto payments. Either you use a centralized gateway that holds your funds hostage, or you go full DeFi and pray the taxman doesn\'t knock.',
+          'Every transaction goes through a compliance Oracle before anything moves on-chain. Not a post-hoc audit. Not a checkbox. Actual pre-execution verification, enforced at the smart contract level.',
+          'Base L2 keeps gas under $0.05. Settlement in 2 seconds. DAC8 reporting built in from day one. Because in this space, "we\'ll add compliance later" is how companies get shut down.',
         ].map((p, i) => (
           <motion.p
             key={i}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.8 + i * 0.15, duration: 0.5, ease: EASE }}
-            style={{ fontFamily: C.M, fontSize: 12, color: C.sub, lineHeight: 1.7, marginBottom: 14 }}
+            style={{ fontFamily: C.S, fontSize: 13, color: C.sub, lineHeight: 1.7, marginBottom: 14 }}
           >
             {p}
           </motion.p>
@@ -602,8 +605,8 @@ function AboutOverlay() {
           <div style={{ fontFamily: C.M, fontSize: 9, fontWeight: 700, color: C.blue, textTransform: 'uppercase' as const, letterSpacing: '0.1em', marginBottom: 6 }}>
             Founder & Solo Developer
           </div>
-          <div style={{ fontFamily: C.M, fontSize: 12, color: C.sub, lineHeight: 1.6, marginBottom: 14 }}>
-            Designed, built, and deployed end-to-end — from Solidity contracts to React frontend to FastAPI backend. Every line of code written with compliance-first architecture in mind.
+          <div style={{ fontFamily: C.S, fontSize: 13, color: C.sub, lineHeight: 1.6, marginBottom: 14 }}>
+            One person, full stack. Solidity contracts, React frontend, FastAPI backend, compliance engine. No team of 50 — just obsessive attention to getting payments right.
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' as const }}>
             {['Solidity', 'Next.js', 'FastAPI', 'Foundry'].map((tech, i) => (
@@ -667,33 +670,33 @@ function HowOverlay() {
 
   const steps = [
     {
-      n: '01', title: 'Connect', desc: 'Link your wallet via RainbowKit — supports MetaMask, WalletConnect, Coinbase Wallet, and all major EVM wallets.', icon: '🔌',
-      detail: 'RSends uses wagmi v2 with RainbowKit for seamless wallet connections. Once connected, the app detects your chain (Base, Ethereum, Arbitrum) and configures the contract interface automatically. No API keys or registration required.',
+      n: '01', title: 'Connect', desc: 'Plug in your wallet. MetaMask, WalletConnect, Coinbase — whatever you use. No sign-up, no API keys.',
+      detail: 'RSends uses wagmi v2 with RainbowKit. Once connected, the app detects your chain (Base, Ethereum, Arbitrum) and configures the contract interface automatically. Zero registration friction.',
     },
     {
-      n: '02', title: 'Verify', desc: 'The compliance Oracle screens the transaction and issues an EIP-712 cryptographic attestation.', icon: '🛡',
-      detail: 'Before any funds move, the Oracle performs AML screening, DAC8 reporting checks, and MiCA compliance verification. It returns a typed EIP-712 signature that the smart contract will independently verify. This ensures compliance is enforced at the protocol level, not just the API level.',
+      n: '02', title: 'Verify', desc: 'The compliance Oracle checks your transaction and signs off with an EIP-712 attestation. If it doesn\'t pass, nothing moves.',
+      detail: 'Before any funds move, the Oracle performs AML screening, DAC8 reporting checks, and MiCA compliance verification. It returns a typed EIP-712 signature that the smart contract independently verifies on-chain. No trust assumptions.',
     },
     {
-      n: '03', title: 'Execute', desc: 'FeeRouterV4 verifies the signature, splits the payment (99.5% recipient, 0.5% fee), and settles instantly.', icon: '⚡',
-      detail: 'The smart contract checks the Oracle signature on-chain, executes the split routing according to your configuration, and emits events for the DAC8 reporting engine. Settlement is final in ~2 seconds on Base L2 with gas costs under $0.05.',
+      n: '03', title: 'Execute', desc: 'FeeRouterV4 verifies the signature, splits the payment (99.5% recipient, 0.5% protocol), settles in ~2 seconds.',
+      detail: 'The contract checks the Oracle signature on-chain, executes split routing, and emits events for the DAC8 reporting engine. Final settlement on Base L2, gas under $0.05.',
     },
   ]
 
   const advancedFlows = [
-    { title: 'Swap & Forward', desc: 'Pay in ETH, recipient gets USDC. Automatic DEX routing with compliance.', icon: '🔄' },
-    { title: 'Auto-Split', desc: 'Programmable treasury routing — split payments across multiple destinations.', icon: '📊' },
-    { title: 'Sweeper', desc: 'Auto-forward incoming funds to configured destinations based on rules.', icon: '🧹' },
-    { title: 'DAC8 Reports', desc: 'Generate fiscal XML reports on demand for any transaction period.', icon: '📋' },
+    { title: 'Swap & Forward', desc: 'Pay in ETH, recipient gets USDC. Automatic DEX routing with compliance.' },
+    { title: 'Auto-Split', desc: 'Programmable treasury routing — split payments across multiple wallets.' },
+    { title: 'Sweeper', desc: 'Auto-forward incoming funds to configured destinations based on rules.' },
+    { title: 'DAC8 Reports', desc: 'Generate fiscal XML reports on demand for any transaction period.' },
   ]
 
   return (
     <div>
-      <h2 style={{ fontFamily: C.D, fontSize: 24, fontWeight: 800, color: C.text, marginBottom: 4 }}>
+      <h2 style={{ fontFamily: C.D, fontSize: 22, fontWeight: 600, color: C.text, marginBottom: 4 }}>
         How It <span style={GRAD}>Works</span>
       </h2>
-      <p style={{ fontFamily: C.M, fontSize: 12, color: C.dim, marginBottom: 28 }}>
-        Three steps from intent to settlement
+      <p style={{ fontFamily: C.S, fontSize: 13, color: C.dim, marginBottom: 28 }}>
+        Three steps. Connect, verify, settle. That's it.
       </p>
 
       {/* ═══ A) 3-Step Journey ═══ */}
@@ -737,11 +740,10 @@ function HowOverlay() {
 
               {/* Content */}
               <div style={{ flex: 1, marginLeft: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <span style={{ fontSize: 16 }}>{s.icon}</span>
-                  <span style={{ fontFamily: C.D, fontSize: 16, fontWeight: 700, color: C.text }}>{s.title}</span>
+                <div style={{ marginBottom: 6 }}>
+                  <span style={{ fontFamily: C.D, fontSize: 16, fontWeight: 600, color: C.text }}>{s.title}</span>
                 </div>
-                <p style={{ fontFamily: C.M, fontSize: 11, color: C.sub, lineHeight: 1.6, marginBottom: 8 }}>{s.desc}</p>
+                <p style={{ fontFamily: C.S, fontSize: 12, color: C.sub, lineHeight: 1.6, marginBottom: 8 }}>{s.desc}</p>
 
                 {/* Technical details toggle */}
                 <button
@@ -788,16 +790,15 @@ function HowOverlay() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: i * 0.08, duration: 0.35, ease: EASE }}
-              whileHover={{ y: -3, rotateX: 2, boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}
               style={{
                 padding: '16px', borderRadius: 14,
                 background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}`,
-                cursor: 'default', transition: 'all 0.3s ease',
+                cursor: 'default',
+                gridColumn: i === 0 ? '1 / -1' : undefined,
               }}
             >
-              <div style={{ fontSize: 20, marginBottom: 8 }}>{f.icon}</div>
-              <div style={{ fontFamily: C.D, fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 }}>{f.title}</div>
-              <div style={{ fontFamily: C.M, fontSize: 10, color: C.dim, lineHeight: 1.5 }}>{f.desc}</div>
+              <div style={{ fontFamily: C.D, fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 4 }}>{f.title}</div>
+              <div style={{ fontFamily: C.S, fontSize: 11, color: C.dim, lineHeight: 1.5 }}>{f.desc}</div>
             </motion.div>
           ))}
         </div>
@@ -816,20 +817,20 @@ function SecurityOverlay() {
   }, [])
 
   const layers = [
-    { title: 'Blockchain Foundation', desc: 'Base L2 with Ethereum settlement finality', icon: '⛓', color: C.blue, detail: 'Transactions execute on Base L2 for minimal gas costs (~$0.01), with full security inherited from Ethereum L1. Settlement finality is guaranteed through the Optimism Bedrock architecture.' },
-    { title: 'Infrastructure', desc: 'HMAC-SHA256, rate limiting, Nginx SSL termination', icon: '🏗', color: C.amber, detail: 'All API requests are authenticated via HMAC-SHA256 signatures. Rate limiting prevents abuse. SSL termination at the edge with Nginx provides encrypted transport. Infrastructure is monitored 24/7.' },
-    { title: 'Smart Contract', desc: 'ReentrancyGuard, OpenZeppelin, FeeRouterV4', icon: '📝', color: C.purple, detail: 'FeeRouterV4.sol inherits from OpenZeppelin\'s battle-tested ReentrancyGuard and Ownable contracts. All state-changing functions are protected against re-entrancy attacks. The contract is verified on Basescan.' },
-    { title: 'Compliance Engine', desc: 'EIP-712 Oracle, AML/DAC8/MiCA screening', icon: '🛡', color: C.green, detail: 'Every transaction requires a valid EIP-712 typed signature from the compliance Oracle. The Oracle screens against AML databases, verifies DAC8 reporting requirements, and ensures MiCA compliance before any funds move.' },
-    { title: 'Monitoring', desc: 'Sentry, Prometheus, Z-score anomaly detection', icon: '📡', color: '#FF4C6A', detail: 'Real-time monitoring with Sentry for error tracking, Prometheus for metrics, and custom Z-score anomaly detection that flags unusual transaction patterns. Alerts are dispatched instantly for any deviation.' },
+    { title: 'Blockchain Foundation', desc: 'Base L2 with Ethereum settlement finality', tag: 'L1', color: C.blue, detail: 'Transactions execute on Base L2 for minimal gas costs (~$0.01), with full security inherited from Ethereum L1. Settlement finality via Optimism Bedrock.' },
+    { title: 'Infrastructure', desc: 'HMAC-SHA256, rate limiting, SSL termination', tag: 'L2', color: C.amber, detail: 'All API requests are HMAC-SHA256 signed. Rate limiting at both API and transaction level. Nginx SSL termination at the edge. Monitored around the clock.' },
+    { title: 'Smart Contract', desc: 'ReentrancyGuard, OpenZeppelin, FeeRouterV4', tag: 'L3', color: C.purple, detail: 'FeeRouterV4.sol inherits from OpenZeppelin\'s ReentrancyGuard and Ownable. All state-changing functions are protected. Contract verified on Basescan.' },
+    { title: 'Compliance Engine', desc: 'EIP-712 Oracle, AML/DAC8/MiCA screening', tag: 'L4', color: C.green, detail: 'Every transaction requires a valid EIP-712 typed signature from the compliance Oracle. Screens against AML databases, verifies DAC8 reporting, ensures MiCA compliance. Nothing moves without it.' },
+    { title: 'Monitoring', desc: 'Sentry, Prometheus, Z-score anomaly detection', tag: 'L5', color: '#FF4C6A', detail: 'Real-time error tracking, metrics collection, and custom Z-score anomaly detection. Unusual transaction patterns get flagged instantly.' },
   ]
 
   const features = [
-    { icon: '🔮', title: 'Oracle-Gated TX', desc: 'Every transaction requires cryptographic approval from the compliance Oracle before execution.' },
-    { icon: '✅', title: 'On-Chain Verification', desc: 'Smart contract independently verifies Oracle signatures. No trust assumptions — verify, don\'t trust.' },
-    { icon: '📊', title: 'Anomaly Detection', desc: 'Z-score statistical analysis flags transactions deviating from normal patterns in real-time.' },
-    { icon: '🚦', title: 'Rate Limiting', desc: 'API and transaction-level rate limiting prevents abuse and protects infrastructure from attacks.' },
-    { icon: '🔐', title: 'HMAC Integrity', desc: 'All backend communications are HMAC-SHA256 signed, preventing request tampering and replay attacks.' },
-    { icon: '🏰', title: 'Infrastructure Security', desc: 'Nginx SSL termination, Docker isolation, automated backups, and least-privilege access controls.' },
+    { title: 'Oracle-Gated TX', desc: 'Every transaction needs cryptographic approval from the compliance Oracle before execution. No exceptions.' },
+    { title: 'On-Chain Verification', desc: 'The smart contract verifies Oracle signatures independently. Verify, don\'t trust.' },
+    { title: 'Anomaly Detection', desc: 'Z-score statistical analysis flags transactions deviating from normal patterns in real-time.' },
+    { title: 'Rate Limiting', desc: 'API and transaction-level rate limiting. Abuse gets blocked before it reaches the contract.' },
+    { title: 'HMAC Integrity', desc: 'All backend communications are HMAC-SHA256 signed. Tampered requests get rejected.' },
+    { title: 'Infrastructure Security', desc: 'SSL termination, Docker isolation, automated backups, least-privilege access. Standard ops.' },
   ]
 
   return (
@@ -842,37 +843,29 @@ function SecurityOverlay() {
       >
         <div style={{ textAlign: 'center', padding: '24px 0' }}>
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.6, ease: EASE }}
-            style={{ fontFamily: C.D, fontSize: 32, fontWeight: 800, color: C.red, marginBottom: 8 }}
-          >
-            $5.8 billion
-          </motion.div>
-          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.4, duration: 0.5 }}
-            style={{ fontFamily: C.M, fontSize: 12, color: C.dim, marginBottom: 16 }}
+            transition={{ duration: 0.6, ease: EASE }}
+            style={{ fontFamily: C.S, fontSize: 14, color: C.sub, lineHeight: 1.6, maxWidth: 480, margin: '0 auto', marginBottom: 8 }}
           >
-            lost to DeFi exploits and hacks since 2020
+            Most DeFi protocols bolt on security after the fact. We architected RSends around compliance and safety from the first commit.
           </motion.div>
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 1.2, duration: 0.6, ease: EASE }}
-            style={{ fontFamily: C.D, fontSize: 18, fontWeight: 700, color: C.text }}
+            style={{ fontFamily: C.M, fontSize: 11, color: C.dim }}
           >
-            RSends was built differently.
+            Five layers. No shortcuts.
           </motion.div>
         </div>
       </motion.div>
 
-      <h2 style={{ fontFamily: C.D, fontSize: 24, fontWeight: 800, color: C.text, marginBottom: 4 }}>
+      <h2 style={{ fontFamily: C.D, fontSize: 22, fontWeight: 600, color: C.text, marginBottom: 4 }}>
         <span style={GRAD}>Security</span> Architecture
       </h2>
-      <p style={{ fontFamily: C.M, fontSize: 12, color: C.dim, marginBottom: 28 }}>
-        Five layers of defense protecting every transaction
+      <p style={{ fontFamily: C.S, fontSize: 13, color: C.dim, marginBottom: 28 }}>
+        How we keep your funds and data safe — layer by layer.
       </p>
 
       {/* ═══ B) Security Layer Stack ═══ */}
@@ -904,16 +897,14 @@ function SecurityOverlay() {
                 <div style={{
                   width: 36, height: 36, borderRadius: 10, flexShrink: 0,
                   background: `${layer.color}12`, border: `1px solid ${layer.color}25`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontFamily: C.M, fontSize: 11, fontWeight: 700, color: layer.color,
                 }}>
-                  {layer.icon}
+                  {layer.tag}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontFamily: C.D, fontSize: 13, fontWeight: 700, color: C.text }}>{layer.title}</div>
-                  <div style={{ fontFamily: C.M, fontSize: 10, color: C.dim }}>{layer.desc}</div>
-                </div>
-                <div style={{ fontFamily: C.M, fontSize: 9, color: C.dim, padding: '2px 6px', borderRadius: 4, background: 'rgba(255,255,255,0.04)' }}>
-                  L{i + 1}
+                  <div style={{ fontFamily: C.D, fontSize: 13, fontWeight: 600, color: C.text }}>{layer.title}</div>
+                  <div style={{ fontFamily: C.S, fontSize: 11, color: C.dim }}>{layer.desc}</div>
                 </div>
               </motion.button>
               <motion.div
@@ -958,18 +949,28 @@ function SecurityOverlay() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: i * 0.08, duration: 0.35, ease: EASE }}
-              whileHover={{ y: -4, boxShadow: '0 8px 32px rgba(59,130,246,0.1), 0 0 0 1px rgba(59,130,246,0.15)' }}
               style={{
                 padding: '16px', borderRadius: 14,
                 background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}`,
-                cursor: 'default', transition: 'box-shadow 0.3s ease, transform 0.3s ease',
+                cursor: 'default',
+                gridColumn: i === 0 ? '1 / -1' : undefined,
               }}
             >
-              <div style={{ fontSize: 18, marginBottom: 8 }}>{f.icon}</div>
-              <div style={{ fontFamily: C.D, fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 4 }}>{f.title}</div>
-              <div style={{ fontFamily: C.M, fontSize: 10, color: C.dim, lineHeight: 1.5 }}>{f.desc}</div>
+              <div style={{ fontFamily: C.D, fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 4 }}>{f.title}</div>
+              <div style={{ fontFamily: C.S, fontSize: 11, color: C.dim, lineHeight: 1.5 }}>{f.desc}</div>
             </motion.div>
           ))}
+        </div>
+        {/* Technical note — breaks visual symmetry */}
+        <div style={{
+          marginTop: 12, padding: '10px 14px', borderRadius: 8,
+          borderLeft: `2px solid ${C.blue}30`,
+          background: 'rgba(255,255,255,0.015)',
+        }}>
+          <div style={{ fontFamily: C.M, fontSize: 10, color: C.dim, lineHeight: 1.6 }}>
+            // FeeRouterV4.sol — all state-changing functions inherit ReentrancyGuard.
+            <br />// Oracle signatures verified on-chain via ecrecover. No off-chain trust.
+          </div>
         </div>
       </div>
 
@@ -992,7 +993,7 @@ function SecurityOverlay() {
           rel="noopener noreferrer"
           style={{ fontFamily: C.M, fontSize: 10, color: C.sub, textDecoration: 'none' }}
         >
-          Contract Verified on Basescan ✅
+          Contract verified on Basescan →
         </a>
       </div>
     </div>
@@ -1013,8 +1014,8 @@ function HeroTitle({ view, setView, isConnected }: { view: View; setView: (v: Vi
         transition={{ duration: 0.6, ease: EASE }}
         style={{
           fontFamily: C.D,
-          fontSize: 'clamp(36px, 6vw, 58px)',
-          fontWeight: 700,
+          fontSize: 'clamp(34px, 5.5vw, 52px)',
+          fontWeight: 600,
           letterSpacing: '-0.02em',
           textAlign: 'center',
           marginBottom: 8,
@@ -1036,17 +1037,16 @@ function HeroTitle({ view, setView, isConnected }: { view: View; setView: (v: Vi
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: EASE, delay: 0.1 }}
         style={{
-          fontFamily: C.M,
-          fontSize: 'clamp(11px, 1.5vw, 13px)',
-          fontWeight: 500,
-          letterSpacing: '0.05em',
+          fontFamily: C.S,
+          fontSize: 'clamp(12px, 1.5vw, 14px)',
+          fontWeight: 400,
+          letterSpacing: '0.02em',
           textAlign: 'center',
           color: C.sub,
           marginBottom: 1,
-          textTransform: 'uppercase' as const,
         }}
       >
-        Built for European Businesses.
+        Move USDC, EURC, ETH across Europe. Compliant from day one.
       </motion.div>
 
       {/* CTA — only when wallet not connected */}
@@ -1059,14 +1059,13 @@ function HeroTitle({ view, setView, isConnected }: { view: View; setView: (v: Vi
           whileTap={{ scale: 0.98 }}
           style={{
             padding: '12px 32px', borderRadius: 14, border: 'none',
-            background: 'linear-gradient(135deg, #3B82F6, #8B5CF6)',
-            color: '#fff', fontFamily: C.D, fontSize: 14, fontWeight: 700,
+            background: 'linear-gradient(135deg, #3B82F6, #6366F1)',
+            color: '#fff', fontFamily: C.D, fontSize: 14, fontWeight: 600,
             cursor: 'pointer', letterSpacing: '-0.01em',
-            boxShadow: '0 4px 24px rgba(59,130,246,0.3)',
-            animation: 'rpCtaPulse 3s ease-in-out infinite',
+            boxShadow: '0 4px 20px rgba(59,130,246,0.25)',
           }}
         >
-          Start Sending →
+          Connect Wallet
         </motion.button>
       )}
     </div>
@@ -1491,7 +1490,7 @@ export default function Home() {
             target="_blank" rel="noopener noreferrer"
             style={{ color: C.green, textDecoration: 'none', fontSize: 9 }}
           >
-            Verified ✅
+            Verified
           </a>
         </div>
       </footer>
