@@ -36,6 +36,7 @@ class SweepStatus(str, enum.Enum):
     completed = "completed"
     failed = "failed"
     gas_too_high = "gas_too_high"
+    skipped = "skipped"
 
 
 # ═══════════════════════════════════════════════════════════════

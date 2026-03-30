@@ -11,10 +11,12 @@ import type { Variants, Transition } from 'framer-motion'
 // STATIC IMPORTS - No lazy loading, instant component availability
 import TransferForm from './TransferForm'
 import SwapModule from './SwapModule'
+import CommandCenter from './CommandCenter'
 import AccountHeader from './AccountHeader'
 import ComplianceOverlay from './ComplianceOverlay'
 import DevelopersOverlay from './DevelopersOverlay'
 import PricingOverlay from './PricingOverlay'
+import { useSweepWebSocket } from '../lib/useSweepWebSocket'
 
 
 
@@ -38,8 +40,6 @@ const SkeletonLoader = () => (
     </div>
   </div>
 );
-
-const BACKEND = process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:8000'
 
 // ═══════════════════════════════════════════════════════════
 //  PALETTE
@@ -1078,107 +1078,6 @@ function HeroTitle({ view, setView, isConnected }: { view: View; setView: (v: Vi
 
 
 
-// ═══════════════════════════════════════════════════════════
-//  COMMAND CENTER COMPONENTS — Jupiter-style compact
-// ═══════════════════════════════════════════════════════════
-function GasGuard() {
-  const [gas, setGas] = useState<number | null>(null)
-  useEffect(() => {
-    const f = async () => { try { const r = await fetch('https://mainnet.base.org', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_gasPrice', params: [] }) }); setGas(parseInt((await r.json()).result, 16) / 1e9) } catch { /* */ } }
-    f(); const iv = setInterval(f, 15000); return () => clearInterval(iv)
-  }, [])
-  const lv = gas === null ? 'unknown' : gas < 0.01 ? 'optimal' : gas < 0.1 ? 'normal' : 'high'
-  const cfg: Record<string, { l: string; c: string }> = { optimal: { l: 'Optimal', c: C.green }, normal: { l: 'Normal', c: C.amber }, high: { l: 'High', c: C.red }, unknown: { l: '—', c: C.dim } }
-  const g = cfg[lv]
-  return (
-    <div style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', borderRadius: 14, padding: '14px 16px', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.07)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: g.c, boxShadow: `0 0 6px ${g.c}60` }} />
-          <span style={{ fontFamily: C.M, fontSize: 12, fontWeight: 600, color: g.c }}>{gas !== null ? `${gas.toFixed(4)} Gwei` : '—'}</span>
-        </div>
-        <span style={{ fontFamily: C.M, fontSize: 10, color: `${g.c}80` }}>{g.l}</span>
-      </div>
-    </div>
-  )
-}
-
-function SmartRouteConfig({ address }: { address: string | undefined }) {
-  const [dest, setDest] = useState(''); const [split, setSplit] = useState(false)
-  const [pct, setPct] = useState('70'); const [dest2, setDest2] = useState('')
-  const [thr, setThr] = useState('0.001'); const [saving, setSaving] = useState(false); const [saved, setSaved] = useState(false)
-  const inp: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 10, background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.14)', color: C.text, fontFamily: C.M, fontSize: 12, outline: 'none', boxSizing: 'border-box' as const }
-  const save = async () => {
-    if (!address || !dest.startsWith('0x')) return; setSaving(true)
-    try { await fetch(`${BACKEND}/api/v1/forwarding/rules`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ source_wallet: address, destination_wallet: dest, min_threshold: parseFloat(thr), gas_strategy: 'normal', max_gas_percent: 10, token_symbol: 'ETH', chain_id: 8453, split_enabled: split, split_percent: split ? parseInt(pct) : 100, split_destination: split ? dest2 : null }) }); setSaved(true); setTimeout(() => setSaved(false), 3000) } catch { /* */ }; setSaving(false)
-  }
-  const ok = dest.startsWith('0x') && !saving
-  return (
-    <div className="rp-anim-2" style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', borderRadius: 14, padding: '14px 16px', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.07)' }}>
-      {/* Destination */}
-      <div style={{ marginBottom: 10 }}>
-        <label style={{ fontFamily: C.D, fontSize: 11, fontWeight: 700, color: C.dim, textTransform: 'uppercase' as const, letterSpacing: '0.08em', display: 'block', marginBottom: 6 }}>Destination {split && `(${pct}%)`}</label>
-        <input value={dest} onChange={e => setDest(e.target.value)} placeholder="0x..." style={inp} />
-      </div>
-
-      {/* Split toggle */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: split ? 10 : 8 }}>
-        <span style={{ fontFamily: C.D, fontSize: 12, color: C.sub }}>Split Routing</span>
-        <button onClick={() => setSplit(s => !s)} style={{ width: 36, height: 20, borderRadius: 10, background: split ? C.green : 'rgba(255,255,255,0.08)', border: 'none', cursor: 'pointer', position: 'relative', transition: 'background 0.2s' }}>
-          <div style={{ width: 14, height: 14, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: split ? 19 : 3, transition: 'left 0.2s' }} />
-        </button>
-      </div>
-
-      {split && (
-        <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr', gap: 6, marginBottom: 10 }}>
-          <input type="number" value={pct} onChange={e => setPct(e.target.value)} min="1" max="99" style={{ ...inp, textAlign: 'center' as const, fontSize: 11 }} />
-          <input value={dest2} onChange={e => setDest2(e.target.value)} placeholder={`Dest 2 (${100 - parseInt(pct || '70')}%)`} style={{ ...inp, fontSize: 11 }} />
-        </div>
-      )}
-
-      {/* Threshold */}
-      <div style={{ marginBottom: 10 }}>
-        <label style={{ fontFamily: C.M, fontSize: 10, color: C.dim, display: 'block', marginBottom: 4 }}>Min threshold (ETH)</label>
-        <input type="number" value={thr} onChange={e => setThr(e.target.value)} step="0.001" style={inp} />
-      </div>
-
-      {/* CTA */}
-      <button onClick={save} disabled={!ok} style={{
-        width: '100%', padding: '14px', borderRadius: 14, border: 'none',
-        background: saved ? C.green : ok ? `linear-gradient(135deg, ${C.purple}, #c084fc)` : 'rgba(255,255,255,0.04)',
-        color: saved ? '#000' : ok ? '#fff' : 'rgba(255,255,255,0.35)',
-        fontFamily: C.D, fontSize: 14, fontWeight: 700, letterSpacing: '-0.01em',
-        cursor: ok ? 'pointer' : 'not-allowed', transition: 'all 0.2s',
-        boxShadow: ok && !saved ? `0 4px 20px ${C.purple}25` : 'none',
-      }}>{saving ? '...' : saved ? '✓ Saved' : 'Activate Route'}</button>
-    </div>
-  )
-}
-
-function ActivityFeed({ address }: { address: string | undefined }) {
-  interface L { id: number; destination: string; amount: number; token: string; status: string; tx_hash: string | null; gas_percent: number | null }
-  const [logs, setLogs] = useState<L[]>([])
-  useEffect(() => { if (!address) return; const ld = () => fetch(`${BACKEND}/api/v1/forwarding/logs?wallet=${address}&limit=6`).then(r => r.ok ? r.json() : null).then(d => { if (d?.logs) setLogs(d.logs) }).catch(() => {}); ld(); const iv = setInterval(ld, 10000); return () => clearInterval(iv) }, [address])
-  const sc: Record<string, string> = { pending: '#ffb800', executing: C.blue, completed: C.green, failed: '#ff2d55', gas_too_high: '#FF8C00' }
-  if (!logs.length) return (
-    <div className="rp-anim-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, padding: '28px 20px', textAlign: 'center' as const }}>
-      <div style={{ fontFamily: C.D, fontSize: 13, color: C.dim, marginBottom: 4 }}>Waiting for transactions</div>
-      <div style={{ fontFamily: C.M, fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>Activity will appear here</div>
-    </div>
-  )
-  return (
-    <div className="rp-anim-3" style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 14, overflow: 'hidden' }}>
-      {logs.map((l, i) => (
-        <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 16px', borderBottom: i < logs.length - 1 ? `1px solid ${C.border}` : 'none' }}>
-          <div style={{ width: 6, height: 6, borderRadius: '50%', background: sc[l.status] ?? C.dim, flexShrink: 0 }} />
-          <div style={{ flex: 1, fontFamily: C.M, fontSize: 12, color: C.text }}>{l.amount?.toFixed(4)} {l.token} → {l.destination?.slice(0, 8)}…</div>
-          <span style={{ fontFamily: C.M, fontSize: 9, color: sc[l.status] ?? C.dim, textTransform: 'uppercase' as const }}>{l.status}</span>
-          {l.tx_hash && <a href={`https://basescan.org/tx/${l.tx_hash}`} target="_blank" rel="noopener noreferrer" style={{ fontFamily: C.M, fontSize: 9, color: C.sub, textDecoration: 'none' }}>↗</a>}
-        </div>
-      ))}
-    </div>
-  )
-}
 
 // ═══════════════════════════════════════════════════════════
 //  MAIN PAGE
@@ -1189,6 +1088,29 @@ export default function Home() {
   const [activeOverlay, setActiveOverlay] = useState<Overlay>(null)
   const [showIntro, setShowIntro] = useState(false)
   const [ready, setReady] = useState(false)
+
+  // Track unseen sweep events for Command Center badge
+  const { events: sweepEvents } = useSweepWebSocket(address)
+  const [unseenCount, setUnseenCount] = useState(0)
+  const lastSeenRef = useRef(0)
+
+  // Increment unseen when new events arrive and user isn't on command tab
+  useEffect(() => {
+    if (sweepEvents.length > lastSeenRef.current) {
+      if (view !== 'command') {
+        setUnseenCount(prev => prev + (sweepEvents.length - lastSeenRef.current))
+      }
+      lastSeenRef.current = sweepEvents.length
+    }
+  }, [sweepEvents.length, view])
+
+  // Reset unseen count when switching to command view
+  useEffect(() => {
+    if (view === 'command') {
+      setUnseenCount(0)
+      lastSeenRef.current = sweepEvents.length
+    }
+  }, [view, sweepEvents.length])
 
   useEffect(() => {
     try {
@@ -1322,6 +1244,25 @@ export default function Home() {
                   />
                 )}
                 <span style={{ position: 'relative', zIndex: 1 }}>{v.label}</span>
+                {/* Notification badge for Command Center */}
+                {v.key === 'command' && unseenCount > 0 && (
+                  <motion.span
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    style={{
+                      position: 'absolute', top: 4, right: 6,
+                      minWidth: 16, height: 16, borderRadius: 8,
+                      background: '#FF4C6A',
+                      color: '#fff', fontFamily: C.M, fontSize: 9, fontWeight: 700,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      padding: '0 4px',
+                      boxShadow: '0 0 8px rgba(255,76,106,0.5)',
+                      zIndex: 2,
+                    }}
+                  >
+                    {unseenCount > 99 ? '99+' : unseenCount}
+                  </motion.span>
+                )}
               </motion.button>
             ))}
           </motion.div>
@@ -1352,31 +1293,7 @@ export default function Home() {
 
           {/* Command Center — always mounted */}
           <div style={view === 'command' ? panelActive : panelHidden}>
-            {isConnected ? (
-              <div style={{ padding: '10px 10px 10px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-                  <GasGuard />
-                  <div style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.10)', borderRadius: 14, padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-around' }}>
-                    <div style={{ textAlign: 'center' as const }}>
-                      <div style={{ fontFamily: C.D, fontSize: 18, fontWeight: 700, color: C.text }}>—</div>
-                      <div style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>Sweeps</div>
-                    </div>
-                    <div style={{ width: 1, height: 24, background: C.border }} />
-                    <div style={{ textAlign: 'center' as const }}>
-                      <div style={{ fontFamily: C.D, fontSize: 18, fontWeight: 700, color: C.text }}>—</div>
-                      <div style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>Vol 24h</div>
-                    </div>
-                  </div>
-                </div>
-                <div style={{ marginBottom: 8 }}><SmartRouteConfig address={address} /></div>
-                <ActivityFeed address={address} />
-              </div>
-            ) : (
-              <div style={{ textAlign: 'center', padding: 40 }}>
-                <div style={{ fontFamily: C.D, fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 4 }}>Connect wallet</div>
-                <div style={{ fontFamily: C.M, fontSize: 11, color: C.dim }}>To access Command Center</div>
-              </div>
-            )}
+            <CommandCenter />
           </div>
         </div>
 

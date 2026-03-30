@@ -1,95 +1,411 @@
 """
-RSend Backend — Sweep Execution Service v2
+RSend Backend — Sweep Execution Service v3
 
-Multi-chain:
-  - Base (8453), Base Sepolia (84532)
-  - Ethereum (1)
-  - Arbitrum One (42161)
-  - Solana (placeholder — requires solana-py)
-
-Split routing + gas guard + WebSocket notifications
+Full Command Center sweep pipeline:
+  - Multi-chain EVM (Base, Ethereum, Arbitrum)
+  - ETH native + ERC-20 token transfers
+  - Redis distributed lock (anti double-sweep)
+  - Rule validation: schedule, cooldown, daily volume, token filter, gas limit
+  - EIP-1559 gas estimation with eth_estimateGas
+  - Split routing (2 sequential TXs)
+  - Retry with exponential backoff (max 3)
+  - Notifications: WebSocket + Telegram + email (stub)
 """
 
-import os
 import asyncio
-from datetime import datetime, timezone
-from typing import Optional
+import json
+import logging
+import time as _time
+from datetime import datetime, timezone, timedelta
+from decimal import Decimal
+from typing import Any, Optional
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
+import httpx
+from eth_account import Account
+from prometheus_client import Counter, Histogram, Gauge
+from sqlalchemy import select, update, func, cast, Date
 
+from app.config import get_settings
 from app.db.session import async_session
 from app.models.forwarding_models import (
     ForwardingRule, SweepLog, SweepStatus, GasStrategy,
 )
+from app.services.cache_service import get_redis
 
-# ═══════════════════════════════════════════════════════════
-#  MULTI-CHAIN RPC CONFIG
-# ═══════════════════════════════════════════════════════════
-RPC_URLS = {
+logger = logging.getLogger("sweep_service")
+
+# ── Prometheus Metrics ─────────────────────────────────────
+SWEEP_TOTAL = Counter(
+    "sweep_total",
+    "Total sweep executions",
+    ["status", "chain_id"],
+)
+SWEEP_LATENCY = Histogram(
+    "sweep_latency_seconds",
+    "Sweep execution duration",
+    buckets=[0.5, 1, 2, 5, 10, 30, 60, 120],
+)
+SWEEP_AMOUNT_ETH = Histogram(
+    "sweep_amount_eth",
+    "Sweep amount in ETH (or ETH-equivalent)",
+    buckets=[0.001, 0.01, 0.05, 0.1, 0.5, 1, 5, 10, 50],
+)
+SWEEP_GAS_GWEI = Gauge(
+    "sweep_gas_gwei",
+    "Last observed gas price in gwei",
+    ["chain_id"],
+)
+ACTIVE_RULES_TOTAL = Gauge(
+    "active_rules_total",
+    "Number of active (non-paused) forwarding rules",
+)
+
+
+async def refresh_active_rules_gauge():
+    """Update the active_rules_total Prometheus gauge."""
+    try:
+        async with async_session() as db:
+            result = await db.execute(
+                select(func.count()).select_from(ForwardingRule).where(
+                    ForwardingRule.is_active == True,
+                    ForwardingRule.is_paused == False,
+                )
+            )
+            ACTIVE_RULES_TOTAL.set(result.scalar() or 0)
+    except Exception:
+        pass
+
+
+# ═══════════════════════════════════════════════════════════════
+#  CONSTANTS
+# ═══════════════════════════════════════════════════════════════
+
+RPC_URLS: dict[int, str] = {
     8453:  "https://mainnet.base.org",
     84532: "https://sepolia.base.org",
     1:     "https://eth.llamarpc.com",
     42161: "https://arb1.arbitrum.io/rpc",
 }
 
-# Solana configuration placeholder
-# Solana is non-EVM and requires solana-py:
-#   pip install solana
-#
-# SOLANA_RPC = "https://api.mainnet-beta.solana.com"
-# SOLANA_DEVNET = "https://api.devnet.solana.com"
-#
-# Solana transactions use a completely different model:
-#   - No nonce/gasPrice — uses "recent blockhash" + "priority fee"
-#   - Signing via Ed25519 instead of ECDSA
-#   - Uses SPL Token program for token transfers
-#   - Transfer instruction: system_program.transfer(from, to, lamports)
-#
-# Implementation:
-#   from solana.rpc.async_api import AsyncClient
-#   from solana.keypair import Keypair
-#   from solana.transaction import Transaction
-#   from solana.system_program import TransferParams, transfer
-#
-#   async def execute_solana_sweep(source_key, dest, lamports):
-#       client = AsyncClient(SOLANA_RPC)
-#       keypair = Keypair.from_secret_key(bytes.fromhex(source_key))
-#       tx = Transaction().add(transfer(TransferParams(
-#           from_pubkey=keypair.public_key,
-#           to_pubkey=PublicKey(dest),
-#           lamports=lamports,
-#       )))
-#       resp = await client.send_transaction(tx, keypair)
-#       return resp['result']
-
-CHAIN_NAMES = {
+CHAIN_NAMES: dict[int, str] = {
     8453: "Base", 84532: "Base Sepolia",
     1: "Ethereum", 42161: "Arbitrum One",
 }
 
-GAS_MULT = {
-    GasStrategy.fast: 1.5,
+# L2 chains that use EIP-1559 (type 2) transactions
+EIP1559_CHAINS = {8453, 84532, 42161}
+
+GAS_MULT: dict[GasStrategy, float] = {
+    GasStrategy.fast:   1.5,
     GasStrategy.normal: 1.1,
-    GasStrategy.slow: 0.9,
+    GasStrategy.slow:   0.9,
 }
 
+# Known ERC-20 tokens on Base mainnet (chain_id, address_lower) → info
+TOKEN_REGISTRY: dict[tuple[int, str], dict] = {
+    # ── Base Mainnet (8453) ──
+    (8453, "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"): {"symbol": "USDC",  "decimals": 6,  "name": "USD Coin"},
+    (8453, "0xfde4c96c8593536e31f229ea8f37b2ada2699bb2"): {"symbol": "USDT",  "decimals": 6,  "name": "Tether USD"},
+    (8453, "0x50c5725949a6f0c72e6c4a641f24049a917db0cb"): {"symbol": "DAI",   "decimals": 18, "name": "Dai Stablecoin"},
+    (8453, "0x4200000000000000000000000000000000000006"): {"symbol": "WETH",  "decimals": 18, "name": "Wrapped Ether"},
+    (8453, "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf"): {"symbol": "cbBTC", "decimals": 8,  "name": "Coinbase BTC"},
+    # ── Base Sepolia (84532) — test tokens ──
+    (84532, "0x036cbd53842c5426634e7929541ec2318f3dcf7e"): {"symbol": "USDC", "decimals": 6, "name": "USDC (Sepolia)"},
+}
 
-# ═══════════════════════════════════════════════════════════
-#  WebSocket notification helper
-# ═══════════════════════════════════════════════════════════
+# ERC-20 transfer(address,uint256) function selector
+ERC20_TRANSFER_SELECTOR = "a9059cbb"
+
+MAX_RETRY_COUNT = 3
+RETRY_BASE_DELAY = 10  # seconds
+LOCK_TTL = 300          # 5 minutes
+
+
+# ═══════════════════════════════════════════════════════════════
+#  RPC HELPER
+# ═══════════════════════════════════════════════════════════════
+
+async def _rpc_call(chain_id: int, method: str, params: list, timeout: int = 10) -> Any:
+    """Execute a JSON-RPC call against the chain's endpoint."""
+    rpc = RPC_URLS.get(chain_id, RPC_URLS[8453])
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            rpc,
+            json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
+            timeout=timeout,
+        )
+        data = resp.json()
+    if "error" in data:
+        raise RuntimeError(f"RPC {method} error on chain {chain_id}: {data['error']}")
+    return data.get("result")
+
+
+# ═══════════════════════════════════════════════════════════════
+#  REDIS DISTRIBUTED LOCK
+# ═══════════════════════════════════════════════════════════════
+
+async def _acquire_lock(key: str, ttl: int = LOCK_TTL) -> bool:
+    """SETNX-based distributed lock. Returns True if acquired."""
+    try:
+        r = await get_redis()
+        return bool(await r.set(f"sweep_lock:{key}", "1", nx=True, ex=ttl))
+    except Exception:
+        logger.warning("Redis lock unavailable for %s — proceeding without lock", key)
+        return True  # fail-open: if Redis is down, allow the sweep
+
+
+async def _release_lock(key: str) -> None:
+    """Release a distributed lock."""
+    try:
+        r = await get_redis()
+        await r.delete(f"sweep_lock:{key}")
+    except Exception:
+        pass
+
+
+# ═══════════════════════════════════════════════════════════════
+#  VALIDATION HELPERS
+# ═══════════════════════════════════════════════════════════════
+
+def _check_schedule(rule: ForwardingRule) -> tuple[bool, Optional[str]]:
+    """Check if current time is within the rule's schedule window."""
+    if not rule.schedule_json:
+        return True, None
+
+    sched = rule.schedule_json
+    tz_name = sched.get("timezone", "UTC")
+    try:
+        tz = ZoneInfo(tz_name)
+    except Exception:
+        tz = ZoneInfo("UTC")
+
+    now = datetime.now(tz)
+    allowed_days = sched.get("days")  # list of weekday ints (0=Mon..6=Sun)
+    if allowed_days is not None and now.weekday() not in allowed_days:
+        return False, f"Schedule: day {now.strftime('%A')} not in allowed days"
+
+    h_start = sched.get("hours_start", 0)
+    h_end = sched.get("hours_end", 24)
+    if not (h_start <= now.hour < h_end):
+        return False, f"Schedule: hour {now.hour} outside {h_start}-{h_end}"
+
+    return True, None
+
+
+async def _check_cooldown(rule: ForwardingRule) -> tuple[bool, Optional[str]]:
+    """Check that enough time has passed since the last completed sweep."""
+    if rule.cooldown_sec <= 0:
+        return True, None
+
+    async with async_session() as db:
+        result = await db.execute(
+            select(SweepLog.executed_at)
+            .where(
+                SweepLog.rule_id == rule.id,
+                SweepLog.status == SweepStatus.completed,
+            )
+            .order_by(SweepLog.executed_at.desc())
+            .limit(1)
+        )
+        last_at = result.scalar_one_or_none()
+
+    if last_at is None:
+        return True, None
+
+    elapsed = (datetime.now(timezone.utc) - last_at).total_seconds()
+    if elapsed < rule.cooldown_sec:
+        remaining = int(rule.cooldown_sec - elapsed)
+        return False, f"Cooldown: {remaining}s remaining (need {rule.cooldown_sec}s)"
+
+    return True, None
+
+
+async def _check_daily_volume(rule: ForwardingRule) -> tuple[bool, Optional[str]]:
+    """Check that today's total sweep volume hasn't exceeded max_daily_vol."""
+    if rule.max_daily_vol is None:
+        return True, None
+
+    async with async_session() as db:
+        today = datetime.now(timezone.utc).date()
+        result = await db.execute(
+            select(func.coalesce(func.sum(SweepLog.amount_human), 0.0))
+            .where(
+                SweepLog.rule_id == rule.id,
+                SweepLog.status == SweepStatus.completed,
+                cast(SweepLog.created_at, Date) == today,
+            )
+        )
+        vol_today = float(result.scalar())
+
+    limit = float(rule.max_daily_vol)
+    if vol_today >= limit:
+        return False, f"Daily volume limit: {vol_today:.4f}/{limit:.4f}"
+
+    return True, None
+
+
+def _check_token_filter(rule: ForwardingRule, incoming_symbol: str) -> tuple[bool, Optional[str]]:
+    """Check if the incoming token is allowed by the rule's token filter."""
+    filt = rule.token_filter
+    if not filt:
+        return True, None
+
+    allowed = [s.upper() for s in filt]
+    if incoming_symbol.upper() in allowed:
+        return True, None
+
+    return False, f"Token {incoming_symbol} not in allowed list: {allowed}"
+
+
+async def _check_gas_limit(chain_id: int, gas_limit_gwei: int) -> tuple[bool, float, Optional[str]]:
+    """Check that current gas price doesn't exceed the rule's gas_limit_gwei."""
+    try:
+        raw = await _rpc_call(chain_id, "eth_gasPrice", [])
+        gas_wei = int(raw, 16)
+        gas_gwei = gas_wei / 1e9
+    except Exception as e:
+        logger.warning("Gas price check failed on chain %d: %s", chain_id, e)
+        return True, 0.0, None  # fail-open
+
+    if gas_gwei > gas_limit_gwei:
+        return False, gas_gwei, f"Gas {gas_gwei:.2f} gwei > limit {gas_limit_gwei} gwei"
+
+    return True, gas_gwei, None
+
+
+async def validate_all_conditions(
+    rule: ForwardingRule, incoming_symbol: str = "ETH",
+) -> tuple[bool, Optional[str]]:
+    """Run all validation checks. Short-circuits on first failure."""
+    ok, reason = _check_schedule(rule)
+    if not ok:
+        return False, reason
+
+    ok, reason = await _check_cooldown(rule)
+    if not ok:
+        return False, reason
+
+    ok, reason = await _check_daily_volume(rule)
+    if not ok:
+        return False, reason
+
+    ok, reason = _check_token_filter(rule, incoming_symbol)
+    if not ok:
+        return False, reason
+
+    ok, _, reason = await _check_gas_limit(rule.chain_id, rule.gas_limit_gwei)
+    if not ok:
+        return False, reason
+
+    return True, None
+
+
+# ═══════════════════════════════════════════════════════════════
+#  GAS ESTIMATION (EIP-1559 aware)
+# ═══════════════════════════════════════════════════════════════
+
+async def estimate_gas_cost(
+    chain_id: int,
+    strategy: GasStrategy,
+    tx_params: Optional[dict] = None,
+) -> tuple[int, float, float, dict]:
+    """
+    Estimate gas for a transaction.
+
+    Returns:
+        (gas_limit, effective_gas_gwei, cost_eth, fee_params)
+        fee_params is either {"gasPrice": int} or {"maxFeePerGas": int, "maxPriorityFeePerGas": int}
+    """
+    mult = GAS_MULT.get(strategy, 1.1)
+
+    # Gas limit estimation
+    if tx_params:
+        try:
+            raw_estimate = await _rpc_call(chain_id, "eth_estimateGas", [tx_params])
+            gas_limit = int(int(raw_estimate, 16) * 1.2)  # 20% buffer
+        except Exception:
+            gas_limit = 65000 if tx_params.get("data") else 21000
+    else:
+        gas_limit = 21000
+
+    # Gas price
+    raw_price = await _rpc_call(chain_id, "eth_gasPrice", [])
+    base_gas_wei = int(raw_price, 16)
+
+    if chain_id in EIP1559_CHAINS:
+        # EIP-1559 type 2 transaction
+        try:
+            raw_priority = await _rpc_call(chain_id, "eth_maxPriorityFeePerGas", [])
+            priority_fee = int(raw_priority, 16)
+        except Exception:
+            priority_fee = int(0.001 * 1e9)  # 0.001 gwei fallback (Base has very low priority fees)
+
+        max_fee = int(base_gas_wei * mult)
+        priority_fee = min(priority_fee, max_fee)
+        effective_gas_wei = max_fee
+        fee_params = {
+            "maxFeePerGas": max_fee,
+            "maxPriorityFeePerGas": priority_fee,
+        }
+    else:
+        # Legacy transaction (Ethereum L1)
+        adjusted = int(base_gas_wei * mult)
+        effective_gas_wei = adjusted
+        fee_params = {"gasPrice": adjusted}
+
+    effective_gwei = effective_gas_wei / 1e9
+    cost_eth = (effective_gas_wei * gas_limit) / 1e18
+
+    return gas_limit, effective_gwei, cost_eth, fee_params
+
+
+async def estimate_simple_gas_cost(
+    chain_id: int, strategy: GasStrategy,
+) -> tuple[int, float, float]:
+    """Backward-compatible wrapper for quick gas estimation (ETH transfer)."""
+    gas_limit, gas_gwei, cost_eth, _ = await estimate_gas_cost(chain_id, strategy)
+    return gas_limit, gas_gwei, cost_eth
+
+
+# ═══════════════════════════════════════════════════════════════
+#  ERC-20 TRANSFER BUILDING
+# ═══════════════════════════════════════════════════════════════
+
+def _build_erc20_transfer_data(to_address: str, amount_raw: int) -> str:
+    """Build calldata for ERC-20 transfer(address, uint256)."""
+    addr = to_address.lower().replace("0x", "").zfill(64)
+    amt = hex(amount_raw)[2:].zfill(64)
+    return "0x" + ERC20_TRANSFER_SELECTOR + addr + amt
+
+
+def _get_token_decimals(chain_id: int, token_address: str) -> int:
+    """Look up token decimals from TOKEN_REGISTRY. Defaults to 18."""
+    key = (chain_id, token_address.lower())
+    info = TOKEN_REGISTRY.get(key)
+    return info["decimals"] if info else 18
+
+
+def _human_to_token_units(amount_human: float, decimals: int) -> int:
+    """Convert human-readable amount to raw token units (decimal-safe)."""
+    return int(Decimal(str(amount_human)) * Decimal(10 ** decimals))
+
+
+# ═══════════════════════════════════════════════════════════════
+#  WEBSOCKET NOTIFICATION
+# ═══════════════════════════════════════════════════════════════
 
 async def _notify(owner: str, event_type: str, data: dict) -> None:
-    """Invia evento al WebSocket feed. Non-blocking, non solleva eccezioni."""
+    """Send event to the WebSocket feed. Non-blocking, never raises."""
     try:
         from app.api.websocket_routes import feed_manager
         await feed_manager.broadcast(owner, event_type, data)
     except Exception:
-        pass  # WS non disponibile — non bloccare lo sweep
+        pass
 
 
 async def _resolve_owner(rule_id: int) -> Optional[str]:
-    """Risolvi rule_id → user_id (owner address)."""
+    """Resolve rule_id → user_id (owner address)."""
     try:
         async with async_session() as db:
             result = await db.execute(
@@ -100,229 +416,685 @@ async def _resolve_owner(rule_id: int) -> Optional[str]:
         return None
 
 
-# ═══════════════════════════════════════════════════════════
-#  Core functions
-# ═══════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════════
+#  TELEGRAM / EMAIL NOTIFICATIONS
+# ═══════════════════════════════════════════════════════════════
 
-def get_sweep_private_key() -> Optional[str]:
-    key = os.environ.get("SWEEP_PRIVATE_KEY")
+async def _notify_telegram(chat_id: str, message: str) -> bool:
+    """Send a Telegram message via Bot API."""
+    token = get_settings().telegram_bot_token
+    if not token:
+        logger.debug("Telegram bot token not configured — skipping notification")
+        return False
+
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                f"https://api.telegram.org/bot{token}/sendMessage",
+                json={"chat_id": chat_id, "text": message, "parse_mode": "Markdown"},
+                timeout=10,
+            )
+            return resp.status_code == 200
+    except Exception as e:
+        logger.warning("Telegram notification failed: %s", e)
+        return False
+
+
+async def _notify_email(email: str, subject: str, body: str) -> bool:
+    """Email notification stub — not yet implemented."""
+    logger.info("Email notification skipped (not implemented): to=%s subj=%s", email, subject)
+    return False
+
+
+async def _send_notification(
+    rule: ForwardingRule,
+    event: str,
+    details: dict,
+) -> None:
+    """Unified notification dispatcher: WS + Telegram/Email if configured."""
+    owner = rule.user_id
+
+    # Always send WebSocket notification
+    await _notify(owner, event, details)
+
+    if not rule.notify_enabled:
+        return
+
+    # Build human-readable message
+    chain = CHAIN_NAMES.get(rule.chain_id, str(rule.chain_id))
+    amount = details.get("amount_eth") or details.get("amount_human", "?")
+    token = details.get("token", rule.token_symbol or "ETH")
+    status = details.get("status", event)
+    tx_hash = details.get("tx_hash", "")
+
+    msg = (
+        f"*RSend Sweep — {status.upper()}*\n"
+        f"Chain: {chain}\n"
+        f"Amount: {amount} {token}\n"
+        f"To: `{details.get('destination', rule.destination_wallet)}`\n"
+    )
+    if tx_hash:
+        msg += f"TX: `{tx_hash}`\n"
+    if details.get("error"):
+        msg += f"Error: {details['error']}\n"
+
+    if rule.notify_channel == "telegram" and rule.telegram_chat_id:
+        await _notify_telegram(rule.telegram_chat_id, msg)
+    elif rule.notify_channel == "email" and rule.email_address:
+        await _notify_email(rule.email_address, f"RSend: {event}", msg)
+
+
+# ═══════════════════════════════════════════════════════════════
+#  CORE SWEEP EXECUTION
+# ═══════════════════════════════════════════════════════════════
+
+def _get_private_key() -> Optional[str]:
+    """Retrieve the sweep wallet private key from settings."""
+    key = get_settings().sweep_private_key
     if not key or not key.startswith("0x") or len(key) != 66:
         return None
     return key
 
 
-async def estimate_gas_cost(chain_id: int, strategy: GasStrategy) -> tuple[int, float, float]:
-    import httpx
-    rpc = RPC_URLS.get(chain_id, RPC_URLS[8453])
-    async with httpx.AsyncClient() as client:
-        res = await client.post(rpc, json={"jsonrpc": "2.0", "id": 1, "method": "eth_gasPrice", "params": []}, timeout=10)
-        gas_wei = int(res.json().get("result", "0x0"), 16)
-    mult = GAS_MULT.get(strategy, 1.1)
-    adjusted = int(gas_wei * mult)
-    gas_limit = 21000
-    cost_eth = (adjusted * gas_limit) / 1e18
-    return gas_limit, adjusted / 1e9, cost_eth
-
-
 async def execute_single_sweep(
-    sweep_id: int, source: str, destination: str,
-    amount_wei: int, chain_id: int = 8453,
+    sweep_id: int,
+    source: str,
+    destination: str,
+    amount_wei: int,
+    chain_id: int = 8453,
     strategy: GasStrategy = GasStrategy.normal,
     max_gas_pct: float = 10.0,
     owner: Optional[str] = None,
+    token_address: Optional[str] = None,
+    token_symbol: str = "ETH",
+    token_decimals: int = 18,
 ) -> dict:
-    import httpx
+    """
+    Execute a single sweep transaction (ETH native or ERC-20).
 
-    # Check chain is EVM-compatible
+    For ETH: gas is deducted from the transfer amount.
+    For ERC-20: gas is paid in ETH separately; full token amount is transferred.
+    """
+    _t0 = _time.monotonic()
+
     if chain_id not in RPC_URLS:
-        return {"status": "failed", "error": f"Chain {chain_id} not supported for sweeping yet"}
+        SWEEP_TOTAL.labels(status="failed", chain_id=str(chain_id)).inc()
+        return {"status": "failed", "error": f"Chain {chain_id} not supported"}
 
-    pk = get_sweep_private_key()
+    pk = _get_private_key()
     if not pk:
+        SWEEP_TOTAL.labels(status="failed", chain_id=str(chain_id)).inc()
         return {"status": "failed", "error": "Private key not configured"}
 
-    rpc = RPC_URLS[chain_id]
-    chain_name = CHAIN_NAMES.get(chain_id, f"Chain {chain_id}")
-    amount_eth = amount_wei / 1e18
+    # Execution lock
+    if not await _acquire_lock(f"exec:{sweep_id}"):
+        SWEEP_TOTAL.labels(status="failed", chain_id=str(chain_id)).inc()
+        return {"status": "failed", "error": "Sweep already in progress (lock)"}
 
-    # Resolve owner per WS notifications
+    chain_name = CHAIN_NAMES.get(chain_id, f"Chain {chain_id}")
+    is_erc20 = token_address is not None
+    amount_human = amount_wei / (10 ** token_decimals)
+
     if not owner:
         owner = await _resolve_owner(sweep_id)
+
     ws_base = {
         "sweep_id": sweep_id,
         "source": source,
         "destination": destination,
-        "amount_eth": round(amount_eth, 8),
+        "amount_human": round(amount_human, 8),
+        "amount_eth": round(amount_wei / 1e18, 8) if not is_erc20 else None,
         "chain": chain_name,
         "chain_id": chain_id,
-        "token": "ETH",
+        "token": token_symbol,
     }
 
     async with async_session() as db:
         try:
-            await db.execute(update(SweepLog).where(SweepLog.id == sweep_id).values(status=SweepStatus.executing))
+            # Mark executing
+            await db.execute(
+                update(SweepLog)
+                .where(SweepLog.id == sweep_id)
+                .values(status=SweepStatus.executing)
+            )
             await db.commit()
 
-            # ── WS: sweep_executing ─────────────────────
             if owner:
                 await _notify(owner, "sweep_executing", ws_base)
 
-            gas_limit, gas_gwei, gas_cost_eth = await estimate_gas_cost(chain_id, strategy)
-            gas_pct = (gas_cost_eth / amount_eth * 100) if amount_eth > 0 else 100
+            # ── Build TX params for gas estimation ─────────
+            account = Account.from_key(pk)
+            nonce_raw = await _rpc_call(chain_id, "eth_getTransactionCount", [source, "latest"])
+            nonce = int(nonce_raw, 16)
 
-            if gas_pct > max_gas_pct:
-                await db.execute(update(SweepLog).where(SweepLog.id == sweep_id).values(
-                    status=SweepStatus.gas_too_high, gas_price_gwei=gas_gwei,
-                    gas_cost_eth=gas_cost_eth, gas_percent=round(gas_pct, 2),
-                    error_message=f"Gas {gas_pct:.1f}% > max {max_gas_pct}% on {chain_name}"))
-                await db.commit()
-                # ── WS: sweep_error ─────────────────────
-                if owner:
-                    await _notify(owner, "sweep_error", {
-                        **ws_base,
-                        "error": f"Gas too high: {gas_pct:.1f}% > {max_gas_pct}%",
-                        "gas_gwei": gas_gwei,
-                        "status": "gas_too_high",
-                    })
-                return {"status": "gas_too_high", "gas_percent": gas_pct}
+            if is_erc20:
+                calldata = _build_erc20_transfer_data(destination, amount_wei)
+                est_params = {"from": source, "to": token_address, "data": calldata}
+            else:
+                est_params = {"from": source, "to": destination, "value": hex(amount_wei)}
 
-            net = amount_wei - int(gas_cost_eth * 1e18)
-            if net <= 0:
-                await db.execute(update(SweepLog).where(SweepLog.id == sweep_id).values(
-                    status=SweepStatus.failed, error_message="Amount too small after gas"))
-                await db.commit()
-                if owner:
-                    await _notify(owner, "sweep_error", {
-                        **ws_base, "error": "Amount too small after gas", "status": "failed",
-                    })
-                return {"status": "failed", "error": "Too small"}
+            # ── Gas estimation ─────────────────────────────
+            gas_limit, gas_gwei, gas_cost_eth, fee_params = await estimate_gas_cost(
+                chain_id, strategy, est_params,
+            )
+            SWEEP_GAS_GWEI.labels(chain_id=str(chain_id)).set(gas_gwei)
 
-            async with httpx.AsyncClient() as client:
-                nonce_r = await client.post(rpc, json={"jsonrpc": "2.0", "id": 1, "method": "eth_getTransactionCount", "params": [source, "latest"]}, timeout=10)
-                nonce = int(nonce_r.json()["result"], 16)
-                chain_r = await client.post(rpc, json={"jsonrpc": "2.0", "id": 1, "method": "eth_chainId", "params": []}, timeout=10)
-                chain = int(chain_r.json()["result"], 16)
+            # ── Gas % guard (ETH transfers only) ──────────
+            if not is_erc20:
+                amount_eth = amount_wei / 1e18
+                gas_pct = (gas_cost_eth / amount_eth * 100) if amount_eth > 0 else 100
 
-                from eth_account import Account
-                account = Account.from_key(pk)
-                signed = account.sign_transaction({
-                    "to": destination, "value": net, "gas": gas_limit,
-                    "gasPrice": int(gas_gwei * 1e9), "nonce": nonce, "chainId": chain,
-                })
-                raw = "0x" + signed.raw_transaction.hex()
+                if gas_pct > max_gas_pct:
+                    await db.execute(
+                        update(SweepLog).where(SweepLog.id == sweep_id).values(
+                            status=SweepStatus.gas_too_high,
+                            gas_price_gwei=gas_gwei,
+                            gas_cost_eth=gas_cost_eth,
+                            gas_percent=round(gas_pct, 2),
+                            error_message=f"Gas {gas_pct:.1f}% > max {max_gas_pct}% on {chain_name}",
+                        )
+                    )
+                    await db.commit()
+                    err_data = {**ws_base, "error": f"Gas too high: {gas_pct:.1f}%", "status": "gas_too_high", "gas_gwei": gas_gwei}
+                    if owner:
+                        await _notify(owner, "sweep_error", err_data)
+                    await _release_lock(f"exec:{sweep_id}")
+                    SWEEP_TOTAL.labels(status="gas_too_high", chain_id=str(chain_id)).inc()
+                    SWEEP_LATENCY.observe(_time.monotonic() - _t0)
+                    return {"status": "gas_too_high", "gas_percent": gas_pct}
 
-                send_r = await client.post(rpc, json={"jsonrpc": "2.0", "id": 1, "method": "eth_sendRawTransaction", "params": [raw]}, timeout=15)
-                result = send_r.json()
+                # Deduct gas from ETH amount
+                net_wei = amount_wei - int(gas_cost_eth * 1e18)
+                if net_wei <= 0:
+                    await db.execute(
+                        update(SweepLog).where(SweepLog.id == sweep_id).values(
+                            status=SweepStatus.failed,
+                            error_message="Amount too small after gas",
+                        )
+                    )
+                    await db.commit()
+                    if owner:
+                        await _notify(owner, "sweep_error", {**ws_base, "error": "Amount too small after gas", "status": "failed"})
+                    await _release_lock(f"exec:{sweep_id}")
+                    SWEEP_TOTAL.labels(status="failed", chain_id=str(chain_id)).inc()
+                    SWEEP_LATENCY.observe(_time.monotonic() - _t0)
+                    return {"status": "failed", "error": "Too small after gas"}
 
-            if "error" in result:
-                err = result["error"].get("message", str(result["error"]))
-                await db.execute(update(SweepLog).where(SweepLog.id == sweep_id).values(
-                    status=SweepStatus.failed, error_message=err[:200],
-                    gas_price_gwei=gas_gwei, gas_cost_eth=gas_cost_eth, gas_percent=round(gas_pct, 2)))
-                await db.commit()
-                # ── WS: sweep_error ─────────────────────
-                if owner:
-                    await _notify(owner, "sweep_error", {
-                        **ws_base, "error": err[:200], "status": "failed",
-                        "gas_gwei": gas_gwei,
-                    })
-                return {"status": "failed", "error": err}
+                tx_value = net_wei
+                tx_to = destination
+                tx_data = None
+            else:
+                # ERC-20: full token amount, gas paid in ETH separately
+                tx_value = 0
+                tx_to = token_address
+                tx_data = _build_erc20_transfer_data(destination, amount_wei)
+                gas_pct = 0.0
 
-            tx_hash = result.get("result", "")
-            await db.execute(update(SweepLog).where(SweepLog.id == sweep_id).values(
-                status=SweepStatus.completed, tx_hash=tx_hash, gas_used=gas_limit,
-                gas_price_gwei=gas_gwei, gas_cost_eth=gas_cost_eth, gas_percent=round(gas_pct, 2),
-                executed_at=datetime.now(timezone.utc)))
+            # ── Build & sign transaction ──────────────────
+            tx = {
+                "to": tx_to,
+                "value": tx_value,
+                "gas": gas_limit,
+                "nonce": nonce,
+                "chainId": chain_id,
+                **fee_params,
+            }
+            if tx_data:
+                tx["data"] = tx_data
+
+            signed = account.sign_transaction(tx)
+            raw_hex = "0x" + signed.raw_transaction.hex()
+
+            # ── Send transaction ──────────────────────────
+            result_raw = await _rpc_call(chain_id, "eth_sendRawTransaction", [raw_hex], timeout=15)
+
+            # If _rpc_call didn't raise, result_raw is the tx hash
+            tx_hash = result_raw if isinstance(result_raw, str) else ""
+
+            await db.execute(
+                update(SweepLog).where(SweepLog.id == sweep_id).values(
+                    status=SweepStatus.completed,
+                    tx_hash=tx_hash,
+                    gas_used=gas_limit,
+                    gas_price_gwei=gas_gwei,
+                    gas_cost_eth=gas_cost_eth,
+                    gas_percent=round(gas_pct, 2),
+                    executed_at=datetime.now(timezone.utc),
+                )
+            )
             await db.commit()
 
-            # ── WS: sweep_completed ─────────────────────
-            if owner:
-                await _notify(owner, "sweep_completed", {
-                    **ws_base,
-                    "tx_hash": tx_hash,
-                    "gas_gwei": gas_gwei,
-                    "gas_cost_eth": round(gas_cost_eth, 8),
-                    "net_amount_eth": round(net / 1e18, 8),
-                    "status": "completed",
-                })
+            completed_data = {
+                **ws_base,
+                "tx_hash": tx_hash,
+                "gas_gwei": gas_gwei,
+                "gas_cost_eth": round(gas_cost_eth, 8),
+                "status": "completed",
+            }
+            if not is_erc20:
+                completed_data["net_amount_eth"] = round(tx_value / 1e18, 8)
 
-            print(f"[rsend] Sweep #{sweep_id} on {chain_name}: {amount_eth:.6f} ETH -> {destination[:10]}... | TX: {tx_hash[:16]}...")
+            if owner:
+                await _notify(owner, "sweep_completed", completed_data)
+
+            logger.info(
+                "[sweep] #%d on %s: %s %s -> %s | TX: %s",
+                sweep_id, chain_name,
+                f"{amount_human:.6f}", token_symbol,
+                destination[:10], tx_hash[:16] if tx_hash else "?",
+            )
+
+            await _release_lock(f"exec:{sweep_id}")
+            SWEEP_TOTAL.labels(status="completed", chain_id=str(chain_id)).inc()
+            SWEEP_LATENCY.observe(_time.monotonic() - _t0)
+            SWEEP_AMOUNT_ETH.observe(amount_human)
             return {"status": "completed", "tx_hash": tx_hash}
 
         except Exception as e:
-            await db.execute(update(SweepLog).where(SweepLog.id == sweep_id).values(
-                status=SweepStatus.failed, error_message=str(e)[:200]))
+            err_msg = str(e)[:200]
+            await db.execute(
+                update(SweepLog).where(SweepLog.id == sweep_id).values(
+                    status=SweepStatus.failed,
+                    error_message=err_msg,
+                )
+            )
             await db.commit()
+
             if owner:
-                await _notify(owner, "sweep_error", {
-                    **ws_base, "error": str(e)[:200], "status": "failed",
-                })
-            return {"status": "failed", "error": str(e)[:200]}
+                await _notify(owner, "sweep_error", {**ws_base, "error": err_msg, "status": "failed"})
+
+            logger.error("[sweep] #%d failed: %s", sweep_id, err_msg)
+            await _release_lock(f"exec:{sweep_id}")
+            SWEEP_TOTAL.labels(status="failed", chain_id=str(chain_id)).inc()
+            SWEEP_LATENCY.observe(_time.monotonic() - _t0)
+            return {"status": "failed", "error": err_msg}
 
 
-async def queue_sweep(sweep_id: int, rule: ForwardingRule, amount: float) -> None:
-    total_wei = int(amount * 1e18)
+# ═══════════════════════════════════════════════════════════════
+#  SPLIT ROUTING
+# ═══════════════════════════════════════════════════════════════
+
+async def _execute_split(
+    id1: int,
+    id2: int,
+    rule: ForwardingRule,
+    wei1: int,
+    wei2: int,
+    owner: Optional[str] = None,
+    token_address: Optional[str] = None,
+    token_symbol: str = "ETH",
+    token_decimals: int = 18,
+) -> None:
+    """Execute a split sweep: two sequential TXs with a nonce-safety delay."""
+    strategy = rule.gas_strategy or GasStrategy.normal
+    max_gas = rule.max_gas_percent or 10.0
+
+    r1 = await execute_single_sweep(
+        id1, rule.source_wallet, rule.destination_wallet, wei1,
+        rule.chain_id, strategy, max_gas, owner,
+        token_address, token_symbol, token_decimals,
+    )
+
+    # Always attempt second TX (even if first fails, the amounts are independent)
+    await asyncio.sleep(2)  # nonce propagation delay
+
+    r2 = await execute_single_sweep(
+        id2, rule.source_wallet, rule.split_destination, wei2,
+        rule.chain_id, strategy, max_gas, owner,
+        token_address, token_symbol, token_decimals,
+    )
+
+    # Send unified notification for the split
+    details = {
+        "sweep_ids": [id1, id2],
+        "split_1": r1,
+        "split_2": r2,
+        "status": "completed" if r1.get("status") == "completed" and r2.get("status") == "completed" else "partial",
+    }
+    await _send_notification(rule, "sweep_split_completed", details)
+
+
+# ═══════════════════════════════════════════════════════════════
+#  RETRY WITH EXPONENTIAL BACKOFF
+# ═══════════════════════════════════════════════════════════════
+
+TRANSIENT_ERRORS = {"nonce too low", "nonce too high", "replacement transaction", "timeout", "connection"}
+
+
+def _is_transient(error_message: str) -> bool:
+    """Check if an error is transient and worth retrying."""
+    lower = (error_message or "").lower()
+    return any(keyword in lower for keyword in TRANSIENT_ERRORS)
+
+
+async def _retry_with_backoff(
+    sweep_id: int,
+    rule: ForwardingRule,
+    token_address: Optional[str] = None,
+    token_symbol: str = "ETH",
+    token_decimals: int = 18,
+) -> dict:
+    """Retry a failed sweep with exponential backoff."""
+    async with async_session() as db:
+        result = await db.execute(select(SweepLog).where(SweepLog.id == sweep_id))
+        sweep = result.scalar_one_or_none()
+        if not sweep:
+            return {"status": "failed", "error": "Sweep log not found"}
+
+        if sweep.retry_count >= MAX_RETRY_COUNT:
+            logger.info("[retry] #%d max retries (%d) reached", sweep_id, MAX_RETRY_COUNT)
+            return {"status": "failed", "error": "Max retries exceeded"}
+
+        new_count = sweep.retry_count + 1
+        await db.execute(
+            update(SweepLog).where(SweepLog.id == sweep_id).values(
+                retry_count=new_count,
+                status=SweepStatus.pending,
+            )
+        )
+        await db.commit()
+
+    delay = RETRY_BASE_DELAY * (2 ** (new_count - 1))
+    logger.info("[retry] #%d attempt %d/%d — waiting %ds", sweep_id, new_count, MAX_RETRY_COUNT, delay)
+    await asyncio.sleep(delay)
+
+    return await execute_single_sweep(
+        sweep_id=sweep_id,
+        source=sweep.source_wallet,
+        destination=sweep.destination_wallet,
+        amount_wei=int(sweep.amount_wei),
+        chain_id=rule.chain_id,
+        strategy=rule.gas_strategy or GasStrategy.normal,
+        max_gas_pct=rule.max_gas_percent or 10.0,
+        owner=rule.user_id,
+        token_address=token_address,
+        token_symbol=token_symbol,
+        token_decimals=token_decimals,
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+#  QUEUE & ORCHESTRATION
+# ═══════════════════════════════════════════════════════════════
+
+async def queue_sweep(
+    sweep_id: int,
+    rule: ForwardingRule,
+    amount: float,
+    trigger_tx_hash: Optional[str] = None,
+) -> None:
+    """
+    Main entry point called by the webhook handler.
+
+    Validates all conditions, acquires a distributed lock,
+    and dispatches the sweep execution as an async task.
+    """
     owner = rule.user_id
 
+    # ── 1. Distributed lock on trigger TX ──────────────
+    if trigger_tx_hash:
+        if not await _acquire_lock(trigger_tx_hash):
+            logger.info("[queue] Duplicate trigger TX %s — skipping", trigger_tx_hash[:16])
+            return
+
+    # ── 2. Validate all conditions ─────────────────────
+    ok, reason = await validate_all_conditions(rule, rule.token_symbol or "ETH")
+    if not ok:
+        logger.info("[queue] Rule #%d skipped: %s", rule.id, reason)
+        async with async_session() as db:
+            await db.execute(
+                update(SweepLog).where(SweepLog.id == sweep_id).values(
+                    status=SweepStatus.skipped,
+                    error_message=reason[:200] if reason else "Condition not met",
+                )
+            )
+            await db.commit()
+
+        SWEEP_TOTAL.labels(status="skipped", chain_id=str(rule.chain_id)).inc()
+        await _send_notification(rule, "sweep_skipped", {
+            "sweep_id": sweep_id,
+            "reason": reason,
+            "status": "skipped",
+        })
+        return
+
+    # ── 3. Auto-swap check ─────────────────────────────
+    if rule.auto_swap and rule.swap_to_token:
+        logger.warning(
+            "[queue] Auto-swap requested (rule #%d) but not yet implemented — proceeding with normal transfer",
+            rule.id,
+        )
+
+    # ── 4. Resolve token params ────────────────────────
+    token_address = rule.token_address
+    token_symbol = rule.token_symbol or "ETH"
+    if token_address:
+        token_decimals = _get_token_decimals(rule.chain_id, token_address)
+    else:
+        token_decimals = 18  # ETH
+
+    # ── 5. Convert amount to raw units ─────────────────
+    amount_raw = _human_to_token_units(amount, token_decimals)
+
+    # ── 6. Split or single ─────────────────────────────
     if rule.split_enabled and rule.split_destination and rule.split_percent:
         pct1 = rule.split_percent
         pct2 = 100 - pct1
 
         async with async_session() as db:
-            _, _, gas_cost = await estimate_gas_cost(rule.chain_id, rule.gas_strategy or GasStrategy.normal)
-            total_gas_wei = int(gas_cost * 1e18 * 2)
-            net_wei = total_wei - total_gas_wei
-            if net_wei <= 0:
-                print(f"[rsend] Split: amount too small for 2 TX on chain {rule.chain_id}")
-                return
+            if not token_address:
+                # ETH: need to pre-estimate gas for 2 TXs to calculate net amounts
+                _, _, gas_cost = await estimate_simple_gas_cost(
+                    rule.chain_id, rule.gas_strategy or GasStrategy.normal,
+                )
+                total_gas_wei = int(gas_cost * 1e18 * 2)
+                net_raw = amount_raw - total_gas_wei
+                if net_raw <= 0:
+                    logger.warning("[queue] Split: amount too small for 2 TX gas on chain %d", rule.chain_id)
+                    return
+            else:
+                # ERC-20: gas is in ETH, not deducted from token amount
+                net_raw = amount_raw
 
-            amt1 = (net_wei * pct1) // 100
-            amt2 = net_wei - amt1
+            amt1 = (net_raw * pct1) // 100
+            amt2 = net_raw - amt1
 
-            log1 = SweepLog(rule_id=rule.id, source_wallet=rule.source_wallet,
-                destination_wallet=rule.destination_wallet, is_split=True, split_index=0,
-                split_percent=pct1, amount_wei=str(amt1), amount_human=amt1/1e18,
-                token_symbol=rule.token_symbol, status=SweepStatus.pending)
-            log2 = SweepLog(rule_id=rule.id, source_wallet=rule.source_wallet,
-                destination_wallet=rule.split_destination, is_split=True, split_index=1,
-                split_percent=pct2, amount_wei=str(amt2), amount_human=amt2/1e18,
-                token_symbol=rule.token_symbol, status=SweepStatus.pending)
-            db.add(log1); db.add(log2)
+            log1 = SweepLog(
+                rule_id=rule.id, source_wallet=rule.source_wallet,
+                destination_wallet=rule.destination_wallet, is_split=True,
+                split_index=0, split_percent=pct1,
+                amount_wei=str(amt1), amount_human=amt1 / (10 ** token_decimals),
+                token_symbol=token_symbol, status=SweepStatus.pending,
+                trigger_tx_hash=trigger_tx_hash,
+            )
+            log2 = SweepLog(
+                rule_id=rule.id, source_wallet=rule.source_wallet,
+                destination_wallet=rule.split_destination, is_split=True,
+                split_index=1, split_percent=pct2,
+                amount_wei=str(amt2), amount_human=amt2 / (10 ** token_decimals),
+                token_symbol=token_symbol, status=SweepStatus.pending,
+                trigger_tx_hash=trigger_tx_hash,
+            )
+            db.add(log1)
+            db.add(log2)
             await db.flush()
             id1, id2 = log1.id, log2.id
             await db.commit()
 
         chain_name = CHAIN_NAMES.get(rule.chain_id, str(rule.chain_id))
-        print(f"[rsend] Split on {chain_name}: {pct1}% -> {rule.destination_wallet[:10]}... | {pct2}% -> {rule.split_destination[:10]}...")
-        asyncio.create_task(_execute_split(id1, id2, rule, amt1, amt2, owner))
+        logger.info(
+            "[queue] Split on %s: %d%% -> %s | %d%% -> %s",
+            chain_name, pct1, rule.destination_wallet[:10], pct2, rule.split_destination[:10],
+        )
+        asyncio.create_task(
+            _execute_split(id1, id2, rule, amt1, amt2, owner, token_address, token_symbol, token_decimals)
+        )
     else:
-        asyncio.create_task(execute_single_sweep(
-            sweep_id=sweep_id, source=rule.source_wallet,
-            destination=rule.destination_wallet, amount_wei=total_wei,
-            chain_id=rule.chain_id, strategy=rule.gas_strategy or GasStrategy.normal,
-            max_gas_pct=rule.max_gas_percent or 10.0, owner=owner))
+        asyncio.create_task(
+            execute_single_sweep(
+                sweep_id=sweep_id,
+                source=rule.source_wallet,
+                destination=rule.destination_wallet,
+                amount_wei=amount_raw,
+                chain_id=rule.chain_id,
+                strategy=rule.gas_strategy or GasStrategy.normal,
+                max_gas_pct=rule.max_gas_percent or 10.0,
+                owner=owner,
+                token_address=token_address,
+                token_symbol=token_symbol,
+                token_decimals=token_decimals,
+            )
+        )
 
 
-async def _execute_split(
-    id1: int, id2: int, rule: ForwardingRule, wei1: int, wei2: int,
-    owner: Optional[str] = None,
-):
-    strategy = rule.gas_strategy or GasStrategy.normal
-    max_gas = rule.max_gas_percent or 10.0
-    r1 = await execute_single_sweep(id1, rule.source_wallet, rule.destination_wallet, wei1, rule.chain_id, strategy, max_gas, owner)
-    if r1["status"] == "completed":
-        await asyncio.sleep(2)
-        await execute_single_sweep(id2, rule.source_wallet, rule.split_destination, wei2, rule.chain_id, strategy, max_gas, owner)
+# ═══════════════════════════════════════════════════════════════
+#  RETRY PENDING SWEEPS
+# ═══════════════════════════════════════════════════════════════
 
+async def process_incoming_tx(
+    from_addr: str,
+    to_addr: str,
+    value: float,
+    tx_hash: str,
+    asset: str = "ETH",
+    token_address: Optional[str] = None,
+    token_decimals: int = 18,
+    block_num: Optional[str] = None,
+) -> int:
+    """
+    Process an incoming transaction detected by webhook or polling.
+
+    Finds active forwarding rules matching the destination address,
+    creates SweepLog entries, and queues sweeps for execution.
+
+    Args:
+        from_addr: Sender address
+        to_addr: Recipient address (must match a rule's source_wallet)
+        value: Human-readable amount (ETH or token units)
+        tx_hash: Transaction hash (used for dedup lock)
+        asset: Asset symbol from the source (e.g. "ETH", "USDC")
+        token_address: ERC-20 contract address (None for native ETH)
+        token_decimals: Token decimals (18 for ETH)
+        block_num: Block number (hex string, for logging)
+
+    Returns:
+        Number of sweeps queued.
+    """
+    from app.api.websocket_routes import feed_manager
+
+    to_lower = to_addr.lower()
+    processed = 0
+
+    async with async_session() as db:
+        # Find active, unpaused rules for this source address
+        result = await db.execute(
+            select(ForwardingRule).where(
+                ForwardingRule.source_wallet == to_lower,
+                ForwardingRule.is_active == True,   # noqa: E712
+                ForwardingRule.is_paused == False,   # noqa: E712
+            )
+        )
+        rules = result.scalars().all()
+
+        for rule in rules:
+            # Token filter: if rule targets a specific token, only match that
+            if rule.token_address:
+                if not token_address or token_address.lower() != rule.token_address.lower():
+                    continue
+
+            # Threshold check
+            if value < rule.min_threshold:
+                continue
+
+            # Calculate amount_wei with correct decimals
+            if token_address:
+                decimals = token_decimals
+            else:
+                decimals = 18
+            amount_wei = int(Decimal(str(value)) * Decimal(10 ** decimals))
+
+            sweep = SweepLog(
+                rule_id=rule.id,
+                source_wallet=rule.source_wallet,
+                destination_wallet=rule.destination_wallet,
+                amount_wei=str(amount_wei),
+                amount_human=value,
+                token_symbol=rule.token_symbol or asset,
+                status=SweepStatus.pending,
+                trigger_tx_hash=tx_hash,
+            )
+            db.add(sweep)
+            await db.flush()
+
+            # Queue sweep — runs in background via asyncio.create_task inside queue_sweep
+            await queue_sweep(sweep.id, rule, value, trigger_tx_hash=tx_hash)
+            processed += 1
+
+            # WS: incoming_detected
+            await feed_manager.broadcast(rule.user_id, "incoming_detected", {
+                "sweep_id": sweep.id,
+                "rule_id": rule.id,
+                "source_wallet": rule.source_wallet,
+                "from_address": from_addr.lower(),
+                "amount": value,
+                "token": rule.token_symbol or asset,
+                "trigger_tx": tx_hash,
+                "block": block_num,
+            })
+
+        if processed > 0:
+            await db.commit()
+
+    if processed > 0:
+        logger.info(
+            "[incoming] %d sweep(s) queued for TX %s -> %s (%.6f %s)",
+            processed, from_addr[:10], to_lower[:10], value, asset,
+        )
+
+    return processed
+
+
+# ═══════════════════════════════════════════════════════════════
+#  RETRY PENDING SWEEPS
+# ═══════════════════════════════════════════════════════════════
 
 async def retry_pending_sweeps() -> int:
+    """
+    Retry sweeps that failed due to gas or transient errors.
+    Called periodically (e.g., via a cron or background task).
+    """
     async with async_session() as db:
-        result = await db.execute(select(SweepLog).where(SweepLog.status == SweepStatus.gas_too_high).order_by(SweepLog.created_at).limit(10))
+        result = await db.execute(
+            select(SweepLog).where(
+                (SweepLog.status == SweepStatus.gas_too_high)
+                | (
+                    (SweepLog.status == SweepStatus.failed)
+                    & (SweepLog.retry_count < MAX_RETRY_COUNT)
+                )
+            ).order_by(SweepLog.created_at).limit(20)
+        )
+        sweeps = result.scalars().all()
+
         retried = 0
-        for sweep in result.scalars().all():
-            rule_r = await db.execute(select(ForwardingRule).where(ForwardingRule.id == sweep.rule_id))
+        for sweep in sweeps:
+            # Only retry transient failures (not permanent ones)
+            if sweep.status == SweepStatus.failed and not _is_transient(sweep.error_message):
+                continue
+
+            rule_r = await db.execute(
+                select(ForwardingRule).where(ForwardingRule.id == sweep.rule_id)
+            )
             rule = rule_r.scalar_one_or_none()
-            if not rule or not rule.is_active: continue
-            asyncio.create_task(execute_single_sweep(sweep.id, sweep.source_wallet, sweep.destination_wallet, int(sweep.amount_wei), rule.chain_id, rule.gas_strategy or GasStrategy.normal, rule.max_gas_percent or 10.0, rule.user_id))
+            if not rule or not rule.is_active:
+                continue
+
+            token_address = rule.token_address
+            token_symbol = rule.token_symbol or "ETH"
+            token_decimals = _get_token_decimals(rule.chain_id, token_address) if token_address else 18
+
+            asyncio.create_task(
+                _retry_with_backoff(sweep.id, rule, token_address, token_symbol, token_decimals)
+            )
             retried += 1
+
         return retried

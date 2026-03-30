@@ -20,10 +20,13 @@ GET  /api/v1/forwarding/stats             → Statistiche aggregate
 GET  /api/v1/forwarding/stats/daily       → Volume giornaliero
 """
 
+import asyncio
 import csv
 import hashlib
 import hmac
 import io
+import json
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -43,8 +46,11 @@ from app.models.forwarding_models import (
     SweepLog,
     SweepStatus,
 )
-from app.services.sweep_service import queue_sweep
+from app.services.sweep_service import process_incoming_tx, queue_sweep
+from app.services import alchemy_webhook_manager
 from app.api.websocket_routes import feed_manager
+
+logger = logging.getLogger("sweeper_routes")
 
 sweeper_router = APIRouter(prefix="/api/v1", tags=["sweeper"])
 
@@ -275,103 +281,108 @@ def _period_to_timedelta(period: str) -> Optional[timedelta]:
 #  POST /api/v1/webhooks/alchemy — Webhook Listener
 # ═══════════════════════════════════════════════════════════
 
-ALCHEMY_SIGNING_KEY = ""  # Set via env: ALCHEMY_WEBHOOK_SECRET
-
 
 @sweeper_router.post("/webhooks/alchemy")
-async def alchemy_webhook(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-):
+async def alchemy_webhook(request: Request):
     """
     Riceve notifiche da Alchemy Address Activity Webhook.
-    Valida la firma, controlla le regole di forwarding,
-    e avvia lo sweep se le condizioni sono soddisfatte.
+    Valida la firma HMAC, parsa il payload, e processa in background.
+    Risponde 200 OK immediatamente per non bloccare Alchemy.
     """
     settings = get_settings()
-    signing_key = getattr(settings, "alchemy_webhook_secret", "") or ALCHEMY_SIGNING_KEY
+    signing_key = settings.alchemy_webhook_secret
 
-    # ── 1. Valida firma Alchemy ──────────────────────────
+    # ── 1. Leggi body raw per verifica firma ─────────────
     body = await request.body()
 
+    # ── 2. Verifica firma HMAC-SHA256 ────────────────────
     if signing_key:
         sig = request.headers.get("x-alchemy-signature", "")
+        if not sig:
+            raise HTTPException(status_code=401, detail="Missing webhook signature")
         expected = hmac.new(
             signing_key.encode(), body, hashlib.sha256
         ).hexdigest()
         if not hmac.compare_digest(sig, expected):
             raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
-    # ── 2. Parsa il payload ──────────────────────────────
+    # ── 3. Parsa il payload ──────────────────────────────
     try:
-        payload = await request.json()
+        payload = json.loads(body)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
+    webhook_id = payload.get("webhookId", "")
     event = payload.get("event", {})
+    network = event.get("network", "")
     activity = event.get("activity", [])
 
     if not activity:
         return {"status": "ignored", "reason": "no_activity"}
 
-    processed = 0
+    logger.info(
+        "[webhook] Received %d activity entries from webhook %s (network: %s)",
+        len(activity), webhook_id[:12], network,
+    )
 
+    # ── 4. Processa in background, rispondi 200 subito ───
+    asyncio.create_task(_process_alchemy_activity(activity))
+
+    return {"status": "accepted", "activity_count": len(activity)}
+
+
+async def _process_alchemy_activity(activity: list) -> None:
+    """
+    Process Alchemy Address Activity webhook entries in background.
+
+    Extracts: fromAddress, toAddress, value, hash, blockNum, asset,
+    rawContract (address, decimals) for ERC-20 transfers.
+    """
     for tx in activity:
-        value = tx.get("value", 0)
+        from_addr = (tx.get("fromAddress") or "").lower()
         to_addr = (tx.get("toAddress") or "").lower()
+        value = tx.get("value", 0)
+        tx_hash = tx.get("hash", "")
+        asset = tx.get("asset", "ETH")
+        block_num = tx.get("blockNum")
+        category = tx.get("category", "")  # external, internal, erc20, erc721, etc.
 
         if not to_addr or value <= 0:
             continue
 
-        # ── 3. Cerca regole attive e non in pausa ────────
-        result = await db.execute(
-            select(ForwardingRule).where(
-                ForwardingRule.source_wallet == to_addr,
-                ForwardingRule.is_active == True,   # noqa: E712
-                ForwardingRule.is_paused == False,   # noqa: E712
-            )
+        # ERC-20: extract contract address and decimals from rawContract
+        raw_contract = tx.get("rawContract") or {}
+        token_address = (raw_contract.get("address") or "").lower() or None
+        token_decimals = int(raw_contract.get("decimals") or 18)
+
+        # For ERC-20 transfers (category=token/erc20), the 'to' in activity
+        # is the actual recipient (not the contract), and 'value' is human-readable
+        if token_address and token_address == "0x":
+            token_address = None
+
+        logger.info(
+            "[webhook] TX %s: %s -> %s | %.6f %s | cat=%s | block=%s",
+            tx_hash[:16] if tx_hash else "?",
+            from_addr[:10], to_addr[:10],
+            value, asset, category, block_num,
         )
-        rules = result.scalars().all()
 
-        for rule in rules:
-            if rule.token_address:
-                tx_asset = (tx.get("rawContract", {}).get("address") or "").lower()
-                if tx_asset != rule.token_address.lower():
-                    continue
-
-            if value < rule.min_threshold:
-                continue
-
-            sweep = SweepLog(
-                rule_id=rule.id,
-                source_wallet=rule.source_wallet,
-                destination_wallet=rule.destination_wallet,
-                amount_wei=str(int(value * 10**18)),
-                amount_human=value,
-                token_symbol=rule.token_symbol,
-                status=SweepStatus.pending,
-                trigger_tx_hash=tx.get("hash"),
+        try:
+            await process_incoming_tx(
+                from_addr=from_addr,
+                to_addr=to_addr,
+                value=value,
+                tx_hash=tx_hash,
+                asset=asset,
+                token_address=token_address,
+                token_decimals=token_decimals,
+                block_num=block_num,
             )
-            db.add(sweep)
-            await db.flush()
-
-            await queue_sweep(sweep.id, rule, value)
-            processed += 1
-
-            # ── WS: incoming_detected ───────────────
-            await feed_manager.broadcast(rule.user_id, "incoming_detected", {
-                "sweep_id": sweep.id,
-                "rule_id": rule.id,
-                "source_wallet": rule.source_wallet,
-                "amount_eth": value,
-                "token": rule.token_symbol,
-                "trigger_tx": tx.get("hash"),
-            })
-
-    if processed > 0:
-        await db.commit()
-
-    return {"status": "processed", "sweeps_queued": processed}
+        except Exception as e:
+            logger.error(
+                "[webhook] process_incoming_tx failed for TX %s: %s",
+                tx_hash[:16] if tx_hash else "?", e,
+            )
 
 
 # ═══════════════════════════════════════════════════════════
@@ -441,6 +452,13 @@ async def create_rule(
     )
     db.add(audit)
     await db.commit()
+
+    # Register source address with Alchemy webhook (background, non-blocking)
+    asyncio.create_task(
+        alchemy_webhook_manager.add_address_to_webhook(
+            rule.source_wallet, rule.chain_id
+        )
+    )
 
     return {"status": "created", "rule": _serialize_rule(rule)}
 
@@ -634,6 +652,13 @@ async def delete_rule(
     )
     db.add(audit)
     await db.commit()
+
+    # Remove source address from Alchemy webhook if no other rules need it
+    asyncio.create_task(
+        alchemy_webhook_manager.remove_address_from_webhook(
+            rule.source_wallet, rule.chain_id
+        )
+    )
 
     return {"status": "deleted", "mode": "soft" if has_logs else "hard", "rule_id": rule_id}
 
@@ -965,3 +990,91 @@ async def get_daily_stats(
             for row in rows
         ],
     }
+
+
+# ═══════════════════════════════════════════════════════════
+#  HEALTH CHECK — Sweep Subsystem
+# ═══════════════════════════════════════════════════════════
+
+@sweeper_router.get("/health/sweep")
+async def health_sweep(db: AsyncSession = Depends(get_db)):
+    """
+    Sweep subsystem health check.
+    Verifies: DB connection, Redis connection, recent sweep activity, WebSocket status.
+    """
+    checks = {}
+    healthy = True
+
+    # 1. DB connection
+    try:
+        await db.execute(select(func.count()).select_from(ForwardingRule))
+        checks["database"] = "ok"
+    except Exception as e:
+        checks["database"] = f"error: {str(e)[:100]}"
+        healthy = False
+
+    # 2. Redis connection
+    try:
+        from app.services.cache_service import get_redis
+        r = await get_redis()
+        await r.ping()
+        checks["redis"] = "ok"
+    except Exception as e:
+        checks["redis"] = f"error: {str(e)[:100]}"
+        healthy = False
+
+    # 3. Last sweep freshness (only relevant if active rules exist)
+    try:
+        active_count = (await db.execute(
+            select(func.count()).select_from(ForwardingRule).where(
+                ForwardingRule.is_active == True,
+                ForwardingRule.is_paused == False,
+            )
+        )).scalar() or 0
+
+        checks["active_rules"] = active_count
+
+        # Refresh Prometheus gauge
+        from app.services.sweep_service import refresh_active_rules_gauge, ACTIVE_RULES_TOTAL
+        ACTIVE_RULES_TOTAL.set(active_count)
+
+        if active_count > 0:
+            one_hour_ago = datetime.now(timezone.utc) - timedelta(hours=1)
+            last_sweep = (await db.execute(
+                select(SweepLog.created_at)
+                .where(SweepLog.status == SweepStatus.completed)
+                .order_by(SweepLog.created_at.desc())
+                .limit(1)
+            )).scalar_one_or_none()
+
+            if last_sweep and last_sweep >= one_hour_ago:
+                checks["last_sweep"] = "ok"
+            elif last_sweep:
+                checks["last_sweep"] = f"stale: last at {last_sweep.isoformat()}"
+            else:
+                checks["last_sweep"] = "no completed sweeps"
+        else:
+            checks["last_sweep"] = "n/a (no active rules)"
+    except Exception as e:
+        checks["last_sweep"] = f"error: {str(e)[:100]}"
+
+    # 4. WebSocket server
+    try:
+        from app.api.websocket_routes import feed_manager
+        checks["websocket"] = {
+            "status": "ok",
+            "active_connections": feed_manager.active_connections,
+        }
+    except Exception as e:
+        checks["websocket"] = f"error: {str(e)[:100]}"
+        healthy = False
+
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=200 if healthy else 503,
+        content={
+            "status": "healthy" if healthy else "degraded",
+            "service": "sweep-subsystem",
+            "checks": checks,
+        },
+    )

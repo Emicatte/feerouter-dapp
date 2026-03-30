@@ -20,6 +20,7 @@ from app.config import get_settings
 from app.db.session import init_db
 from app.api.routes import router
 from app.services.cache_service import close_redis
+from app.services.polling_service import start_polling_if_needed, stop_polling
 from app.api.websocket_routes import ws_router, feed_manager
 
 
@@ -44,6 +45,10 @@ async def lifespan(app: FastAPI):
     # ── Start WebSocket background tasks ─────────────
     feed_manager.start_background_tasks()
 
+    # ── Start block polling if webhook not configured ──
+    poller = await start_polling_if_needed()
+
+    webhook_mode = "webhook" if settings.alchemy_webhook_secret else "polling"
     print("=" * 60)
     print("  RPagos Backend Core")
     print(f"  Mode: {'DEV' if settings.debug else 'PRODUCTION'}")
@@ -51,12 +56,14 @@ async def lifespan(app: FastAPI):
     print(f"  Redis: {settings.redis_url}")
     print(f"  Sentry: {'Y' if settings.sentry_dsn else 'N'}")
     print(f"  WebSocket: /ws/sweep-feed/{{owner}}")
+    print(f"  TX Detection: {webhook_mode}")
     print(f"  DAC8 Entity: {settings.dac8_reporting_entity_name}")
     print("=" * 60)
 
     yield
 
     # Cleanup
+    await stop_polling()
     await feed_manager.shutdown()
     await close_redis()
 

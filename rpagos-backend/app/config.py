@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     # ── Alchemy ───────────────────────────────────────────
     alchemy_api_key: str = ""
     alchemy_webhook_secret: str = ""
+    alchemy_auth_token: str = ""
 
     # ── Sweeper ──────────────────────────────────────────
     sweep_private_key: str = ""
@@ -40,6 +41,9 @@ class Settings(BaseSettings):
     # ── Anomaly Detection ─────────────────────────────────
     anomaly_z_score_threshold: float = 3.0
     anomaly_min_sample_size: int = 10
+
+    # ── Telegram Bot ──────────────────────────────────────
+    telegram_bot_token: str = ""
 
     # ── Monitoring ────────────────────────────────────────
     sentry_dsn: str = ""
