@@ -1014,8 +1014,8 @@ function HeroTitle({ view, setView, isConnected }: { view: View; setView: (v: Vi
         transition={{ duration: 0.6, ease: EASE }}
         style={{
           fontFamily: C.D,
-          fontSize: 'clamp(34px, 5.5vw, 52px)',
-          fontWeight: 600,
+          fontSize: 'clamp(40px, 6.0vw, 58px)',
+          fontWeight: 700,
           letterSpacing: '-0.02em',
           textAlign: 'center',
           marginBottom: 8,
@@ -1038,7 +1038,7 @@ function HeroTitle({ view, setView, isConnected }: { view: View; setView: (v: Vi
         transition={{ duration: 0.6, ease: EASE, delay: 0.1 }}
         style={{
           fontFamily: C.S,
-          fontSize: 'clamp(12px, 1.5vw, 14px)',
+          fontSize: 'clamp(12px, 1.5vw, 20px)',
           fontWeight: 400,
           letterSpacing: '0.02em',
           textAlign: 'center',
@@ -1046,8 +1046,8 @@ function HeroTitle({ view, setView, isConnected }: { view: View; setView: (v: Vi
           marginBottom: 1,
         }}
       >
-        Move USDC, EURC, ETH across Europe. Compliant from day one.
-      </motion.div>
+        Built for European Businesses
+        </motion.div>
 
       {/* CTA — only when wallet not connected */}
       {!isConnected && (
@@ -1206,8 +1206,16 @@ export default function Home() {
 
       {/* Background */}
       <div className="rp-bg" aria-hidden="true">
-        <div className="rp-bg__base" /><div className="rp-orb rp-orb--1" /><div className="rp-orb rp-orb--2" />
-        <div className="rp-orb rp-orb--3" /><div className="rp-orb rp-orb--4" /><div className="rp-orb rp-orb--5" />
+        <div className="rp-bg__base" />
+        <div className="rp-orb rp-orb--1" style={{ opacity: 1 }} />
+        <div className="rp-orb rp-orb--2" style={{ opacity: 1 }} />
+        <div className="rp-orb rp-orb--3" style={{ opacity: 1 }} />
+        <div className="rp-orb rp-orb--4" style={{ opacity: 1 }} />
+        <div className="rp-orb rp-orb--5" style={{ opacity: 1 }} />
+         <div className="rp-orb rp-orb--9" style={{ opacity: 2 }} />
+        <div className="rp-orb rp-orb--6" style={{ opacity: 0.65 }} />
+        <div className="rp-orb rp-orb--7" style={{ opacity: 0.55 }} />
+        <div className="rp-orb rp-orb--8" style={{ opacity: 0.50 }} />
         <div className="rp-bg__noise" />
       </div>
 

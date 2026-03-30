@@ -3,11 +3,12 @@
   RPagos Backend Core — Production Server
 
   Stack:
-  • FastAPI + Uvicorn (4 workers)
-  • PostgreSQL via asyncpg
-  • Redis per cache + rate limiting
-  • Sentry per error tracking
-  • Prometheus per metriche
+  - FastAPI + Uvicorn (4 workers)
+  - PostgreSQL via asyncpg
+  - Redis per cache + rate limiting + WS event buffer
+  - Sentry per error tracking
+  - Prometheus per metriche
+  - WebSocket sweep feed (real-time)
 ═══════════════════════════════════════════════════════════════
 """
 
@@ -19,6 +20,7 @@ from app.config import get_settings
 from app.db.session import init_db
 from app.api.routes import router
 from app.services.cache_service import close_redis
+from app.api.websocket_routes import ws_router, feed_manager
 
 
 @asynccontextmanager
@@ -39,18 +41,23 @@ async def lifespan(app: FastAPI):
     # ── Init DB ──────────────────────────────────────
     await init_db()
 
-    print("═" * 60)
+    # ── Start WebSocket background tasks ─────────────
+    feed_manager.start_background_tasks()
+
+    print("=" * 60)
     print("  RPagos Backend Core")
     print(f"  Mode: {'DEV' if settings.debug else 'PRODUCTION'}")
     print(f"  DB: {settings.database_url.split('@')[-1] if '@' in settings.database_url else settings.database_url}")
     print(f"  Redis: {settings.redis_url}")
-    print(f"  Sentry: {'✓' if settings.sentry_dsn else '✗'}")
+    print(f"  Sentry: {'Y' if settings.sentry_dsn else 'N'}")
+    print(f"  WebSocket: /ws/sweep-feed/{{owner}}")
     print(f"  DAC8 Entity: {settings.dac8_reporting_entity_name}")
-    print("═" * 60)
+    print("=" * 60)
 
     yield
 
     # Cleanup
+    await feed_manager.shutdown()
     await close_redis()
 
 
@@ -93,7 +100,7 @@ try:
     Instrumentator(
         should_group_status_codes=True,
         should_group_untemplated=True,
-        excluded_handlers=["/health", "/metrics"],
+        excluded_handlers=["/health", "/metrics", "/ws/*"],
     ).instrument(app).expose(app, endpoint="/metrics")
 except ImportError:
     pass  # Skip if not installed
@@ -102,6 +109,7 @@ except ImportError:
 app.include_router(router)
 from app.api.sweeper_routes import sweeper_router
 app.include_router(sweeper_router)
+app.include_router(ws_router)
 
 
 # ── Health check ─────────────────────────────────────────
@@ -111,6 +119,7 @@ async def health():
         "status": "healthy",
         "service": "rpagos-backend-core",
         "version": "2.0.0",
+        "ws_connections": feed_manager.active_connections,
     }
 
 

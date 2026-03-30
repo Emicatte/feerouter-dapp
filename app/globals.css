@@ -4,13 +4,13 @@
    ============================================================
 
    Architettura rendering:
-   - Zero filter:blur() sui singoli orbs — gradienti pre-sfumati
-   - Un singolo backdrop-filter:blur(40px) su overlay statico (.rp-bg__blur)
    - Tutti gli orbs usano SOLO transform: translate3d + scale3d
-   - contain: strict + transform: translateZ(0) per layer GPU isolati
-   - aspect-ratio: 1 mantiene la forma su resize
-   - 1 blur pass totale invece di 5-8 per-element
-   - 60fps garantito anche su resize/zoom finestra
+   - Zero proprietà layout (no top/left/width/height animati)
+   - will-change pre-alloca layer GPU separati
+   - contain: strict isola il repaint
+   - Orbs come FONTI DI LUCE reali — core brillante + halo diffuso
+   - 8 orbs totali, animazioni ampie e fluide
+   - 60fps garantito anche su resize finestra
    ============================================================ */
 
 /* ── Reset & base ─────────────────────────────────────────── */
@@ -31,6 +31,8 @@ body {
   background-color: #050510;
   color: #e2e2f0;
   overflow-x: hidden;
+  min-height: 100vh;
+  position: relative;
 }
 
 /* ── Font variables ───────────────────────────────────────── */
@@ -61,11 +63,14 @@ body {
    BACKGROUND SYSTEM — Full GPU
    ============================================================ */
 
-/* Wrapper fisso che non partecipa al layout */
+/* Wrapper fisso che NON partecipa al layout — rigorosamente dietro tutto */
 .rp-bg {
   position: fixed;
-  inset: 0;                    /* top:0 right:0 bottom:0 left:0 — static */
-  z-index: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: -10;
   pointer-events: none;
   overflow: hidden;
 
@@ -77,47 +82,64 @@ body {
   transform: translateZ(0);
 }
 
-/* Gradient di base — ambient glow caldo */
+/* Gradient di base — sfondo scuro solido */
 .rp-bg__base {
   position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(ellipse 120% 70% at 50% 100%, rgba(0, 230, 255, 0.14) 0%, transparent 50%),
-    radial-gradient(ellipse 80% 50% at 70% 55%, rgba(255, 40, 180, 0.07) 0%, transparent 45%),
-    radial-gradient(ellipse 80% 50% at 20% 60%, rgba(0, 200, 230, 0.08) 0%, transparent 45%),
-    #050510;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: #050510;
+}
+
+/* Layer contenitore orbs — absolute, zero impatto su layout */
+.rp-bg__orbs {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+}
+
+/* Singolo orb — posizionamento absolute, bordo tondo, blend screen */
+.rp-bg__orb {
+  position: absolute;
+  border-radius: 50%;
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+/* Blur pass — fonde tutti gli orbs in una nebula morbida */
+.rp-bg__blur {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  backdrop-filter: blur(140px);
+  -webkit-backdrop-filter: blur(140px);
 }
 
 /* ── Orb base ────────────────────────────────────────────── */
 .rp-orb {
   position: absolute;
   border-radius: 50%;
-  aspect-ratio: 1;
-  will-change: transform;
+  will-change: transform, opacity;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  contain: strict;
-  transform: translateZ(0);
-  pointer-events: none;
+  contain: layout style;
 }
 
 /* ── Orb 1 — CYAN BRILLANTE — BOTTOM-LEFT — luce primaria ── */
 .rp-orb--1 {
-  width: 82vw;
-  max-width: 1250px;
-  bottom: -32vh;
-  left: -20vw;
+  width: 75vw;
+  height: 75vw;
+  max-width: 1100px;
+  max-height: 1100px;
+  bottom: -30vh;
+  left: -18vw;
 
   background: radial-gradient(
     circle at 50% 50%,
-    rgba(0, 240, 255, 0.72),
-    rgba(0, 225, 248, 0.50) 12%,
-    rgba(0, 200, 230, 0.32) 26%,
-    rgba(0, 170, 200, 0.18) 40%,
-    rgba(0, 130, 165, 0.07) 56%,
-    rgba(0, 100, 140, 0.02) 70%,
-    transparent 86%
+    rgba(0, 240, 255, 0.90),
+    rgba(0, 220, 245, 0.65) 15%,
+    rgba(0, 190, 220, 0.40) 30%,
+    rgba(0, 150, 185, 0.20) 45%,
+    rgba(0, 100, 140, 0.06) 60%,
+    transparent 75%
   );
+  filter: blur(80px);
   opacity: 1;
 
   animation: orbDrift1 20s ease-in-out infinite;
@@ -125,21 +147,23 @@ body {
 
 /* ── Orb 2 — CYAN BRILLANTE — BOTTOM-RIGHT — luce secondaria */
 .rp-orb--2 {
-  width: 76vw;
-  max-width: 1150px;
-  bottom: -30vh;
-  right: -22vw;
+  width: 70vw;
+  height: 70vw;
+  max-width: 1000px;
+  max-height: 1000px;
+  bottom: -28vh;
+  right: -20vw;
 
   background: radial-gradient(
     circle at 50% 50%,
-    rgba(0, 235, 250, 0.68),
-    rgba(0, 218, 242, 0.46) 12%,
-    rgba(0, 190, 220, 0.28) 26%,
-    rgba(0, 155, 185, 0.14) 42%,
-    rgba(0, 110, 145, 0.05) 58%,
-    rgba(0, 80, 120, 0.01) 72%,
-    transparent 86%
+    rgba(0, 235, 250, 0.85),
+    rgba(0, 210, 240, 0.55) 15%,
+    rgba(0, 175, 210, 0.32) 30%,
+    rgba(0, 130, 165, 0.14) 48%,
+    rgba(0, 80, 120, 0.04) 62%,
+    transparent 75%
   );
+  filter: blur(80px);
   opacity: 1;
 
   animation: orbDrift2 22s ease-in-out infinite;
@@ -147,21 +171,23 @@ body {
 
 /* ── Orb 3 — MAGENTA BRILLANTE — CENTER-RIGHT — luce rosa ── */
 .rp-orb--3 {
-  width: 62vw;
-  max-width: 940px;
-  top: 3vh;
-  right: -14vw;
+  width: 55vw;
+  height: 55vw;
+  max-width: 800px;
+  max-height: 800px;
+  top: 5vh;
+  right: -12vw;
 
   background: radial-gradient(
     circle at 50% 50%,
-    rgba(255, 50, 200, 0.62),
-    rgba(245, 42, 185, 0.40) 12%,
-    rgba(220, 35, 160, 0.24) 26%,
-    rgba(180, 25, 130, 0.12) 42%,
-    rgba(130, 15, 90, 0.04) 58%,
-    rgba(100, 10, 70, 0.01) 72%,
-    transparent 88%
+    rgba(255, 50, 200, 0.80),
+    rgba(240, 40, 180, 0.50) 15%,
+    rgba(200, 30, 150, 0.28) 30%,
+    rgba(150, 20, 110, 0.12) 48%,
+    rgba(100, 10, 70, 0.03) 62%,
+    transparent 75%
   );
+  filter: blur(90px);
   opacity: 0.9;
 
   animation: orbDrift3 26s ease-in-out infinite;
@@ -169,20 +195,22 @@ body {
 
 /* ── Orb 4 — CYAN — BOTTOM-CENTER — ponte luce ──────────── */
 .rp-orb--4 {
-  width: 68vw;
-  max-width: 1040px;
-  bottom: -24vh;
-  left: 16vw;
+  width: 60vw;
+  height: 60vw;
+  max-width: 900px;
+  max-height: 900px;
+  bottom: -22vh;
+  left: 18vw;
 
   background: radial-gradient(
     circle at 50% 50%,
-    rgba(0, 230, 250, 0.52),
-    rgba(0, 210, 238, 0.34) 14%,
-    rgba(0, 180, 210, 0.19) 30%,
-    rgba(0, 145, 175, 0.09) 46%,
-    rgba(0, 110, 145, 0.03) 62%,
-    transparent 82%
+    rgba(0, 230, 250, 0.70),
+    rgba(0, 200, 230, 0.42) 18%,
+    rgba(0, 160, 195, 0.22) 35%,
+    rgba(0, 110, 145, 0.08) 52%,
+    transparent 70%
   );
+  filter: blur(100px);
   opacity: 0.9;
 
   animation: orbDrift4 18s ease-in-out infinite;
@@ -190,20 +218,22 @@ body {
 
 /* ── Orb 5 — MAGENTA — CENTER-LEFT — secondo rosa ────────── */
 .rp-orb--5 {
-  width: 54vw;
-  max-width: 800px;
-  top: 13vh;
-  left: 3vw;
+  width: 45vw;
+  height: 45vw;
+  max-width: 650px;
+  max-height: 650px;
+  top: 15vh;
+  left: 5vw;
 
   background: radial-gradient(
     circle at 50% 50%,
-    rgba(240, 45, 180, 0.40),
-    rgba(215, 38, 160, 0.24) 16%,
-    rgba(175, 28, 135, 0.12) 34%,
-    rgba(130, 18, 100, 0.05) 50%,
-    rgba(100, 10, 70, 0.01) 66%,
-    transparent 84%
+    rgba(240, 45, 180, 0.55),
+    rgba(200, 35, 150, 0.30) 20%,
+    rgba(150, 20, 110, 0.12) 40%,
+    rgba(100, 10, 70, 0.03) 58%,
+    transparent 72%
   );
+  filter: blur(100px);
   opacity: 0.65;
 
   animation: orbDrift5 24s ease-in-out infinite;
@@ -211,19 +241,21 @@ body {
 
 /* ── Orb 6 — CYAN chiaro — TOP-LEFT — riempie la parte alta */
 .rp-orb--6 {
-  width: 58vw;
-  max-width: 870px;
-  top: -17vh;
-  left: -14vw;
+  width: 50vw;
+  height: 50vw;
+  max-width: 720px;
+  max-height: 720px;
+  top: -15vh;
+  left: -12vw;
 
   background: radial-gradient(
     circle at 50% 50%,
-    rgba(0, 220, 245, 0.40),
-    rgba(0, 196, 225, 0.24) 16%,
-    rgba(0, 160, 195, 0.12) 34%,
-    rgba(0, 130, 165, 0.04) 52%,
-    transparent 76%
+    rgba(0, 220, 245, 0.55),
+    rgba(0, 180, 210, 0.30) 20%,
+    rgba(0, 130, 165, 0.12) 40%,
+    transparent 65%
   );
+  filter: blur(100px);
   opacity: 0.75;
 
   animation: orbDrift6 28s ease-in-out infinite;
@@ -231,19 +263,21 @@ body {
 
 /* ── Orb 7 — CYAN leggero — TOP-RIGHT — equilibra alto ──── */
 .rp-orb--7 {
-  width: 48vw;
-  max-width: 720px;
-  top: -10vh;
-  right: -7vw;
+  width: 40vw;
+  height: 40vw;
+  max-width: 580px;
+  max-height: 580px;
+  top: -8vh;
+  right: -5vw;
 
   background: radial-gradient(
     circle at 50% 50%,
-    rgba(0, 200, 230, 0.28),
-    rgba(0, 175, 210, 0.16) 20%,
-    rgba(0, 140, 175, 0.06) 40%,
-    rgba(0, 110, 145, 0.02) 58%,
-    transparent 78%
+    rgba(0, 200, 230, 0.40),
+    rgba(0, 160, 195, 0.20) 25%,
+    rgba(0, 110, 145, 0.06) 45%,
+    transparent 65%
   );
+  filter: blur(110px);
   opacity: 0.6;
 
   animation: orbDrift3 30s ease-in-out infinite;
@@ -252,19 +286,21 @@ body {
 
 /* ── Orb 8 — Indaco/Viola — MID — profondità atmosferica ── */
 .rp-orb--8 {
-  width: 65vw;
-  max-width: 960px;
-  top: 8vh;
-  left: 18vw;
+  width: 55vw;
+  height: 55vw;
+  max-width: 800px;
+  max-height: 800px;
+  top: 10vh;
+  left: 20vw;
 
   background: radial-gradient(
     circle at 50% 50%,
-    rgba(40, 20, 120, 0.24),
-    rgba(30, 15, 95, 0.13) 22%,
-    rgba(20, 10, 65, 0.05) 44%,
-    rgba(15, 8, 50, 0.01) 62%,
-    transparent 82%
+    rgba(40, 20, 120, 0.35),
+    rgba(25, 12, 80, 0.18) 30%,
+    rgba(15, 8, 50, 0.06) 50%,
+    transparent 65%
   );
+  filter: blur(130px);
   opacity: 0.6;
 
   animation: orbDrift1 36s ease-in-out infinite;
@@ -272,66 +308,66 @@ body {
 }
 
 /* ============================================================
-   KEYFRAMES — Fixed px translations (no vw/vh to avoid jumps on resize)
+   KEYFRAMES — Ampie e fluide, movimenti reali di luce
    SOLO transform (GPU compositor thread)
    ============================================================ */
 
 @keyframes orbDrift1 {
   0%   { transform: translate3d(0,     0,    0) scale3d(1,    1,    1); }
-  15%  { transform: translate3d(80px,  45px, 0) scale3d(1.06, 1.06, 1); }
-  35%  { transform: translate3d(40px,  105px,0) scale3d(0.94, 0.94, 1); }
-  55%  { transform: translate3d(-70px, 70px, 0) scale3d(1.08, 1.08, 1); }
-  75%  { transform: translate3d(-40px, 25px, 0) scale3d(0.96, 0.96, 1); }
+  15%  { transform: translate3d(6vw,   5vh,  0) scale3d(1.06, 1.06, 1); }
+  35%  { transform: translate3d(3vw,   12vh, 0) scale3d(0.94, 0.94, 1); }
+  55%  { transform: translate3d(-5vw,  8vh,  0) scale3d(1.08, 1.08, 1); }
+  75%  { transform: translate3d(-3vw,  3vh,  0) scale3d(0.96, 0.96, 1); }
   100% { transform: translate3d(0,     0,    0) scale3d(1,    1,    1); }
 }
 
 @keyframes orbDrift2 {
   0%   { transform: translate3d(0,     0,    0) scale3d(1,    1,    1); }
-  20%  { transform: translate3d(-80px, -35px,0) scale3d(1.07, 1.07, 1); }
-  45%  { transform: translate3d(-40px, -90px,0) scale3d(0.93, 0.93, 1); }
-  65%  { transform: translate3d(70px,  -55px,0) scale3d(1.05, 1.05, 1); }
-  85%  { transform: translate3d(25px,  -18px,0) scale3d(0.97, 0.97, 1); }
+  20%  { transform: translate3d(-6vw,  -4vh, 0) scale3d(1.07, 1.07, 1); }
+  45%  { transform: translate3d(-3vw,  -10vh,0) scale3d(0.93, 0.93, 1); }
+  65%  { transform: translate3d(5vw,   -6vh, 0) scale3d(1.05, 1.05, 1); }
+  85%  { transform: translate3d(2vw,   -2vh, 0) scale3d(0.97, 0.97, 1); }
   100% { transform: translate3d(0,     0,    0) scale3d(1,    1,    1); }
 }
 
 @keyframes orbDrift3 {
   0%   { transform: translate3d(0,     0,    0) scale3d(1,    1,    1); }
-  18%  { transform: translate3d(-55px, 55px, 0) scale3d(1.08, 1.08, 1); }
-  40%  { transform: translate3d(70px,  35px, 0) scale3d(0.92, 0.92, 1); }
-  60%  { transform: translate3d(25px,  -45px,0) scale3d(1.06, 1.06, 1); }
-  80%  { transform: translate3d(-40px, -18px,0) scale3d(0.95, 0.95, 1); }
+  18%  { transform: translate3d(-4vw,  6vh,  0) scale3d(1.08, 1.08, 1); }
+  40%  { transform: translate3d(5vw,   4vh,  0) scale3d(0.92, 0.92, 1); }
+  60%  { transform: translate3d(2vw,   -5vh, 0) scale3d(1.06, 1.06, 1); }
+  80%  { transform: translate3d(-3vw,  -2vh, 0) scale3d(0.95, 0.95, 1); }
   100% { transform: translate3d(0,     0,    0) scale3d(1,    1,    1); }
 }
 
 @keyframes orbDrift4 {
   0%   { transform: translate3d(0,     0,    0) scale3d(1,    1,    1); }
-  25%  { transform: translate3d(70px,  55px, 0) scale3d(0.93, 0.93, 1); }
-  50%  { transform: translate3d(-55px, 25px, 0) scale3d(1.09, 1.09, 1); }
-  75%  { transform: translate3d(25px,  -35px,0) scale3d(0.95, 0.95, 1); }
+  25%  { transform: translate3d(5vw,   6vh,  0) scale3d(0.93, 0.93, 1); }
+  50%  { transform: translate3d(-4vw,  3vh,  0) scale3d(1.09, 1.09, 1); }
+  75%  { transform: translate3d(2vw,   -4vh, 0) scale3d(0.95, 0.95, 1); }
   100% { transform: translate3d(0,     0,    0) scale3d(1,    1,    1); }
 }
 
 @keyframes orbDrift5 {
   0%   { transform: translate3d(0,     0,    0) scale3d(1,    1,    1); }
-  22%  { transform: translate3d(55px,  -45px,0) scale3d(1.07, 1.07, 1); }
-  48%  { transform: translate3d(-40px, -25px,0) scale3d(0.94, 0.94, 1); }
-  70%  { transform: translate3d(-70px, 35px, 0) scale3d(1.05, 1.05, 1); }
+  22%  { transform: translate3d(4vw,   -5vh, 0) scale3d(1.07, 1.07, 1); }
+  48%  { transform: translate3d(-3vw,  -3vh, 0) scale3d(0.94, 0.94, 1); }
+  70%  { transform: translate3d(-5vw,  4vh,  0) scale3d(1.05, 1.05, 1); }
   100% { transform: translate3d(0,     0,    0) scale3d(1,    1,    1); }
 }
 
 @keyframes orbDrift6 {
   0%   { transform: translate3d(0,     0,    0) scale3d(1,    1,    1); }
-  20%  { transform: translate3d(70px,  35px, 0) scale3d(1.06, 1.06, 1); }
-  42%  { transform: translate3d(110px, 70px, 0) scale3d(0.94, 0.94, 1); }
-  65%  { transform: translate3d(25px,  55px, 0) scale3d(1.04, 1.04, 1); }
-  85%  { transform: translate3d(-25px, 18px, 0) scale3d(0.97, 0.97, 1); }
+  20%  { transform: translate3d(5vw,   4vh,  0) scale3d(1.06, 1.06, 1); }
+  42%  { transform: translate3d(8vw,   8vh,  0) scale3d(0.94, 0.94, 1); }
+  65%  { transform: translate3d(2vw,   6vh,  0) scale3d(1.04, 1.04, 1); }
+  85%  { transform: translate3d(-2vw,  2vh,  0) scale3d(0.97, 0.97, 1); }
   100% { transform: translate3d(0,     0,    0) scale3d(1,    1,    1); }
 }
 
 /* ── Noise overlay — grain anti-banding ───────────────────── */
 .rp-bg__noise {
   position: absolute;
-  inset: 0;
+  top: 0; left: 0; right: 0; bottom: 0;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='5' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
   background-size: 200px 200px;
   opacity: 0.08;
@@ -348,59 +384,54 @@ body {
 @keyframes rpFadeUp {
   from {
     opacity: 0;
-    transform: translate3d(0, 16px, 0);
-    filter: blur(6px);
+    transform: translate3d(0, 20px, 0);
   }
   to {
     opacity: 1;
     transform: translate3d(0, 0, 0);
-    filter: blur(0px);
   }
 }
 
 @keyframes rpFadeIn {
-  from { opacity: 0; filter: blur(4px); }
-  to   { opacity: 1; filter: blur(0px); }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 @keyframes rpScaleIn {
   from {
     opacity: 0;
-    transform: translate3d(0, 10px, 0) scale3d(0.97, 0.97, 1);
-    filter: blur(4px);
+    transform: translate3d(0, 12px, 0) scale3d(0.97, 0.97, 1);
   }
   to {
     opacity: 1;
     transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
-    filter: blur(0px);
   }
 }
 
-/* Staggered fade-in — spring ease + blur cinematografico
-   Si attivano una sola volta al mount iniziale (tutti i pannelli sono always-mounted) */
+/* Classi applicabili ai blocchi del TransferForm */
 .rp-anim-0 {
-  animation: rpFadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: rpFadeUp 0.6s var(--ease-spring) both;
   animation-delay: 0ms;
 }
 .rp-anim-1 {
-  animation: rpFadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: 70ms;
+  animation: rpFadeUp 0.6s var(--ease-spring) both;
+  animation-delay: 80ms;
 }
 .rp-anim-2 {
-  animation: rpFadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: 140ms;
+  animation: rpFadeUp 0.6s var(--ease-spring) both;
+  animation-delay: 160ms;
 }
 .rp-anim-3 {
-  animation: rpFadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: 210ms;
+  animation: rpFadeUp 0.6s var(--ease-spring) both;
+  animation-delay: 240ms;
 }
 .rp-anim-4 {
-  animation: rpFadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: 280ms;
+  animation: rpFadeUp 0.6s var(--ease-spring) both;
+  animation-delay: 320ms;
 }
 .rp-anim-5 {
-  animation: rpFadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
-  animation-delay: 350ms;
+  animation: rpFadeUp 0.6s var(--ease-spring) both;
+  animation-delay: 400ms;
 }
 
 /* ============================================================
@@ -609,7 +640,7 @@ body {
 
 .rp-content {
   position: relative;
-  z-index: 1;
+  z-index: 10;
 }
 
 /* ============================================================
@@ -617,15 +648,14 @@ body {
    ============================================================ */
 
 @media (max-width: 640px) {
-  .rp-orb--1 { width: 105vw; }
-  .rp-orb--2 { width: 100vw; }
-  .rp-orb--3 { width: 88vw; }
-  .rp-orb--4 { width: 92vw; }
+  .rp-orb--1 { width: 100vw; height: 100vw; filter: blur(70px); }
+  .rp-orb--2 { width: 95vw; height: 95vw; filter: blur(70px); }
+  .rp-orb--3 { width: 80vw; height: 80vw; filter: blur(80px); }
+  .rp-orb--4 { width: 85vw; height: 85vw; filter: blur(80px); }
   .rp-orb--5 { display: none; }
-  .rp-orb--6 { width: 78vw; }
+  .rp-orb--6 { width: 70vw; height: 70vw; filter: blur(80px); }
   .rp-orb--7 { display: none; }
   .rp-orb--8 { display: none; }
-  .rp-bg__blur { backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -682,6 +712,25 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--c-muted);
+}
+
+/* ============================================================
+   HERO HEADING — Gradient bianco → cyan/blu
+   ============================================================ */
+
+.rp-heading-gradient {
+  background: linear-gradient(
+    90deg,
+    #ffffff 0%,
+    #ffffff 40%,
+    #7deefc 65%,
+    #00d4ff 82%,
+    #0090ff 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent; /* fallback */
 }
 
 @keyframes rpShimmer {

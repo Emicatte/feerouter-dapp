@@ -18,6 +18,10 @@ class Settings(BaseSettings):
 
     # ── Alchemy ───────────────────────────────────────────
     alchemy_api_key: str = ""
+    alchemy_webhook_secret: str = ""
+
+    # ── Sweeper ──────────────────────────────────────────
+    sweep_private_key: str = ""
 
     # ── Server ────────────────────────────────────────────
     host: str = "0.0.0.0"
