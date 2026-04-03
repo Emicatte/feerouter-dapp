@@ -79,7 +79,7 @@ async def receive_transaction(
         x_signature=payload.x_signature,
         fiscal_ref=payload.fiscal_ref,
         tx_hash=payload.tx_hash,
-        amount=payload.gross_amount,
+        amount=str(payload.gross_amount),
         currency=payload.currency,
         timestamp=payload.timestamp.isoformat(),
     )

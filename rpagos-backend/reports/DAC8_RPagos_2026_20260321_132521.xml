@@ -5,12 +5,12 @@
     <ReceivingCountry>IT</ReceivingCountry>
     <MessageType>DAC8</MessageType>
     <Warning></Warning>
-    <MessageRefId>RPagos-DAC8-2026-20260321132521</MessageRefId>
+    <MessageRefId>RSends-DAC8-2026-20260321132521</MessageRefId>
     <ReportingPeriod>2026-12-31</ReportingPeriod>
     <Timestamp>2026-03-21T13:25:21.087769+00:00</Timestamp>
   </MessageSpec>
   <ReportingFI>
-    <Name>RPagos S.r.l.</Name>
+    <Name>RSends S.r.l.</Name>
     <TIN issuedBy="IT">IT12345678901</TIN>
     <Address>
       <CountryCode>IT</CountryCode>

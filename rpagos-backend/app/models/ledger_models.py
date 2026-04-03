@@ -226,9 +226,17 @@ class TransactionStateLog(Base):
 # ═══════════════════════════════════════════════════════════════
 
 class LedgerAuditLog(Base):
+    """Append-only audit log with chain hash for tamper detection.
+
+    chain_hash = SHA-256(previous_hash || event_type || entity_type ||
+                         entity_id || actor_id || created_at)
+    First entry uses previous_hash = "0" * 64.
+    Any gap in sequence_number or broken hash chain indicates tampering.
+    """
     __tablename__ = "audit_log"
 
     id = Column(BigIntegerType, primary_key=True, autoincrement=True)
+    sequence_number = Column(BigInteger, nullable=False, unique=True)
     event_type = Column(String(64), nullable=False)
     entity_type = Column(String(64), nullable=False)
     entity_id = Column(String(128), nullable=False)
@@ -238,6 +246,8 @@ class LedgerAuditLog(Base):
     user_agent = Column(Text, nullable=True)
     changes = Column(JSONBType, nullable=True)
     request_id = Column(Uuid(as_uuid=True), nullable=True)
+    chain_hash = Column(String(64), nullable=False)
+    previous_hash = Column(String(64), nullable=False)
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -247,4 +257,5 @@ class LedgerAuditLog(Base):
     __table_args__ = (
         Index("idx_audit_log_entity", "entity_type", "entity_id"),
         Index("idx_audit_log_created", "created_at"),
+        Index("idx_audit_log_seq", "sequence_number"),
     )

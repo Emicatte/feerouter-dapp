@@ -15,6 +15,7 @@ from app.config import get_settings
 from app.models.db_models import Base
 from app.models import forwarding_models as _fwd_models   # noqa: F401 — registra tabelle forwarding in Base.metadata
 from app.models import ledger_models as _ledger_models    # noqa: F401 — registra tabelle ledger in Base.metadata
+from app.models import command_models as _cmd_models      # noqa: F401 — registra tabelle command center in Base.metadata
 
 settings = get_settings()
 

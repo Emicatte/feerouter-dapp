@@ -21,8 +21,11 @@ class Settings(BaseSettings):
     alchemy_webhook_secret: str = ""
     alchemy_auth_token: str = ""
 
-    # ── Sweeper ──────────────────────────────────────────
+    # ── Sweeper / Key Management ────────────────────────
     sweep_private_key: str = ""
+    signer_mode: str = "local"          # "local" (env key) | "kms" (AWS KMS)
+    kms_key_id: str = ""                # AWS KMS key ID (ECC_SECG_P256K1)
+    aws_region: str = "eu-west-1"       # AWS region for KMS
 
     # ── Server ────────────────────────────────────────────
     host: str = "0.0.0.0"

@@ -97,18 +97,21 @@ app = FastAPI(
 
 # ── CORS ─────────────────────────────────────────────────
 settings = get_settings()
-origins = settings.cors_origins.split(",") if settings.cors_origins else []
 if settings.debug:
-    origins.extend(["http://localhost:3000", "http://localhost:5173"])
+    cors_origins = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+    ]
+else:
+    cors_origins = (
+        [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+        if settings.cors_origins
+        else ["https://rsends.io", "https://www.rsends.io"]
+    )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://fee-router-dapp.vercel.app",
-        "https://rsends.io",
-        "https://www.rsends.io",
-    ],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -118,6 +121,10 @@ app.add_middleware(
 # ── Request Context Middleware ──────────────────────────
 from app.middleware.request_context import RequestContextMiddleware
 app.add_middleware(RequestContextMiddleware)
+
+# ── Input Sanitization Middleware ──────────────────────
+from app.middleware.input_sanitization import InputSanitizationMiddleware
+app.add_middleware(InputSanitizationMiddleware)
 
 # ── Rate Limiting Middleware ─────────────────────────────
 from app.middleware.rate_limit import RateLimitMiddleware
@@ -191,6 +198,13 @@ async def health_ready():
         status_code=200 if ready else 503,
         content={"status": "ready" if ready else "not_ready", "checks": checks},
     )
+
+
+@app.get("/health/dependencies")
+async def health_dependencies():
+    """External services health: circuit breaker states for all dependencies."""
+    from app.services.external_health import get_dependency_summary
+    return await get_dependency_summary()
 
 
 @app.get("/health/deep")

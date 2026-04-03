@@ -12,8 +12,8 @@ import enum
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    Column, String, Float, Boolean, DateTime, Integer, BigInteger,
-    Text, Index, Numeric, ForeignKey, Uuid,
+    Column, String, Float, Boolean, CheckConstraint, DateTime, Integer,
+    BigInteger, Text, Index, Numeric, ForeignKey, Uuid,
     Enum as SAEnum, JSON,
 )
 from sqlalchemy.orm import relationship
@@ -49,7 +49,14 @@ class ForwardingRule(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(String(64), nullable=False, index=True)
     source_wallet = Column(String(42), nullable=False, index=True)
-    destination_wallet = Column(String(42), nullable=False)
+    destination_wallet = Column(String(42), nullable=True)
+
+    # ── V2: Distribution list support ───────────────────────
+    distribution_list_id = Column(
+        Uuid(as_uuid=True),
+        ForeignKey("distribution_lists.id"),
+        nullable=True,
+    )
 
     # ── Label ───────────────────────────────────────────────
     label = Column(String(100), nullable=True)
@@ -98,11 +105,19 @@ class ForwardingRule(Base):
     # ── Relationships ───────────────────────────────────────
     sweep_logs = relationship("SweepLog", back_populates="rule", lazy="selectin")
     audit_logs = relationship("AuditLog", back_populates="rule", lazy="selectin")
+    distribution_list = relationship(
+        "DistributionList", back_populates="forwarding_rules", lazy="selectin"
+    )
 
     __table_args__ = (
+        CheckConstraint(
+            "destination_wallet IS NOT NULL OR distribution_list_id IS NOT NULL",
+            name="ck_fwd_dest_or_distlist",
+        ),
         Index("ix_fwd_source_active", "source_wallet", "is_active"),
         Index("ix_fwd_user_chain", "user_id", "chain_id"),
         Index("ix_fwd_paused", "is_paused", "is_active"),
+        Index("ix_fwd_dist_list", "distribution_list_id"),
     )
 
 

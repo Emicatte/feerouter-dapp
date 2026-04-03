@@ -32,6 +32,7 @@ from app.models.forwarding_models import (
     ForwardingRule, SweepLog, SweepStatus, GasStrategy,
 )
 from app.services.cache_service import get_redis
+from app.services.circuit_breaker import CircuitBreaker, CircuitOpenError
 
 logger = logging.getLogger("sweep_service")
 
@@ -88,6 +89,14 @@ RPC_URLS: dict[int, str] = {
     42161: "https://arb1.arbitrum.io/rpc",
 }
 
+# Fallback RPC URLs — tried when primary is down (circuit open)
+RPC_FALLBACK_URLS: dict[int, list[str]] = {
+    8453:  ["https://base.llamarpc.com", "https://1rpc.io/base"],
+    84532: ["https://sepolia.base.org"],
+    1:     ["https://1rpc.io/eth", "https://rpc.ankr.com/eth"],
+    42161: ["https://1rpc.io/arb", "https://rpc.ankr.com/arbitrum"],
+}
+
 CHAIN_NAMES: dict[int, str] = {
     8453: "Base", 84532: "Base Sepolia",
     1: "Ethereum", 42161: "Arbitrum One",
@@ -123,15 +132,24 @@ LOCK_TTL = 300          # 5 minutes
 
 
 # ═══════════════════════════════════════════════════════════════
-#  RPC HELPER
+#  RPC HELPER (with circuit breaker + fallback)
 # ═══════════════════════════════════════════════════════════════
 
-async def _rpc_call(chain_id: int, method: str, params: list, timeout: int = 10) -> Any:
-    """Execute a JSON-RPC call against the chain's endpoint."""
-    rpc = RPC_URLS.get(chain_id, RPC_URLS[8453])
+_rpc_cb = CircuitBreaker(
+    name="alchemy_rpc",
+    failure_threshold=5,
+    recovery_timeout=30.0,
+    half_open_max_calls=1,
+)
+
+
+async def _rpc_call_raw(
+    url: str, method: str, params: list, chain_id: int, timeout: int = 10,
+) -> Any:
+    """Low-level JSON-RPC call to a specific URL."""
     async with httpx.AsyncClient() as client:
         resp = await client.post(
-            rpc,
+            url,
             json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
             timeout=timeout,
         )
@@ -139,6 +157,37 @@ async def _rpc_call(chain_id: int, method: str, params: list, timeout: int = 10)
     if "error" in data:
         raise RuntimeError(f"RPC {method} error on chain {chain_id}: {data['error']}")
     return data.get("result")
+
+
+async def _rpc_call(chain_id: int, method: str, params: list, timeout: int = 10) -> Any:
+    """
+    Execute a JSON-RPC call with circuit breaker protection.
+
+    If the primary RPC is down (circuit OPEN), tries fallback URLs sequentially.
+    """
+    rpc = RPC_URLS.get(chain_id, RPC_URLS[8453])
+
+    try:
+        return await _rpc_cb.call(
+            _rpc_call_raw, rpc, method, params, chain_id, timeout,
+        )
+    except CircuitOpenError:
+        # Primary is down — try fallback URLs directly (no CB)
+        fallbacks = RPC_FALLBACK_URLS.get(chain_id, [])
+        for fb_url in fallbacks:
+            try:
+                logger.info(
+                    "RPC circuit open — trying fallback %s for chain %d",
+                    fb_url, chain_id,
+                )
+                return await _rpc_call_raw(fb_url, method, params, chain_id, timeout)
+            except Exception as fb_err:
+                logger.warning("Fallback RPC %s failed: %s", fb_url, fb_err)
+                continue
+        raise RuntimeError(
+            f"All RPC endpoints failed for chain {chain_id} (primary circuit OPEN, "
+            f"{len(fallbacks)} fallbacks exhausted)"
+        )
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -420,21 +469,39 @@ async def _resolve_owner(rule_id: int) -> Optional[str]:
 #  TELEGRAM / EMAIL NOTIFICATIONS
 # ═══════════════════════════════════════════════════════════════
 
+_telegram_cb = CircuitBreaker(
+    name="telegram",
+    failure_threshold=3,
+    recovery_timeout=60.0,
+    half_open_max_calls=1,
+)
+
+
+async def _telegram_send(token: str, chat_id: str, message: str) -> bool:
+    """Raw Telegram API call."""
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            f"https://api.telegram.org/bot{token}/sendMessage",
+            json={"chat_id": chat_id, "text": message, "parse_mode": "Markdown"},
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            raise RuntimeError(f"Telegram API returned {resp.status_code}")
+        return True
+
+
 async def _notify_telegram(chat_id: str, message: str) -> bool:
-    """Send a Telegram message via Bot API."""
+    """Send a Telegram message via Bot API (circuit-breaker protected)."""
     token = get_settings().telegram_bot_token
     if not token:
         logger.debug("Telegram bot token not configured — skipping notification")
         return False
 
     try:
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(
-                f"https://api.telegram.org/bot{token}/sendMessage",
-                json={"chat_id": chat_id, "text": message, "parse_mode": "Markdown"},
-                timeout=10,
-            )
-            return resp.status_code == 200
+        return await _telegram_cb.call(_telegram_send, token, chat_id, message)
+    except CircuitOpenError:
+        logger.warning("Telegram circuit OPEN — notification skipped")
+        return False
     except Exception as e:
         logger.warning("Telegram notification failed: %s", e)
         return False

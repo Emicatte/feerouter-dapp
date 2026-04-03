@@ -37,6 +37,8 @@ OTHER = "0x" + "ee" * 20       # 0xeeee...ee
 @pytest_asyncio.fixture(autouse=True)
 async def setup_db():
     """Crea e distrugge le tabelle per ogni test."""
+    from app.middleware.rate_limit import _memory_limiter
+    _memory_limiter._buckets.clear()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield

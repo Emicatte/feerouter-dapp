@@ -10,6 +10,11 @@
  *   3. Al prossimo avvio app → drain automatico della queue (retry)
  *   4. HMAC-SHA256 signature per autenticazione backend
  *
+ * Sicurezza:
+ *   - La firma HMAC è calcolata su: "fiscal_ref|tx_hash|gross_amount|currency|timestamp"
+ *   - La chiave viene da NEXT_PUBLIC_HMAC_KEY (env var su Vercel)
+ *   - PENDING_HMAC_SHA256 non viene mai usato in produzione
+ *
  * Backend Python (FastAPI) atteso:
  *   POST /api/v1/tx/callback
  *   Headers: X-Signature: <hmac-sha256>
@@ -27,13 +32,21 @@ const API_ENDPOINT = `${API_BASE}/api/v1/tx/callback`
 const QUEUE_KEY   = 'rp_pending_queue'
 const MAX_RETRIES = 5
 const HMAC_KEY    = process.env.NEXT_PUBLIC_HMAC_KEY ?? 'dev_secret_replace_in_prod'
+const IS_PRODUCTION = process.env.NODE_ENV === 'production'
 
 // ── HMAC-SHA256 (Web Crypto API — client side) ─────────────────────────────
-async function generateHmac(payload: string): Promise<string> {
+async function generateHmac(
+  fiscalRef: string,
+  txHash: string,
+  grossAmount: string,
+  currency: string,
+  timestamp: string,
+): Promise<string> {
+  const message = `${fiscalRef}|${txHash}|${grossAmount}|${currency}|${timestamp}`
   try {
     const enc     = new TextEncoder()
     const keyData = enc.encode(HMAC_KEY)
-    const msgData = enc.encode(payload)
+    const msgData = enc.encode(message)
     const key     = await crypto.subtle.importKey(
       'raw', keyData,
       { name: 'HMAC', hash: 'SHA-256' },
@@ -43,7 +56,11 @@ async function generateHmac(payload: string): Promise<string> {
     const arr  = Array.from(new Uint8Array(sig))
     return arr.map(b => b.toString(16).padStart(2, '0')).join('')
   } catch {
-    return 'HMAC_UNAVAILABLE'
+    if (IS_PRODUCTION) {
+      console.error('[rp_compliance] HMAC generation failed — cannot send in production')
+      return ''
+    }
+    return 'PENDING_HMAC_SHA256'
   }
 }
 
@@ -89,13 +106,30 @@ function addToQueue(record: ComplianceRecord) {
 // ── Invio singolo record ───────────────────────────────────────────────────
 async function sendRecord(record: ComplianceRecord): Promise<boolean> {
   try {
-   const enriched = {
-    ...record,
-    currency: record.asset,
-    timestamp: record.block_timestamp,
+    const enriched = {
+      ...record,
+      currency: record.asset,
+      timestamp: record.block_timestamp,
     }
-    const payload = JSON.stringify(enriched) 
-    const signature = 'PENDING_HMAC_SHA256'
+
+    const grossAmount = String(enriched.gross_amount ?? enriched.fiat_gross ?? '0')
+    const timestamp = enriched.timestamp
+
+    const signature = await generateHmac(
+      enriched.fiscal_ref,
+      enriched.tx_hash,
+      grossAmount,
+      enriched.currency,
+      timestamp,
+    )
+
+    // In produzione, non inviare se HMAC non è disponibile
+    if (IS_PRODUCTION && !signature) {
+      console.error('[rp_compliance] Cannot send without valid HMAC in production')
+      return false
+    }
+
+    const payload = JSON.stringify(enriched)
     const res = await fetch(API_ENDPOINT, {
       method: 'POST',
       headers: {

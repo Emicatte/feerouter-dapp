@@ -115,6 +115,14 @@ class TransactionCallbackPayload(BaseModel):
             raise ValueError(f"network deve essere uno di: {allowed}")
         return v
 
+    @field_validator("currency")
+    @classmethod
+    def validate_currency(cls, v: str) -> str:
+        allowed = {"ETH", "USDC", "USDT", "DAI", "cbBTC", "DEGEN"}
+        if v not in allowed:
+            raise ValueError(f"currency deve essere uno di: {allowed}")
+        return v
+
 
 # ═══════════════════════════════════════════════════════════════
 #  Responses

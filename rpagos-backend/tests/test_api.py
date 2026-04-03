@@ -22,6 +22,9 @@ async def setup_db():
     """Crea e distrugge le tabelle per ogni test."""
     global _payload_counter
     _payload_counter = 0
+    # Reset in-memory rate limiter tra i test
+    from app.middleware.rate_limit import _memory_limiter
+    _memory_limiter._buckets.clear()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
@@ -176,16 +179,27 @@ async def test_anomaly_empty_db(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_anomaly_with_data(client: AsyncClient):
-    """Inserisce TX e verifica che l'analisi funzioni."""
-    # Inserisci 15 TX normali
-    for i in range(15):
-        p = make_payload(
-            fiscal_ref=f"RP-ANOM-{i:03d}",
-            tx_hash=f"0x{i:064x}",
-            gross=100.0 + (i * 2),
-        )
-        r = await client.post("/api/v1/tx/callback", json=p)
-        assert r.status_code == 200
+    """Inserisce TX direttamente in DB e verifica che l'analisi funzioni."""
+    from app.db.session import async_session as _session
+    from app.models.db_models import TransactionLog, TxStatus
+
+    async with _session() as session:
+        for i in range(15):
+            tx = TransactionLog(
+                fiscal_ref=f"RP-ANOM-{i:03d}",
+                tx_hash=f"0x{i:064x}",
+                gross_amount=100.0 + (i * 2),
+                net_amount=(100.0 + (i * 2)) * 0.995,
+                fee_amount=(100.0 + (i * 2)) * 0.005,
+                currency="USDC",
+                network="BASE_MAINNET",
+                status=TxStatus.completed,
+                x_signature="test",
+                signature_valid=True,
+                tx_timestamp=datetime.now(timezone.utc),
+            )
+            session.add(tx)
+        await session.commit()
 
     r = await client.get("/api/v1/anomalies?window_hours=1")
     assert r.status_code == 200
@@ -223,14 +237,14 @@ async def test_dac8_generate_with_data(client: AsyncClient):
 
 def test_hmac_compute():
     """La firma HMAC è deterministica."""
-    sig1 = compute_signature("REF1", "0xabc", 100.0, "USDC", "2025-01-01")
-    sig2 = compute_signature("REF1", "0xabc", 100.0, "USDC", "2025-01-01")
+    sig1 = compute_signature("REF1", "0xabc", "100.0", "USDC", "2025-01-01")
+    sig2 = compute_signature("REF1", "0xabc", "100.0", "USDC", "2025-01-01")
     assert sig1 == sig2
     assert len(sig1) == 64  # SHA-256 hex digest
 
 
 def test_hmac_different_inputs():
     """Input diversi → firme diverse."""
-    sig1 = compute_signature("REF1", "0xabc", 100.0, "USDC", "2025-01-01")
-    sig2 = compute_signature("REF2", "0xabc", 100.0, "USDC", "2025-01-01")
+    sig1 = compute_signature("REF1", "0xabc", "100.0", "USDC", "2025-01-01")
+    sig2 = compute_signature("REF2", "0xabc", "100.0", "USDC", "2025-01-01")
     assert sig1 != sig2

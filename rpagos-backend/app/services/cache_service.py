@@ -6,18 +6,84 @@ Cache per:
   - Prezzi token (TTL: 2 min)
   - Portfolio data (TTL: 30 sec)
   - Rate limiting per IP (sliding window)
+
+Graceful degradation:
+  - Redis down → in-memory LRU cache fallback
+  - Circuit breaker tracks Redis health for /health/dependencies
 """
 
 import json
+import logging
+import time
+from collections import OrderedDict
+from threading import Lock
 from typing import Optional, Any
 from datetime import datetime, timezone
 
 import redis.asyncio as redis
 from app.config import get_settings
+from app.services.circuit_breaker import CircuitBreaker, CircuitOpenError
 
+logger = logging.getLogger(__name__)
 
 _pool: Optional[redis.Redis] = None
 
+_redis_cb = CircuitBreaker(
+    name="redis",
+    failure_threshold=3,
+    recovery_timeout=15.0,
+    half_open_max_calls=1,
+)
+
+
+# ═══════════════════════════════════════════════════════════
+#  In-Memory Fallback Cache (LRU, TTL-aware)
+# ═══════════════════════════════════════════════════════════
+
+class InMemoryCache:
+    """Simple in-memory LRU cache with TTL, used when Redis is down."""
+
+    MAX_SIZE = 1000
+
+    def __init__(self) -> None:
+        self._data: OrderedDict[str, tuple[Any, float]] = OrderedDict()
+        self._lock = Lock()
+
+    def get(self, key: str) -> Optional[Any]:
+        with self._lock:
+            entry = self._data.get(key)
+            if entry is None:
+                return None
+            value, expires_at = entry
+            if time.time() > expires_at:
+                self._data.pop(key, None)
+                return None
+            self._data.move_to_end(key)
+            return value
+
+    def set(self, key: str, value: Any, ttl: int) -> None:
+        with self._lock:
+            self._data[key] = (value, time.time() + ttl)
+            self._data.move_to_end(key)
+            while len(self._data) > self.MAX_SIZE:
+                self._data.popitem(last=False)
+
+    def delete(self, key: str) -> None:
+        with self._lock:
+            self._data.pop(key, None)
+
+    def clear(self) -> None:
+        with self._lock:
+            self._data.clear()
+
+
+_memory_cache = InMemoryCache()
+_redis_down_warned = False
+
+
+# ═══════════════════════════════════════════════════════════
+#  Redis Connection
+# ═══════════════════════════════════════════════════════════
 
 async def get_redis() -> redis.Redis:
     """Lazy-init Redis connection pool."""
@@ -33,39 +99,72 @@ async def get_redis() -> redis.Redis:
     return _pool
 
 
-# ═══════════════════════════════════════════════════════════
-#  Generic Cache
-# ═══════════════════════════════════════════════════════════
-
-async def cache_get(key: str) -> Optional[Any]:
-    """Get a cached value. Returns None if miss."""
+async def _redis_ping() -> bool:
+    """Check if Redis is reachable (used by health checks)."""
     try:
         r = await get_redis()
-        val = await r.get(key)
-        if val is None:
-            return None
-        return json.loads(val)
-    except Exception:
-        return None
-
-
-async def cache_set(key: str, value: Any, ttl_seconds: int = 300) -> bool:
-    """Set a cached value with TTL."""
-    try:
-        r = await get_redis()
-        await r.setex(key, ttl_seconds, json.dumps(value, default=str))
+        await r.ping()
         return True
     except Exception:
         return False
 
 
+# ═══════════════════════════════════════════════════════════
+#  Generic Cache (with circuit breaker + fallback)
+# ═══════════════════════════════════════════════════════════
+
+async def _redis_get(key: str) -> Optional[str]:
+    r = await get_redis()
+    return await r.get(key)
+
+
+async def _redis_setex(key: str, ttl: int, value: str) -> None:
+    r = await get_redis()
+    await r.setex(key, ttl, value)
+
+
+async def _redis_delete(key: str) -> None:
+    r = await get_redis()
+    await r.delete(key)
+
+
+async def cache_get(key: str) -> Optional[Any]:
+    """Get a cached value. Falls back to in-memory if Redis is down."""
+    global _redis_down_warned
+    try:
+        val = await _redis_cb.call(_redis_get, key)
+        if val is None:
+            return None
+        parsed = json.loads(val)
+        # Also store in memory cache as backup
+        _memory_cache.set(key, parsed, 600)
+        return parsed
+    except (CircuitOpenError, Exception):
+        if not _redis_down_warned:
+            logger.warning("Redis unavailable — using in-memory cache fallback")
+            _redis_down_warned = True
+        return _memory_cache.get(key)
+
+
+async def cache_set(key: str, value: Any, ttl_seconds: int = 300) -> bool:
+    """Set a cached value with TTL. Falls back to in-memory."""
+    serialized = json.dumps(value, default=str)
+    # Always store in memory as backup
+    _memory_cache.set(key, value, ttl_seconds)
+    try:
+        await _redis_cb.call(_redis_setex, key, ttl_seconds, serialized)
+        return True
+    except (CircuitOpenError, Exception):
+        return False
+
+
 async def cache_delete(key: str) -> bool:
     """Delete a cached key."""
+    _memory_cache.delete(key)
     try:
-        r = await get_redis()
-        await r.delete(key)
+        await _redis_cb.call(_redis_delete, key)
         return True
-    except Exception:
+    except (CircuitOpenError, Exception):
         return False
 
 
