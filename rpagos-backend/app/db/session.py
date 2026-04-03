@@ -13,6 +13,8 @@ from sqlalchemy.ext.asyncio import (
 )
 from app.config import get_settings
 from app.models.db_models import Base
+from app.models import forwarding_models as _fwd_models   # noqa: F401 — registra tabelle forwarding in Base.metadata
+from app.models import ledger_models as _ledger_models    # noqa: F401 — registra tabelle ledger in Base.metadata
 
 settings = get_settings()
 

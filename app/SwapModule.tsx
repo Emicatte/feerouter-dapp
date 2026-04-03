@@ -431,7 +431,7 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
           }}>
             {/* Top row: label + pool fee */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <span style={{ fontFamily: C.D, fontSize: 13, fontWeight: 600, color: C.dim }}>Recive</span>
+              <span style={{ fontFamily: C.D, fontSize: 13, fontWeight: 600, color: C.dim }}>Receive</span>
               {quote?.poolFee && (
                 <span style={{ fontFamily: C.M, fontSize: 10, color: C.dim }}>
                   Pool: {quote.poolFee === 100 ? '0.01%' : quote.poolFee === 500 ? '0.05%' : quote.poolFee === 3000 ? '0.3%' : '1%'}

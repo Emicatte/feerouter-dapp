@@ -24,6 +24,8 @@ from app.models.schemas import (
 from app.services.hmac_service import verify_signature
 from app.services.anomaly_service import analyze_transactions
 from app.services.dac8_service import generate_dac8_report
+from app.services.idempotency_service import check_idempotency, ConflictError
+from app.services.audit_service import log_event
 
 router = APIRouter(prefix="/api/v1", tags=["transactions"])
 
@@ -49,6 +51,29 @@ async def receive_transaction(
       5. Restituisce conferma con flag dac8_reportable
     """
 
+    # ── 0. Idempotency check (se chiave presente) ─────────────
+    if payload.idempotency_key:
+        try:
+            existing_tx = await check_idempotency(db, payload.idempotency_key)
+            if existing_tx is not None:
+                # COMPLETED → restituisci il risultato precedente senza rieseguire
+                return CallbackResponse(
+                    status="success",
+                    message=f"Idempotent replay: TX {existing_tx.id}",
+                    transaction_id=0,  # legacy field — il vero ID è in existing_tx.id
+                    compliance_logged=False,
+                    dac8_reportable=False,
+                )
+        except ConflictError:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "IDEMPOTENCY_CONFLICT",
+                    "message": f"Transazione con idempotency_key "
+                               f"'{payload.idempotency_key}' è già in corso.",
+                },
+            )
+
     # ── 1. Validazione HMAC ──────────────────────────────────
     sig_valid = verify_signature(
         x_signature=payload.x_signature,
@@ -59,6 +84,14 @@ async def receive_transaction(
         timestamp=payload.timestamp.isoformat(),
     )
     if not sig_valid:
+        await log_event(
+            db,
+            "AUTH_FAILURE",
+            "transaction_callback",
+            payload.tx_hash,
+            actor_type="external",
+            changes={"fiscal_ref": payload.fiscal_ref, "reason": "INVALID_SIGNATURE"},
+        )
         raise HTTPException(
             status_code=401,
             detail={
@@ -100,6 +133,22 @@ async def receive_transaction(
     )
     db.add(tx)
     await db.flush()  # Otteniamo l'ID senza committare
+
+    # ── 3b. Audit trail ─────────────────────────────────────
+    await log_event(
+        db,
+        "TX_CREATED",
+        "transaction_log",
+        str(tx.id),
+        actor_type="external",
+        changes={
+            "tx_hash": payload.tx_hash,
+            "gross_amount": str(payload.gross_amount),
+            "fee_amount": str(payload.fee_amount),
+            "currency": payload.currency,
+            "network": payload.network,
+        },
+    )
 
     # ── 4. Salvataggio ComplianceSnapshot (se presente) ──────
     compliance_logged = False
@@ -188,7 +237,21 @@ async def run_anomaly_analysis(
     - Importi anomali (amount_outlier)
     - Burst di frequenza (frequency_burst)
     """
-    return await analyze_transactions(db, window_hours, currency)
+    report = await analyze_transactions(db, window_hours, currency)
+    if report.anomalies_found > 0:
+        await log_event(
+            db,
+            "ANOMALY_DETECTED",
+            "anomaly_report",
+            f"window_{window_hours}h",
+            actor_type="system",
+            changes={
+                "anomalies_found": report.anomalies_found,
+                "total_transactions": report.total_transactions,
+                "window_hours": window_hours,
+            },
+        )
+    return report
 
 
 # ═══════════════════════════════════════════════════════════════

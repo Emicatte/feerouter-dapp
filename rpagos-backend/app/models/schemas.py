@@ -77,6 +77,11 @@ class TransactionCallbackPayload(BaseModel):
     # Sicurezza
     x_signature: str = Field(..., min_length=16, description="HMAC SHA-256 firma del payload")
 
+    # Idempotency (opzionale — se presente, abilita idempotency check)
+    idempotency_key: Optional[str] = Field(
+        None, max_length=128, description="Chiave di idempotenza per prevenire doppia esecuzione"
+    )
+
     # Compliance record opzionale
     compliance_record: Optional[ComplianceRecordPayload] = None
 
