@@ -82,6 +82,149 @@ services:
     networks:
       - rpagos-net
 
+  # ── Celery Workers ──────────────────────────────────────
+  worker-sweep:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    restart: unless-stopped
+    command: >
+      celery -A app.celery_app:celery worker
+      --loglevel=info -Q sweep,default -c 8 -n sweep@%h
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://rpagos:${DB_PASSWORD}@db:5432/rpagos
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - HMAC_SECRET=${HMAC_SECRET}
+      - ALCHEMY_API_KEY=${ALCHEMY_API_KEY}
+      - SWEEP_PRIVATE_KEY=${SWEEP_PRIVATE_KEY:-}
+      - SIGNER_MODE=${SIGNER_MODE:-local}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - rpagos-net
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+  worker-confirm:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    restart: unless-stopped
+    command: >
+      celery -A app.celery_app:celery worker
+      --loglevel=info -Q confirm -c 4 -n confirm@%h
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://rpagos:${DB_PASSWORD}@db:5432/rpagos
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - ALCHEMY_API_KEY=${ALCHEMY_API_KEY}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - rpagos-net
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  worker-notify:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    restart: unless-stopped
+    command: >
+      celery -A app.celery_app:celery worker
+      --loglevel=info -Q notify -c 2 -n notify@%h
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://rpagos:${DB_PASSWORD}@db:5432/rpagos
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - rpagos-net
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 128M
+
+  worker-analytics:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    restart: unless-stopped
+    command: >
+      celery -A app.celery_app:celery worker
+      --loglevel=info -Q analytics -c 1 -n analytics@%h
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://rpagos:${DB_PASSWORD}@db:5432/rpagos
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - ALCHEMY_API_KEY=${ALCHEMY_API_KEY}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - rpagos-net
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    restart: unless-stopped
+    command: >
+      celery -A app.celery_app:celery beat
+      --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://rpagos:${DB_PASSWORD}@db:5432/rpagos
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/1
+      - CELERY_RESULT_BACKEND=redis://redis:6379/2
+      - SENTRY_DSN=${SENTRY_DSN:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - rpagos-net
+    deploy:
+      replicas: 1
+      resources:
+        limits:
+          cpus: "0.1"
+          memory: 64M
+
   # ── Nginx Reverse Proxy ─────────────────────────────────
   nginx:
     image: nginx:1.25-alpine

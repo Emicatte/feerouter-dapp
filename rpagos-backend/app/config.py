@@ -47,6 +47,11 @@ class Settings(BaseSettings):
 
     # ── Telegram Bot ──────────────────────────────────────
     telegram_bot_token: str = ""
+    telegram_chat_id: str = ""
+
+    # ── Celery ────────────────────────────────────────────
+    celery_broker_url: str = "redis://localhost:6379/1"
+    celery_result_backend: str = "redis://localhost:6379/2"
 
     # ── Monitoring ────────────────────────────────────────
     sentry_dsn: str = ""
