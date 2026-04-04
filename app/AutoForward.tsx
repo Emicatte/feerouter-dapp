@@ -213,7 +213,7 @@ export default function AutoForward({ onClose }: Props) {
             transition={{ type:'spring', bounce:0, duration:0.4 }}
             style={{ overflow:'hidden', marginBottom:10 }}
           >
-            <div style={{ background:C.card, backdropFilter:'blur(32px) saturate(180%)', WebkitBackdropFilter:'blur(32px) saturate(180%)', border:'1px solid rgba(255,255,255,0.18)', borderRadius:14, padding:14, boxShadow:'0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.15)' }}>
+            <div className="bf-blur-32s" style={{ background:C.card, border:'1px solid rgba(255,255,255,0.18)', borderRadius:14, padding:14, boxShadow:'0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.15)' }}>
               {/* Destination */}
               <div style={{ marginBottom:8 }}>
                 <label style={{ fontFamily:C.D, fontSize:10, fontWeight:700, color:C.dim, textTransform:'uppercase' as const, letterSpacing:'0.08em', display:'block', marginBottom:4 }}>Destinazione</label>
@@ -276,10 +276,10 @@ export default function AutoForward({ onClose }: Props) {
       {rules.length > 0 && (
         <div style={{ marginBottom:10 }}>
           {rules.map(r => (
-            <div key={r.id} style={{
+            <div key={r.id} className="bf-blur-24s160" style={{
               display:'flex', alignItems:'center', gap:10,
               padding:'11px 14px', borderRadius:12,
-              background:C.card, backdropFilter:'blur(24px) saturate(160%)', WebkitBackdropFilter:'blur(24px) saturate(160%)', border:'1px solid rgba(255,255,255,0.16)',
+              background:C.card, border:'1px solid rgba(255,255,255,0.16)',
               marginBottom:4, opacity: r.is_active ? 1 : 0.4, boxShadow:'inset 0 1px 0 rgba(255,255,255,0.10)',
             }}>
               <div style={{ flex:1 }}>
@@ -311,9 +311,9 @@ export default function AutoForward({ onClose }: Props) {
             Caricamento…
           </div>
         ) : logs.length === 0 ? (
-          <div style={{
+          <div className="bf-blur-32s" style={{
             padding:28, textAlign:'center' as const,
-            background:C.card, backdropFilter:'blur(32px) saturate(180%)', WebkitBackdropFilter:'blur(32px) saturate(180%)', borderRadius:14, border:'1px solid rgba(255,255,255,0.16)', boxShadow:'0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.12)',
+            background:C.card, borderRadius:14, border:'1px solid rgba(255,255,255,0.16)', boxShadow:'0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.12)',
           }}>
             <div style={{ fontFamily:C.D, fontSize:13, color:C.dim }}>Nessuno sweep</div>
             <div style={{ fontFamily:C.M, fontSize:10, color:`${C.dim}60`, marginTop:4 }}>

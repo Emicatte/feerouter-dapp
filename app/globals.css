@@ -107,8 +107,17 @@ body {
 .rp-bg__blur {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
+  isolation: isolate;
+}
+.rp-bg__blur::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
   backdrop-filter: blur(140px);
   -webkit-backdrop-filter: blur(140px);
+  transform: translateZ(0);
+  will-change: transform, backdrop-filter;
 }
 
 /* ── Orb base ────────────────────────────────────────────── */
@@ -551,16 +560,25 @@ body {
    ============================================================ */
 
 .rp-dropdown {
-  
-  backdrop-filter: blur(12px) saturate(180%);
-  -webkit-backdrop-filter: blur(12px) saturate(180%);
-
+  position: relative;
+  isolation: isolate;
   will-change: transform, opacity;
   transform-origin: top right;
 }
+.rp-dropdown::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  backdrop-filter: blur(12px) saturate(180%);
+  -webkit-backdrop-filter: blur(12px) saturate(180%);
+  transform: translateZ(0);
+  will-change: transform, backdrop-filter;
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .rp-dropdown {
+  .rp-dropdown::before {
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
   }
@@ -752,3 +770,87 @@ body {
   0%   { opacity: 0; transform: translateY(12px); }
   100% { opacity: 1; transform: translateY(0); }
 }
+
+.tuo-elemento-card {
+    -webkit-backface-visibility: hidden; /* Nasconde il 'retro' dell'elemento */
+    backface-visibility: hidden;
+    transform: translateZ(0); /* Forza il rendering 3D */
+    perspective: 1000;
+    will-change: transform; /* Avvisa il browser che l'elemento cambierà scala */
+}
+
+.tuo-elemento-vetro {
+    -webkit-transform: translate3d(0, 0, 0);
+    transform: translate3d(0, 0, 0);
+}
+
+html, body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+/* ============================================================
+   BACKDROP-FILTER UTILITY CLASSES
+   Promotes blur to a GPU-composited ::before layer so that
+   transition:all on the parent never re-composites the filter.
+   Parent keeps its own background; ::before sits in z:-1 slot
+   inside the isolation:isolate stacking context.
+   ============================================================ */
+
+.bf-blur-8,
+.bf-blur-12,
+.bf-blur-16,
+.bf-blur-24s,
+.bf-blur-24s160,
+.bf-blur-32s {
+  position: relative;
+  isolation: isolate;
+}
+
+.bf-blur-8::before,
+.bf-blur-12::before,
+.bf-blur-16::before,
+.bf-blur-24s::before,
+.bf-blur-24s160::before,
+.bf-blur-32s::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  transform: translateZ(0);
+  will-change: transform, backdrop-filter;
+  pointer-events: none;
+}
+
+.bf-blur-8::before {
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.bf-blur-12::before {
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.bf-blur-16::before {
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.bf-blur-24s::before {
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+}
+
+.bf-blur-24s160::before {
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+}
+
+.bf-blur-32s::before {
+  backdrop-filter: blur(32px) saturate(180%);
+  -webkit-backdrop-filter: blur(32px) saturate(180%);
+}
+

@@ -117,9 +117,9 @@ function GasWarningBanner() {
   const { gasWarning, switchToBase } = useChainGuard()
   if (!gasWarning) return null
   return (
-    <div style={{
+    <div className="bf-blur-8" style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1000,
-      background: 'rgba(245,158,11,0.9)', backdropFilter: 'blur(8px)',
+      background: 'rgba(245,158,11,0.9)',
       padding: '9px 20px',
       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
       fontFamily: 'var(--font-display)', fontSize: 13,

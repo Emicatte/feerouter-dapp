@@ -250,15 +250,14 @@ function NetworkGasWidget() {
       {/* Trigger pill */}
       <button
         onClick={() => setOpen(o => !o)}
+        className="bf-blur-16"
         style={{
           display: 'flex', alignItems: 'center', gap: 0,
           padding: 0, cursor: 'pointer',
           background: 'rgba(12,12,30,0.85)',
-          backdropFilter: 'blur(16px)',
-          WebkitBackdropFilter: 'blur(16px)',
           borderRadius: 12,
           border: `1px solid ${open ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)'}`,
-          transition: 'all 0.2s ease',
+          transition: 'border-color 0.2s ease',
           overflow: 'hidden',
         }}
       >
@@ -386,12 +385,10 @@ function Navbar({
   ]
 
   return (
-    <nav style={{
+    <nav className="bf-blur-24s" style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1000,
       height: 60,
       background: 'linear-gradient(180deg, rgba(10,10,15,0.8) 0%, rgba(10,10,15,0.7) 100%)',
-      backdropFilter: 'blur(24px) saturate(180%)',
-      WebkitBackdropFilter: 'blur(24px) saturate(180%)',
       borderBottom: '1px solid rgba(255,255,255,0.08)',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: '0 24px',
@@ -524,11 +521,10 @@ function OverlayShell({ active, onClose, children }: { active: boolean; onClose:
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
             onClick={onClose}
+            className="bf-blur-12"
             style={{
               position: 'fixed', inset: 0, zIndex: 900,
               background: 'rgba(0,0,0,0.5)',
-              backdropFilter: 'blur(12px)',
-              WebkitBackdropFilter: 'blur(12px)',
             }}
           />
           {/* Content */}
@@ -1224,12 +1220,11 @@ export default function Home() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease: SPRING, delay: 0.15 }}
+            className="bf-blur-16"
             style={{
               zIndex: 2,
               position: 'relative',
               background: 'rgba(255,255,255,0.04)',
-              backdropFilter: 'blur(16px)',
-              WebkitBackdropFilter: 'blur(16px)',
               border: '1px solid rgba(255,255,255,0.10)',
               borderRadius: 18,
               marginBottom: 28,
@@ -1306,12 +1301,10 @@ export default function Home() {
         )}
 
         {/* WidgetContainer — sempre montato, sfondo vetro fisso, cross-fade CSS puro */}
-        <div className="widget-container" style={{
+        <div className="widget-container bf-blur-32s" style={{
           width: '100%',
           maxWidth: 480,
           background: 'rgba(8,12,30,0.72)',
-          backdropFilter: 'blur(32px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(32px) saturate(180%)',
           border: '1px solid rgba(255,255,255,0.18)',
           borderRadius: 20,
           boxShadow: '0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.15)',

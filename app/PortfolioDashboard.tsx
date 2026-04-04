@@ -641,10 +641,10 @@ export default function PortfolioDashboard({ open, onClose, initialTab }: Props)
             onClick={onClose}
             variants={overlayV}
             transition={smooth}
+            className="bf-blur-16"
             style={{
               position: 'absolute', inset: 0,
               background: 'rgba(0,0,0,0.6)',
-              backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
             }}
           />
 

@@ -2,6 +2,7 @@
 
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import {
   useAccount, useBalance, useReadContracts,
   useWriteContract, useWaitForTransactionReceipt,
@@ -343,9 +344,9 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
 
   if (!isConnected || !reg) return null
 
-  const cardStyle = noCard ? {} : { background: 'rgba(8,12,30,0.72)', backdropFilter: 'blur(32px) saturate(180%)', WebkitBackdropFilter: 'blur(32px) saturate(180%)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 20, overflow: 'hidden', boxShadow: '0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.15)' }
+  const cardStyle = noCard ? {} : { background: 'rgba(8,12,30,0.72)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 20, overflow: 'hidden', boxShadow: '0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.15)' }
   return (
-    <div style={cardStyle}>
+    <div className={noCard ? '' : 'bf-blur-32s'} style={cardStyle}>
       <div style={{ padding: '10px 10px 10px' }}>
 
         {/* ── SELL ─────────────────────────────────────────────── */}
@@ -410,13 +411,13 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
 
         {/* ── Swap arrow ───────────────────────────────────────── */}
         <div className="rp-anim-2" style={{ display: 'flex', justifyContent: 'center', margin: '-4px 0', position: 'relative', zIndex: 2 }}>
-          <button onClick={flip} disabled={busy} style={{
+          <button onClick={flip} disabled={busy} className="bf-blur-16" style={{
             width: 34, height: 34, borderRadius: 10,
-            background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)',
+            background: 'rgba(255,255,255,0.08)',
             border: '1.5px solid rgba(255,255,255,0.18)',
             color: C.dim, fontSize: 16, cursor: busy ? 'default' : 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'all 0.2s ease', boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.10)',
+            transition: 'background 0.2s ease, color 0.2s ease', boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.10)',
           }}
             onMouseEnter={e => { if (!busy) { e.currentTarget.style.background = 'rgba(255,255,255,0.14)'; e.currentTarget.style.color = C.text } }}
             onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = C.dim }}
@@ -586,7 +587,7 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
       </div>
 
       {/* ── Token Selector Modal ───────────────────────────── */}
-      {selectingFor && (
+      {selectingFor && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div onClick={() => setSelectingFor(null)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)' }} />
           <div style={{
@@ -649,7 +650,7 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
     </div>
   )
 }

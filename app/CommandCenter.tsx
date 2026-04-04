@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useAccount, useChainId, useBalance } from 'wagmi'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
@@ -116,9 +117,9 @@ const tabContent = {
 }
 
 const slideVariants = {
-  enter: (dir: number) => ({ x: dir > 0 ? 280 : -280, opacity: 0 }),
+  enter: (dir: number) => ({ x: dir > 0 ? '60%' : '-60%', opacity: 0 }),
   center: { x: 0, opacity: 1 },
-  exit: (dir: number) => ({ x: dir > 0 ? -280 : 280, opacity: 0 }),
+  exit: (dir: number) => ({ x: dir > 0 ? '-60%' : '60%', opacity: 0 }),
 }
 
 const STATUS_COLORS: Record<string, string> = {
@@ -515,25 +516,31 @@ function RoutesTab({
     try { await updateRule(id, { is_active: !active }) } catch {}
   }
 
+  // Single portal instance — AnimatePresence inside so exit animation works after portal
+  const wizardPortal = createPortal(
+    <AnimatePresence>
+      {showWizard && (
+        <RouteWizard
+          key="route-wizard"
+          onClose={() => setShowWizard(false)}
+          onCreate={createRule}
+          onCreateBatch={createRuleBatch}
+          address={address}
+          chainId={chainId}
+          balance={balance}
+          ethPrice={ethPrice}
+          distLists={distLists}
+        />
+      )}
+    </AnimatePresence>
+  , document.body)
+
   // ── Empty state ────────────────────────────────────────
   if (!loading && rules.length === 0) {
     return (
       <>
         <EmptyState onStart={() => setShowWizard(true)} />
-        <AnimatePresence>
-          {showWizard && (
-            <RouteWizard
-              onClose={() => setShowWizard(false)}
-              onCreate={createRule}
-              onCreateBatch={createRuleBatch}
-              address={address}
-              chainId={chainId}
-              balance={balance}
-              ethPrice={ethPrice}
-              distLists={distLists}
-            />
-          )}
-        </AnimatePresence>
+        {wizardPortal}
       </>
     )
   }
@@ -578,21 +585,8 @@ function RoutesTab({
         </AnimatePresence>
       )}
 
-      {/* Wizard overlay */}
-      <AnimatePresence>
-        {showWizard && (
-          <RouteWizard
-            onClose={() => setShowWizard(false)}
-            onCreate={createRule}
-            onCreateBatch={createRuleBatch}
-            address={address}
-            chainId={chainId}
-            balance={balance}
-            ethPrice={ethPrice}
-            distLists={distLists}
-          />
-        )}
-      </AnimatePresence>
+      {/* Wizard portal */}
+      {wizardPortal}
     </div>
   )
 }
@@ -856,147 +850,176 @@ function RouteWizard({
     setDestMode('quick')
   }
 
+  // Fix D — lock body scroll while modal is open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
+      onClick={onClose} /* Fix E — close on backdrop click */
       style={{
-        position: 'fixed', inset: 0, zIndex: 200,
-        background: 'rgba(10,10,15,0.92)',
-        backdropFilter: 'blur(24px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(24px) saturate(180%)',
-        display: 'flex', justifyContent: 'center',
-        overflowY: 'auto',
+        position: 'fixed', inset: 0,
+        zIndex: 9999,
+        background: 'rgba(0, 0, 0, 0.75)',
+        backdropFilter: 'blur(2px)',
+        WebkitBackdropFilter: 'blur(2px)',
+        display: 'flex', justifyContent: 'center', alignItems: 'center',
       }}
     >
-      <div style={{ width: '100%', maxWidth: 560, padding: '32px 24px 60px', position: 'relative' }}>
-        {/* Close */}
-        <button onClick={onClose} style={{
-          position: 'absolute', top: 0, right: 0,
-          background: 'none', border: 'none', color: C.dim, cursor: 'pointer',
-          fontFamily: C.D, fontSize: 20, padding: 8,
-        }}>{'\u2715'}</button>
+      {/* Modal panel */}
+      <div
+        onClick={e => e.stopPropagation()} /* Fix E — prevent panel clicks from closing */
+        style={{
+        width: '90%', maxWidth: 480,
+        display: 'flex', flexDirection: 'column',
+        maxHeight: '90vh',
+        overflow: 'hidden',
+        position: 'relative',
+        zIndex: 10000,
+        borderRadius: 16,
+        boxSizing: 'border-box',
+        background: C.card,
+      }}>
 
-        {/* Title */}
-        <div style={{ fontFamily: C.D, fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 4 }}>
-          Create Route
-        </div>
-        <div style={{ fontFamily: C.M, fontSize: 11, color: C.dim, marginBottom: 24 }}>
-          Set up automatic forwarding for incoming funds
-        </div>
+        {/* ── Non-scrolling header: close + title + step bar ── */}
+        <div style={{ padding: '20px 24px 0', flexShrink: 0 }}>
+          {/* Close */}
+          <button onClick={onClose} style={{
+            position: 'absolute', top: 12, right: 12,
+            background: 'none', border: 'none', color: C.dim, cursor: 'pointer',
+            fontFamily: C.D, fontSize: 20, padding: 8,
+          }}>{'\u2715'}</button>
 
-        {/* Step bar */}
-        <WizardStepBar step={step} />
-
-        {/* Step content */}
-        <AnimatePresence mode="wait" custom={direction}>
-          <motion.div
-            key={step}
-            custom={direction}
-            variants={slideVariants}
-            initial="enter"
-            animate="center"
-            exit="exit"
-            transition={{ duration: 0.35, ease: EASE }}
-            style={{ minHeight: 200 }}
-          >
-            {step === 1 && (
-              <Step1Source address={address} chainId={chainId} balance={balance} ethPrice={ethPrice} />
-            )}
-            {step === 2 && (
-              <Step2Destinations
-                destMode={destMode} setDestMode={setDestMode}
-                destinations={destinations} setDestinations={setDestinations}
-                csvText={csvText} setCsvText={setCsvText}
-                csvParsed={csvParsed} parseCsv={parseCsv}
-                showAdvanced={showAdvanced} setShowAdvanced={setShowAdvanced}
-                advanced={advanced} setAdvanced={setAdvanced}
-                ethPrice={ethPrice}
-                distLists={distLists} loadGroup={loadGroup}
-              />
-            )}
-            {step === 3 && (
-              <Step3Review
-                address={address}
-                destinations={activeDests}
-                ethPrice={ethPrice}
-                advanced={advanced}
-                confirmed={confirmed}
-                setConfirmed={setConfirmed}
-              />
-            )}
-          </motion.div>
-        </AnimatePresence>
-
-        {/* Error */}
-        {error && (
-          <div style={{
-            fontFamily: C.M, fontSize: 10, color: C.red, marginTop: 10,
-            padding: '6px 10px', background: `${C.red}08`, borderRadius: 8,
-          }}>
-            {error}
+          {/* Title */}
+          <div style={{ fontFamily: C.D, fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 4 }}>
+            Create Route
           </div>
-        )}
+          <div style={{ fontFamily: C.M, fontSize: 11, color: C.dim, marginBottom: 24 }}>
+            Set up automatic forwarding for incoming funds
+          </div>
 
-        {/* Navigation */}
-        <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
-          {step > 1 && (
-            <motion.button
-              whileTap={{ scale: 0.97 }}
-              onClick={goBack}
-              style={{
-                padding: '12px 20px', borderRadius: 12,
-                background: 'rgba(255,255,255,0.06)', border: `1px solid ${C.border}`,
-                color: C.sub, fontFamily: C.D, fontSize: 13, fontWeight: 600,
-                cursor: 'pointer', transition: 'all 0.15s',
-              }}
+          {/* Step bar */}
+          <WizardStepBar step={step} />
+        </div>
+
+        {/* ── Scrollable body: step content + error ── */}
+        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '0 24px' }}>
+          <AnimatePresence mode="wait" custom={direction}>
+            <motion.div
+              key={step}
+              custom={direction}
+              variants={slideVariants}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={{ duration: 0.35, ease: EASE }}
+              style={{ minHeight: 200 }}
             >
-              Back
-            </motion.button>
-          )}
-          <div style={{ flex: 1 }} />
-          {step < 3 ? (
-            <motion.button
-              whileTap={{ scale: 0.97 }}
-              onClick={goNext}
-              disabled={step === 2 && !canNext2}
-              style={{
-                padding: '12px 28px', borderRadius: 12, border: 'none',
-                background: (step === 2 && !canNext2)
-                  ? 'rgba(255,255,255,0.04)'
-                  : `linear-gradient(135deg, ${C.red}, ${C.purple})`,
-                color: (step === 2 && !canNext2) ? 'rgba(255,255,255,0.35)' : '#fff',
-                fontFamily: C.D, fontSize: 13, fontWeight: 700,
-                cursor: (step === 2 && !canNext2) ? 'not-allowed' : 'pointer',
-                boxShadow: (step === 2 && !canNext2) ? 'none' : `0 4px 20px ${C.purple}25`,
-                transition: 'all 0.2s',
-              }}
-            >
-              Continue
-            </motion.button>
-          ) : (
-            <motion.button
-              whileTap={{ scale: 0.97 }}
-              onClick={handleCreate}
-              disabled={!confirmed || saving}
-              style={{
-                padding: '12px 28px', borderRadius: 12, border: 'none',
-                background: (!confirmed || saving)
-                  ? 'rgba(255,255,255,0.04)'
-                  : `linear-gradient(135deg, ${C.red}, ${C.purple})`,
-                color: (!confirmed || saving) ? 'rgba(255,255,255,0.35)' : '#fff',
-                fontFamily: C.D, fontSize: 13, fontWeight: 700,
-                cursor: (!confirmed || saving) ? 'not-allowed' : 'pointer',
-                boxShadow: (!confirmed || saving) ? 'none' : `0 4px 20px ${C.purple}25`,
-                transition: 'all 0.2s',
-              }}
-            >
-              {saving ? 'Signing...' : 'Sign & Create Route'}
-            </motion.button>
+              {step === 1 && (
+                <Step1Source address={address} chainId={chainId} balance={balance} ethPrice={ethPrice} />
+              )}
+              {step === 2 && (
+                <Step2Destinations
+                  destMode={destMode} setDestMode={setDestMode}
+                  destinations={destinations} setDestinations={setDestinations}
+                  csvText={csvText} setCsvText={setCsvText}
+                  csvParsed={csvParsed} parseCsv={parseCsv}
+                  showAdvanced={showAdvanced} setShowAdvanced={setShowAdvanced}
+                  advanced={advanced} setAdvanced={setAdvanced}
+                  ethPrice={ethPrice}
+                  distLists={distLists} loadGroup={loadGroup}
+                />
+              )}
+              {step === 3 && (
+                <Step3Review
+                  address={address}
+                  destinations={activeDests}
+                  ethPrice={ethPrice}
+                  advanced={advanced}
+                  confirmed={confirmed}
+                  setConfirmed={setConfirmed}
+                />
+              )}
+            </motion.div>
+          </AnimatePresence>
+
+          {/* Error */}
+          {error && (
+            <div style={{
+              fontFamily: C.M, fontSize: 10, color: C.red, marginTop: 10,
+              padding: '6px 10px', background: `${C.red}08`, borderRadius: 8,
+            }}>
+              {error}
+            </div>
           )}
         </div>
+
+        {/* ── Non-scrolling footer: navigation buttons ── */}
+        <div style={{ padding: '0 24px 32px', flexShrink: 0 }}>
+          <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
+            {step > 1 && (
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                onClick={goBack}
+                style={{
+                  padding: '12px 20px', borderRadius: 12,
+                  background: 'rgba(255,255,255,0.06)', border: `1px solid ${C.border}`,
+                  color: C.sub, fontFamily: C.D, fontSize: 13, fontWeight: 600,
+                  cursor: 'pointer', transition: 'all 0.15s',
+                }}
+              >
+                Back
+              </motion.button>
+            )}
+            <div style={{ flex: 1 }} />
+            {step < 3 ? (
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                onClick={goNext}
+                disabled={step === 2 && !canNext2}
+                style={{
+                  padding: '12px 28px', borderRadius: 12, border: 'none',
+                  background: (step === 2 && !canNext2)
+                    ? 'rgba(255,255,255,0.04)'
+                    : `linear-gradient(135deg, ${C.red}, ${C.purple})`,
+                  color: (step === 2 && !canNext2) ? 'rgba(255,255,255,0.35)' : '#fff',
+                  fontFamily: C.D, fontSize: 13, fontWeight: 700,
+                  cursor: (step === 2 && !canNext2) ? 'not-allowed' : 'pointer',
+                  boxShadow: (step === 2 && !canNext2) ? 'none' : `0 4px 20px ${C.purple}25`,
+                  transition: 'all 0.2s',
+                }}
+              >
+                Continue
+              </motion.button>
+            ) : (
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                onClick={handleCreate}
+                disabled={!confirmed || saving}
+                style={{
+                  padding: '12px 28px', borderRadius: 12, border: 'none',
+                  background: (!confirmed || saving)
+                    ? 'rgba(255,255,255,0.04)'
+                    : `linear-gradient(135deg, ${C.red}, ${C.purple})`,
+                  color: (!confirmed || saving) ? 'rgba(255,255,255,0.35)' : '#fff',
+                  fontFamily: C.D, fontSize: 13, fontWeight: 700,
+                  cursor: (!confirmed || saving) ? 'not-allowed' : 'pointer',
+                  boxShadow: (!confirmed || saving) ? 'none' : `0 4px 20px ${C.purple}25`,
+                  transition: 'all 0.2s',
+                }}
+              >
+                {saving ? 'Signing...' : 'Sign & Create Route'}
+              </motion.button>
+            )}
+          </div>
+        </div>
+
       </div>
     </motion.div>
   )
@@ -2799,10 +2822,8 @@ function GroupsTab({
             transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
             style={{ overflow: 'hidden', marginBottom: 12 }}
           >
-            <div style={{
+            <div className="bf-blur-24s" style={{
               background: 'rgba(255,255,255,0.03)',
-              backdropFilter: 'blur(24px) saturate(180%)',
-              WebkitBackdropFilter: 'blur(24px) saturate(180%)',
               border: '1px solid rgba(255,255,255,0.08)',
               borderRadius: 16, padding: 16,
             }}>

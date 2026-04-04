@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import {
   useAccount, useBalance, useReadContracts,
   useWriteContract, useWaitForTransactionReceipt,
@@ -781,17 +782,17 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
     :                                         'ready'
 
   const C = {
-    card:  { borderRadius:20, background:'rgba(8,12,30,0.72)', backdropFilter:'blur(32px) saturate(180%)', WebkitBackdropFilter:'blur(32px) saturate(180%)', border:'1px solid rgba(255,255,255,0.18)', overflow:'hidden' as const, boxShadow:'0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.15)' } satisfies React.CSSProperties,
+    card:  { borderRadius:20, background:'rgba(8,12,30,0.72)', border:'1px solid rgba(255,255,255,0.18)', overflow:'hidden' as const, boxShadow:'0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.15)' } satisfies React.CSSProperties,
     box:   { borderRadius:14, background:focused?'rgba(255,255,255,0.08)':'rgba(255,255,255,0.04)', padding:'14px 14px', border:'1.5px solid', borderColor:focused?`${T.emerald}60`:'rgba(255,255,255,0.14)', transition:'all 0.2s ease', cursor:'text', boxShadow:focused?`0 0 0 3px ${T.emerald}12`:'inset 0 1px 0 rgba(255,255,255,0.07)' } satisfies React.CSSProperties,
     box2:  { borderRadius:14, background:'rgba(255,255,255,0.04)', padding:'14px 14px', border:'1.5px solid rgba(255,255,255,0.12)' } satisfies React.CSSProperties,
     row:   { display:'flex', alignItems:'center', justifyContent:'space-between' } satisfies React.CSSProperties,
-    input: { width:'100%', background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:10, padding:'10px 12px', color:T.text, fontSize:13, outline:'none', transition:'all 0.2s ease', fontFamily:T.M, boxSizing:'border-box' as const, backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)' } satisfies React.CSSProperties,
+    input: { width:'100%', background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:10, padding:'10px 12px', color:T.text, fontSize:13, outline:'none', transition:'border-color 0.2s ease, box-shadow 0.2s ease', fontFamily:T.M, boxSizing:'border-box' as const, backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)' } satisfies React.CSSProperties,
   }
 
   // ── SUCCESS ───────────────────────────────────────────────────────────
   if (phase === 'done' && report) return (
     <>
-      <div style={noCard ? {} : C.card} className="rp-anim-0">
+      <div style={noCard ? {} : C.card} className={`rp-anim-0${noCard ? '' : ' bf-blur-32s'}`}>
         <div style={{ padding:'18px 20px 16px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', gap:10 }}>
           <div style={{ width:9, height:9, borderRadius:'50%', background:T.emerald, boxShadow:`0 0 12px ${T.emerald}` }} />
           <span style={{ fontFamily:T.D, color:T.emerald, fontSize:13, fontWeight:700, textTransform:'uppercase' as const, letterSpacing:'0.06em' }}>Pagamento Confermato</span>
@@ -827,7 +828,7 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
   // ── MAIN FORM — Jupiter-style: no header, direct Sell/Buy ──────────
   return (
     <>
-      <div style={noCard ? {} : C.card}>
+      <div style={noCard ? {} : C.card} className={noCard ? '' : 'bf-blur-32s'}>
         <div style={{ padding:'10px 10px 10px' }}>
 
           {/* Gas warning L1 — only when needed */}
@@ -885,15 +886,15 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
                   const tmp = tokenIn; setTokenIn(tokenOut); setTokenOut(tmp); setAmount('')
                 }
               }}
+              className="bf-blur-16"
               style={{
                 width:34, height:34, borderRadius:10,
                 background: 'rgba(255,255,255,0.08)',
-                backdropFilter:'blur(16px)', WebkitBackdropFilter:'blur(16px)',
                 border:'1.5px solid rgba(255,255,255,0.14)',
                 color: T.muted, fontSize:16,
                 cursor: isSwapMode ? 'pointer' : 'default',
                 display:'flex', alignItems:'center', justifyContent:'center',
-                transition:'all 0.2s ease',
+                transition:'background 0.2s ease, color 0.2s ease',
                 boxShadow:'0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.10)',
               }}
               onMouseEnter={e => { if (isSwapMode) { e.currentTarget.style.background='rgba(255,255,255,0.14)'; e.currentTarget.style.color=T.text } }}
@@ -1088,7 +1089,7 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
       </div>
 
       {/* Token Selector Modal */}
-      {selectingToken && (
+      {selectingToken && createPortal(
         <TokenSelectorModal
           title={selectingToken === 'in' ? 'Seleziona token di input' : 'Seleziona token di output'}
           tokens={tokenList}
@@ -1105,7 +1106,7 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
             setSelectingToken(null)
           }}
         />
-      )}
+      , document.body)}
 
       {toast && <Toast message={toast.msg} color={toast.color} onDismiss={() => setToast(null)} />}
     </>
