@@ -695,7 +695,13 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
           signal: AbortSignal.timeout(10_000),
         })
         oracle = await res.json()
-      } catch { setTxError('Oracle non raggiungibile.'); setPhase('error'); return }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error('[TransferForm] Oracle fetch failed:', msg, err)
+        setTxError(`Oracle non raggiungibile: ${msg}`)
+        setPhase('error')
+        return
+      }
     }
     if (!oracle?.approved) { setOracleDenied(true); setOracleData(oracle); setPhase('idle'); return }
     txLog('tx.initiated', { isSwap: isSwapMode, token: tokenIn.symbol, chain: chainId })
