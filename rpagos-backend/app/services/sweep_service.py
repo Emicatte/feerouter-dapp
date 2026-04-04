@@ -351,6 +351,123 @@ async def validate_all_conditions(
 
 
 # ═══════════════════════════════════════════════════════════════
+#  GAS BUMP (replacement TX support)
+# ═══════════════════════════════════════════════════════════════
+
+GAS_BUMP_FACTOR = 1.15  # 15% bump — exceeds the 10% minimum required by most mempools
+MIN_PRIORITY_FEE_WEI = 100_000_000  # 0.1 gwei floor
+REPLACEMENT_MODE_DURATION = 300  # 5 minutes
+
+# Module-level replacement mode state
+_replacement_mode_until: float = 0.0  # monotonic timestamp
+
+
+def _replacement_mode_active() -> bool:
+    """Return True if we are within the 5-min replacement window after startup gap detection."""
+    return _time.monotonic() < _replacement_mode_until
+
+
+def _activate_replacement_mode() -> None:
+    """Activate replacement mode for REPLACEMENT_MODE_DURATION seconds."""
+    global _replacement_mode_until
+    _replacement_mode_until = _time.monotonic() + REPLACEMENT_MODE_DURATION
+    logger.warning(
+        "Replacement mode ACTIVATED for %ds — all TXes will use 15%% gas bump",
+        REPLACEMENT_MODE_DURATION,
+    )
+
+
+async def initialize_nonce_with_gap_detection(chain_id: int = 8453) -> dict:
+    """Initialize the NonceManager and detect nonce gaps from a previous crash.
+
+    Called at server startup. If redis_nonce > chain_pending_nonce, there are
+    pending/queued TXes in the mempool from a previous run. In that case,
+    activate replacement mode for 5 minutes so new TXes bump gas and replace
+    stale mempool entries.
+
+    Returns:
+        Dict with initialization state.
+    """
+    from app.services.nonce_manager import get_nonce_manager
+
+    nm = get_nonce_manager(chain_id)
+    try:
+        nonce_value = await nm.initialize()
+    except Exception as e:
+        logger.error("NonceManager init failed for chain %d: %s", chain_id, e)
+        return {"chain_id": chain_id, "status": "error", "error": str(e)}
+
+    # Check for gap
+    try:
+        state = await nm.get_state()
+        gap = state.get("gap", 0) or 0
+    except Exception as e:
+        logger.warning("NonceManager get_state failed: %s — skipping gap check", e)
+        return {"chain_id": chain_id, "nonce": nonce_value, "gap": None}
+
+    result = {
+        "chain_id": chain_id,
+        "nonce": nonce_value,
+        "redis_nonce": state.get("redis_nonce"),
+        "chain_pending": state.get("chain_pending"),
+        "chain_latest": state.get("chain_latest"),
+        "gap": gap,
+    }
+
+    if gap > 0:
+        logger.warning(
+            "NONCE GAP detected on chain %d: redis=%s chain_pending=%s gap=%d "
+            "— activating replacement mode for %ds",
+            chain_id, state.get("redis_nonce"), state.get("chain_pending"),
+            gap, REPLACEMENT_MODE_DURATION,
+        )
+        _activate_replacement_mode()
+
+        # Prometheus metric
+        try:
+            from app.services.metrics import NONCE_GAPS_ON_STARTUP
+            NONCE_GAPS_ON_STARTUP.labels(chain_id=str(chain_id)).inc()
+        except Exception:
+            pass
+    else:
+        logger.info(
+            "NonceManager initialized clean: chain=%d nonce=%d gap=0",
+            chain_id, nonce_value,
+        )
+
+    return result
+
+
+async def get_bumped_gas_params(
+    chain_id: int,
+    base_gas_price: int,
+    is_replacement: bool = False,
+) -> dict:
+    """Return gas parameters for a TX, with optional bump for replacement.
+
+    When is_replacement=True, all gas fields are bumped by at least 15%
+    to guarantee the new TX replaces any pending TX at the same nonce.
+
+    Returns:
+        EIP-1559 dict ``{maxFeePerGas, maxPriorityFeePerGas}`` for chains
+        in EIP1559_CHAINS, or legacy ``{gasPrice}`` otherwise.
+    """
+    if is_replacement:
+        bumped = int(base_gas_price * GAS_BUMP_FACTOR)
+    else:
+        bumped = base_gas_price
+
+    if chain_id in EIP1559_CHAINS:
+        priority = max(bumped // 10, MIN_PRIORITY_FEE_WEI)
+        return {
+            "maxFeePerGas": bumped,
+            "maxPriorityFeePerGas": priority,
+        }
+    else:
+        return {"gasPrice": bumped}
+
+
+# ═══════════════════════════════════════════════════════════════
 #  GAS ESTIMATION (EIP-1559 aware)
 # ═══════════════════════════════════════════════════════════════
 
@@ -404,7 +521,28 @@ async def estimate_gas_cost(
         fee_params = {"gasPrice": adjusted}
 
     effective_gwei = effective_gas_wei / 1e9
-    cost_eth = (effective_gas_wei * gas_limit) / 1e18
+    l2_cost_wei = effective_gas_wei * gas_limit
+
+    # Add L1 data fee for OP Stack chains
+    l1_cost_wei = 0
+    from app.services.gas_estimator import is_op_stack, estimate_l1_data_fee
+    if is_op_stack(chain_id):
+        try:
+            # Estimate calldata size: single ETH transfer ≈ 0 bytes,
+            # ERC-20 transfer ≈ 68 bytes, distribution ≈ varies by recipient count
+            calldata_bytes = 0
+            if tx_params and tx_params.get("data"):
+                data_hex = tx_params["data"]
+                if isinstance(data_hex, str) and data_hex.startswith("0x"):
+                    calldata_bytes = (len(data_hex) - 2) // 2
+                elif isinstance(data_hex, bytes):
+                    calldata_bytes = len(data_hex)
+            l1_cost_wei = await estimate_l1_data_fee(chain_id, calldata_bytes)
+        except Exception as exc:
+            logger.debug("L1 fee estimation failed: %s", exc)
+
+    total_cost_wei = l2_cost_wei + l1_cost_wei
+    cost_eth = total_cost_wei / 1e18
 
     return gas_limit, effective_gwei, cost_eth, fee_params
 

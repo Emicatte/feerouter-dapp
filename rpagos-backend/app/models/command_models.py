@@ -206,6 +206,7 @@ class SweepBatchItem(Base):
     nonce = Column(Integer, nullable=True)
     gas_used = Column(BigInteger, nullable=True)
     error_message = Column(Text, nullable=True)
+    retry_count = Column(Integer, default=0, nullable=False)
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -218,7 +219,7 @@ class SweepBatchItem(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('PENDING','SIGNING','SUBMITTED','CONFIRMED','FAILED')",
+            "status IN ('PENDING','SIGNING','SUBMITTED','CONFIRMED','FAILED','RETRYING')",
             name="ck_batch_item_status",
         ),
         CheckConstraint(

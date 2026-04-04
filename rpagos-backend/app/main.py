@@ -17,7 +17,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.config import get_settings
+from app.config import get_settings, validate_settings
 from app.db.session import init_db
 from app.api.routes import router
 from app.services.cache_service import close_redis
@@ -41,6 +41,9 @@ async def lifespan(app: FastAPI):
     # ── Structured JSON logging ─────────────────────
     setup_logging(debug=settings.debug)
 
+    # ── Validate critical env vars ──────────────────
+    validate_settings(settings)
+
     # ── Sentry ───────────────────────────────────────
     if settings.sentry_dsn:
         import sentry_sdk
@@ -62,6 +65,14 @@ async def lifespan(app: FastAPI):
 
     # ── Start reconciliation job ────────────────────
     start_reconciliation_job()
+
+    # ── Initialize NonceManager + gap detection ────
+    try:
+        from app.services.sweep_service import initialize_nonce_with_gap_detection
+        nonce_state = await initialize_nonce_with_gap_detection(chain_id=8453)
+        logger.info("NonceManager ready: %s", nonce_state)
+    except Exception as e:
+        logger.warning("NonceManager init skipped (Redis/RPC unavailable): %s", e)
 
     webhook_mode = "webhook" if settings.alchemy_webhook_secret else "polling"
     db_display = settings.database_url.split("@")[-1] if "@" in settings.database_url else settings.database_url
@@ -324,6 +335,48 @@ async def health_sweep():
             "checks": checks,
         },
     )
+
+
+@app.get("/health/config")
+async def health_config():
+    """Configuration status: which env vars are set (values never exposed)."""
+    settings = get_settings()
+    is_prod = not settings.debug
+
+    def _check(val: str, required: bool = False, prod_only: bool = False) -> str:
+        has_value = bool(val and val not in (
+            "change-me-in-production",
+            "change_this_to_random_string",
+        ))
+        if has_value:
+            return "ok"
+        if required and (not prod_only or is_prod):
+            return "MISSING"
+        return "not_set"
+
+    return {
+        "environment": "production" if is_prod else "development",
+        "vars": {
+            "DATABASE_URL": _check(settings.database_url, required=True),
+            "REDIS_URL": _check(settings.redis_url, required=True, prod_only=True),
+            "ALCHEMY_API_KEY": _check(settings.alchemy_api_key, required=True),
+            "ALCHEMY_WEBHOOK_SECRET": _check(settings.alchemy_webhook_secret),
+            "SWEEP_PRIVATE_KEY": _check(
+                settings.sweep_private_key,
+                required=(settings.signer_mode == "local"),
+            ),
+            "SIGNER_MODE": settings.signer_mode,
+            "KMS_KEY_ID": _check(
+                settings.kms_key_id,
+                required=(settings.signer_mode == "kms"),
+            ),
+            "HMAC_SECRET": _check(settings.hmac_secret, required=True, prod_only=True),
+            "TELEGRAM_BOT_TOKEN": _check(settings.telegram_bot_token),
+            "TELEGRAM_CHAT_ID": _check(settings.telegram_chat_id),
+            "SENTRY_DSN": _check(settings.sentry_dsn),
+            "DEBUG": settings.debug,
+        },
+    }
 
 
 @app.get("/health/deep")

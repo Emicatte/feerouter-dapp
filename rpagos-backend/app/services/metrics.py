@@ -77,6 +77,17 @@ SWEEP_GAS_USED_TOTAL = Counter(
 
 
 # ═══════════════════════════════════════════════════════════════
+#  Nonce Management
+# ═══════════════════════════════════════════════════════════════
+
+NONCE_GAPS_ON_STARTUP = Counter(
+    "rsend_nonce_gaps_on_startup",
+    "Number of times the sweeper restarted with a nonce gap (pending TXes in mempool)",
+    ["chain_id"],
+)
+
+
+# ═══════════════════════════════════════════════════════════════
 #  Spending & Wallet
 # ═══════════════════════════════════════════════════════════════
 

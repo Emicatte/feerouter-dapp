@@ -295,7 +295,7 @@ class NonceManager:
         )
         return int(result, 16)
 
-    # ── Info ──────────────────────────────────────────────
+    # ── Info / State ─────────────────────────────────────
 
     async def info(self) -> dict:
         """Status for health checks."""
@@ -309,6 +309,43 @@ class NonceManager:
             "address": address,
             "redis_nonce": int(val) if val is not None else None,
             "initialized": val is not None,
+        }
+
+    async def get_state(self) -> dict:
+        """Full state for monitoring/debugging.
+
+        Returns dict with:
+            redis_nonce:   current nonce counter in Redis (next to allocate)
+            chain_latest:  confirmed nonce (eth_getTransactionCount 'latest')
+            chain_pending: pending nonce (eth_getTransactionCount 'pending')
+            gap:           redis_nonce - chain_pending (positive = reserved but unconfirmed)
+        """
+        from app.services.rpc_manager import get_rpc_manager
+
+        address = await self._get_address()
+        r = await self._get_redis()
+        key = self._nonce_key(address)
+        mgr = get_rpc_manager(self.chain_id)
+
+        redis_val = await r.get(key)
+        redis_nonce = int(redis_val) if redis_val is not None else None
+
+        latest_raw = await mgr.consensus_call(
+            "eth_getTransactionCount", [address, "latest"],
+        )
+        pending_raw = await mgr.consensus_call(
+            "eth_getTransactionCount", [address, "pending"],
+        )
+        chain_latest = int(latest_raw, 16)
+        chain_pending = int(pending_raw, 16)
+
+        gap = (redis_nonce - chain_pending) if redis_nonce is not None else None
+
+        return {
+            "redis_nonce": redis_nonce,
+            "chain_latest": chain_latest,
+            "chain_pending": chain_pending,
+            "gap": gap,
         }
 
 

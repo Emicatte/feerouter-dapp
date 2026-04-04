@@ -198,16 +198,31 @@ class WalletManager:
 
         total_gas = GAS_PER_BATCH_OVERHEAD + (gas_per_transfer * recipient_count)
 
-        # Apply 1.2x safety margin for gas estimation
-        total_cost = int(total_gas * gas_price * 1.2)
+        # L2 execution cost with 1.2x safety margin
+        l2_cost = int(total_gas * gas_price * 1.2)
+
+        # L1 data fee for OP Stack chains (Base)
+        l1_cost = 0
+        from app.services.gas_estimator import is_op_stack, estimate_l1_data_fee, \
+            CALLDATA_FIXED_BYTES, CALLDATA_PER_RECIPIENT_BYTES
+        if is_op_stack(self.chain_id):
+            try:
+                calldata_bytes = CALLDATA_FIXED_BYTES + CALLDATA_PER_RECIPIENT_BYTES * recipient_count
+                l1_cost = await estimate_l1_data_fee(self.chain_id, calldata_bytes)
+            except Exception as exc:
+                logger.debug("L1 fee estimation failed, using 0: %s", exc)
+
+        total_cost = l2_cost + l1_cost
 
         logger.debug(
             "Gas estimate: %d recipients x %s = %d gas units, "
-            "price=%d gwei, cost=%s ETH",
+            "price=%d gwei, l2=%s l1=%s total=%s ETH",
             recipient_count,
             mode,
             total_gas,
             gas_price // 10**9,
+            Decimal(l2_cost) / Decimal(WEI_PER_ETH),
+            Decimal(l1_cost) / Decimal(WEI_PER_ETH),
             Decimal(total_cost) / Decimal(WEI_PER_ETH),
         )
 

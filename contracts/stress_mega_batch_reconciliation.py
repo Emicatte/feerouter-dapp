@@ -19,7 +19,7 @@ from decimal import Decimal
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 RPC_URL     = "https://base-sepolia.g.alchemy.com/v2/KsynbKs-OZ1c4BSw-2D4R"
-PRIVATE_KEY = "0xe6b574972275d918bfb8c72b91e2fc3d152d1841d53854a6c64866442104a2ce"
+PRIVATE_KEY = os.environ.get("PRIVATE_KEY", "")
 CONTRACT    = "0x481062Ba5843BbF8BcC7781EF84D42e49D0D77c3"
 DEPLOYER    = "0xa61A471FC226a06C681cf2Ec41d2C64a147b4392"
 TREASURY    = DEPLOYER   # treasury == deployer in this contract deployment

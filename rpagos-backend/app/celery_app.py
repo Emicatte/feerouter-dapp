@@ -53,13 +53,18 @@ celery.conf.update(
     broker_connection_retry_on_startup=True,
     broker_transport_options={
         "visibility_timeout": 3600,  # 1h — must be > longest task
+        "socket_connect_timeout": 2,  # fail fast if Redis is down
+        "socket_timeout": 2,
     },
+    broker_connection_timeout=2,  # kombu connection timeout
 
     # Task routing
     task_routes={
         "app.tasks.sweep_tasks.process_incoming_tx": {"queue": "sweep"},
         "app.tasks.sweep_tasks.execute_distribution": {"queue": "sweep"},
+        "app.tasks.sweep_tasks.confirm_batch": {"queue": "confirm"},
         "app.tasks.sweep_tasks.confirm_tx": {"queue": "confirm"},
+        "app.tasks.sweep_tasks.retry_failed_items": {"queue": "sweep"},
         "app.tasks.periodic_tasks.update_gas_oracle": {"queue": "analytics"},
         "app.tasks.periodic_tasks.check_stale_batches": {"queue": "sweep"},
         "app.tasks.periodic_tasks.check_hot_wallet": {"queue": "sweep"},

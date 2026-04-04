@@ -28,6 +28,7 @@ import csv
 import io
 import logging
 import re
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -329,13 +330,69 @@ async def alchemy_webhook(request: Request):
     return {"status": "accepted", "activity_count": len(activity)}
 
 
+# ── Redis health check (cached 5s) ────────────────────────
+_redis_healthy: bool = False
+_redis_checked_at: float = 0.0
+_REDIS_CHECK_TTL: float = 5.0
+
+# ── Log rate-limiting for ConnectionRefusedError ──────────
+_last_conn_error_log: float = 0.0
+_CONN_ERROR_LOG_INTERVAL: float = 60.0
+
+_CELERY_DISPATCH_TIMEOUT: float = 2.0
+
+
+async def _check_redis_health() -> bool:
+    """Return True if Redis broker is reachable. Result cached for 5s."""
+    global _redis_healthy, _redis_checked_at
+    now = time.monotonic()
+    if now - _redis_checked_at < _REDIS_CHECK_TTL:
+        return _redis_healthy
+    try:
+        import redis
+        settings = get_settings()
+        url = settings.celery_broker_url
+        r = redis.Redis.from_url(url, socket_connect_timeout=1, socket_timeout=1)
+        r.ping()
+        r.close()
+        _redis_healthy = True
+    except Exception:
+        _redis_healthy = False
+    _redis_checked_at = now
+    return _redis_healthy
+
+
+async def _dispatch_to_celery(celery_task, payload: dict) -> bool:
+    """Dispatch to Celery in a thread pool with timeout. Returns True on success."""
+    loop = asyncio.get_running_loop()
+    try:
+        await asyncio.wait_for(
+            loop.run_in_executor(None, celery_task.delay, payload),
+            timeout=_CELERY_DISPATCH_TIMEOUT,
+        )
+        return True
+    except (asyncio.TimeoutError, Exception) as exc:
+        global _last_conn_error_log
+        now = time.monotonic()
+        if now - _last_conn_error_log >= _CONN_ERROR_LOG_INTERVAL:
+            logger.warning(
+                "[webhook] Celery dispatch failed (%s: %s) — falling back to async",
+                type(exc).__name__, exc,
+            )
+            _last_conn_error_log = now
+        return False
+
+
 async def _process_alchemy_activity(activity: list) -> None:
     """Process Alchemy Address Activity webhook entries in background.
 
-    Dispatches each valid TX to Celery ``process_incoming_tx.delay()``.
-    Falls back to direct async call if Celery broker is unavailable.
+    Fast path: if Redis is healthy, dispatch to Celery via run_in_executor
+    with a 2s timeout. If Redis is down or dispatch fails, fall back
+    immediately to direct async processing. Never blocks the event loop.
     """
     from app.tasks.sweep_tasks import process_incoming_tx as celery_process_tx
+
+    redis_up = await _check_redis_health()
 
     for tx in activity:
         from_addr = (tx.get("fromAddress") or "").lower()
@@ -376,14 +433,13 @@ async def _process_alchemy_activity(activity: list) -> None:
             "block_number": block_num,
         }
 
-        try:
-            celery_process_tx.delay(payload)
-        except Exception:
-            # Celery broker down — fall back to direct async processing
-            logger.warning(
-                "[webhook] Celery unavailable, processing TX %s directly",
-                tx_hash[:16] if tx_hash else "?",
-            )
+        # Fast path: Celery via thread pool (non-blocking, 2s timeout)
+        dispatched = False
+        if redis_up:
+            dispatched = await _dispatch_to_celery(celery_process_tx, payload)
+
+        # Slow path: direct async processing (still non-blocking)
+        if not dispatched:
             try:
                 await process_incoming_tx(
                     from_addr=from_addr,
@@ -1219,6 +1275,34 @@ async def spending_limits_status(
             status_code=503,
             detail="Spending limits status temporarily unavailable",
         )
+
+
+# ═══════════════════════════════════════════════════════════
+#  GAS ESTIMATION — L2 + L1 fee breakdown
+# ═══════════════════════════════════════════════════════════
+
+@sweeper_router.get("/forwarding/estimate-gas")
+async def estimate_gas(
+    recipients: int = Query(ge=1, le=1000, description="Number of recipients"),
+    chain_id: int = Query(default=8453, description="Chain ID"),
+):
+    """Estimate total gas cost for a distribution (L2 execution + L1 data fee).
+
+    Returns fee breakdown so the frontend can show accurate cost estimates,
+    especially on OP Stack chains where L1 data fee can be 50-90% of total.
+    """
+    from app.services.gas_estimator import estimate_distribution_cost
+
+    try:
+        estimate = await estimate_distribution_cost(recipients, chain_id)
+        return {
+            "chain_id": chain_id,
+            "recipients": recipients,
+            **estimate,
+        }
+    except Exception as exc:
+        logger.warning("Gas estimation failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Gas estimation unavailable")
 
 
 # ═══════════════════════════════════════════════════════════

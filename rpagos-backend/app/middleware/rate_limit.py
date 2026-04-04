@@ -28,8 +28,14 @@ logger = logging.getLogger(__name__)
 
 # ── Limiti per endpoint (max_requests, window_seconds) ─────────────────────
 RATE_LIMITS: dict[str, tuple[int, int]] = {
-    "POST:/api/v1/tx/callback":   (10, 60),
-    "POST:/api/v1/dac8/generate": (5, 60),
+    "POST:/api/v1/tx/callback":          (10, 60),
+    "POST:/api/v1/dac8/generate":        (5, 60),
+    "POST:/api/v1/webhooks/alchemy":     (1000, 60),  # Alchemy webhook bursts (payroll/airdrop)
+}
+
+# Paths exempt from rate limiting entirely (they have their own auth/throttle)
+RATE_LIMIT_EXEMPTIONS: set[str] = {
+    "/api/v1/webhooks/alchemy",
 }
 DEFAULT_GET_LIMIT = (60, 60)   # 60 req/min per GET
 DEFAULT_POST_LIMIT = (30, 60)  # 30 req/min per POST generici
@@ -141,6 +147,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         # Skip metrics
         if request.url.path == "/metrics":
+            return await call_next(request)
+
+        # Skip exempt paths (e.g. webhooks — they have their own auth/throttle)
+        if request.url.path in RATE_LIMIT_EXEMPTIONS:
             return await call_next(request)
 
         client_ip = _get_client_ip(request)

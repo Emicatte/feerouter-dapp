@@ -2,8 +2,14 @@
 RPagos Backend — Configurazione Production-Ready.
 """
 
+import logging
+import re
+import sys
+
 from pydantic_settings import BaseSettings
 from functools import lru_cache
+
+logger = logging.getLogger(__name__)
 
 
 class Settings(BaseSettings):
@@ -61,6 +67,110 @@ class Settings(BaseSettings):
     sentry_dsn: str = ""
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+
+
+_HEX_KEY_RE = re.compile(r"^0x[0-9a-fA-F]{64}$")
+
+
+class StartupValidationError(SystemExit):
+    """Raised when required configuration is missing or invalid."""
+    pass
+
+
+def validate_settings(settings: Settings) -> None:
+    """Validate critical env vars at startup.
+
+    Errors are fatal — the process exits with a clear message.
+    Warnings are logged but non-fatal.
+
+    Rules:
+    - SWEEP_PRIVATE_KEY: always required (unless SIGNER_MODE=kms)
+    - ALCHEMY_API_KEY: always required (RPC calls fail without it)
+    - HMAC_SECRET: must be >= 32 chars in production
+    - DATABASE_URL: must not be the placeholder default in production
+    """
+    errors: list[str] = []
+    warnings: list[str] = []
+
+    is_prod = not settings.debug
+
+    # ── SWEEP_PRIVATE_KEY ─────────────────────────────────
+    if settings.signer_mode == "local":
+        if not settings.sweep_private_key:
+            errors.append(
+                "SWEEP_PRIVATE_KEY is empty. "
+                "The sweeper cannot sign transactions without it. "
+                "Set it in .env or switch SIGNER_MODE=kms."
+            )
+        elif not _HEX_KEY_RE.match(settings.sweep_private_key):
+            errors.append(
+                "SWEEP_PRIVATE_KEY is malformed. "
+                "Expected 0x-prefixed 64-char hex string (32 bytes). "
+                f"Got: {settings.sweep_private_key[:6]}...({len(settings.sweep_private_key)} chars)"
+            )
+    elif settings.signer_mode == "kms":
+        if not settings.kms_key_id:
+            errors.append(
+                "SIGNER_MODE=kms but KMS_KEY_ID is empty. "
+                "Set the AWS KMS key ID for transaction signing."
+            )
+
+    # ── ALCHEMY_API_KEY ───────────────────────────────────
+    if not settings.alchemy_api_key:
+        errors.append(
+            "ALCHEMY_API_KEY is empty. "
+            "RPC calls (gas estimation, tx broadcast, receipt polling) will all fail. "
+            "Get a key at https://dashboard.alchemy.com/"
+        )
+
+    # ── HMAC_SECRET (prod only) ───────────────────────────
+    if is_prod:
+        if settings.hmac_secret == "change-me-in-production":
+            errors.append(
+                "HMAC_SECRET is still the default placeholder. "
+                "Webhook signatures are NOT secure. Set a unique secret >= 32 chars."
+            )
+        elif len(settings.hmac_secret) < 32:
+            errors.append(
+                f"HMAC_SECRET is too short ({len(settings.hmac_secret)} chars). "
+                "Must be >= 32 characters in production."
+            )
+
+    # ── DATABASE_URL (prod only) ──────────────────────────
+    if is_prod and "localhost" in settings.database_url and "sqlite" not in settings.database_url:
+        warnings.append(
+            "DATABASE_URL points to localhost in production mode. "
+            "This is likely incorrect — verify your connection string."
+        )
+
+    # ── ALCHEMY_WEBHOOK_SECRET ────────────────────────────
+    if not settings.alchemy_webhook_secret:
+        warnings.append(
+            "ALCHEMY_WEBHOOK_SECRET is empty. "
+            "Falling back to block polling (slower, higher RPC usage). "
+            "Set it in Alchemy Dashboard > Webhooks for real-time TX detection."
+        )
+
+    # ── Telegram (informational) ──────────────────────────
+    if not settings.telegram_bot_token:
+        warnings.append(
+            "TELEGRAM_BOT_TOKEN is empty. Sweep notifications are disabled."
+        )
+
+    # ── Print results ─────────────────────────────────────
+    for w in warnings:
+        logger.warning("[CONFIG] %s", w)
+
+    if errors:
+        logger.critical("=" * 60)
+        logger.critical("  STARTUP BLOCKED — Missing/invalid configuration")
+        logger.critical("=" * 60)
+        for i, e in enumerate(errors, 1):
+            logger.critical("  %d. %s", i, e)
+        logger.critical("")
+        logger.critical("  Fix these in .env and restart. See .env.example for docs.")
+        logger.critical("=" * 60)
+        raise StartupValidationError(1)
 
 
 @lru_cache
