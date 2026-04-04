@@ -182,7 +182,7 @@ export default function ComplianceOverlay() {
       Icon: MiCAIcon,
       details: {
         requires: 'Authorization for crypto-asset service providers (CASPs), transparency obligations, consumer protection, and governance requirements across EU member states.',
-        implements: 'RSend operates as a non-custodial protocol with full transaction transparency. Every operation is verifiable on-chain with pre-transaction compliance attestation.',
+        implements: 'RSends operates as a non-custodial protocol with full transaction transparency. Every operation is verifiable on-chain with pre-transaction compliance attestation.',
         component: 'EIP-712 Oracle — cryptographic attestation signed before every transaction, ensuring compliance is verified pre-execution, not post-hoc.',
       },
     },
@@ -291,7 +291,7 @@ export default function ComplianceOverlay() {
             }}>
               {[
                 { label: 'What it requires', text: p.details.requires },
-                { label: 'How RSend implements it', text: p.details.implements },
+                { label: 'How RSends implements it', text: p.details.implements },
                 { label: 'Technical component', text: p.details.component },
               ].map((d) => (
                 <div key={d.label} style={{ marginBottom: 12 }}>

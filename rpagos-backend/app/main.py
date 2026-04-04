@@ -145,6 +145,8 @@ except ImportError:
 app.include_router(router)
 from app.api.sweeper_routes import sweeper_router
 app.include_router(sweeper_router)
+from app.api.distribution_routes import distribution_router
+app.include_router(distribution_router)
 app.include_router(ws_router)
 from app.api.audit_routes import audit_router
 app.include_router(audit_router)
@@ -205,6 +207,123 @@ async def health_dependencies():
     """External services health: circuit breaker states for all dependencies."""
     from app.services.external_health import get_dependency_summary
     return await get_dependency_summary()
+
+
+@app.get("/health/sweep")
+async def health_sweep():
+    """Full system health check for sweep pipeline.
+
+    Validates: DB, Redis, Celery workers, circuit breakers,
+    hot wallet balance, spending policy, WebSocket manager.
+    Returns 503 if any critical component is unhealthy.
+    """
+    from fastapi.responses import JSONResponse
+    from app.db.session import engine
+    from app.services.cache_service import get_redis
+    from app.services.circuit_breaker import get_all_circuit_breakers
+    from app.services.external_health import get_dependency_summary
+
+    checks: dict = {}
+    critical_ok = True
+
+    # ── 1. Database ──────────────────────────────────────
+    try:
+        async with engine.connect() as conn:
+            from sqlalchemy import text
+            await conn.execute(text("SELECT 1"))
+        checks["db"] = {"status": "ok"}
+    except Exception as e:
+        checks["db"] = {"status": "error", "detail": str(e)[:200]}
+        critical_ok = False
+
+    # ── 2. Redis ─────────────────────────────────────────
+    try:
+        r = await get_redis()
+        info = await r.info("server")
+        await r.ping()
+        checks["redis"] = {
+            "status": "ok",
+            "version": info.get("redis_version", "?"),
+        }
+    except Exception as e:
+        checks["redis"] = {"status": "error", "detail": str(e)[:200]}
+        critical_ok = False
+
+    # ── 3. Celery workers ────────────────────────────────
+    try:
+        from app.celery_app import celery as celery_app
+        inspector = celery_app.control.inspect(timeout=3)
+        active = inspector.active_queues() or {}
+        worker_count = len(active)
+        queues_found = set()
+        for queues in active.values():
+            for q in queues:
+                queues_found.add(q.get("name", "?"))
+        checks["celery"] = {
+            "status": "ok" if worker_count > 0 else "warn",
+            "workers": worker_count,
+            "queues": sorted(queues_found),
+        }
+        if worker_count == 0:
+            checks["celery"]["detail"] = "no workers responding"
+    except Exception as e:
+        checks["celery"] = {"status": "warn", "detail": str(e)[:200]}
+
+    # ── 4. Circuit breakers ──────────────────────────────
+    try:
+        cbs = get_all_circuit_breakers()
+        open_cbs = [
+            name for name, cb in cbs.items()
+            if cb.state.value == "open"
+        ]
+        checks["circuit_breakers"] = {
+            "status": "warn" if open_cbs else "ok",
+            "total": len(cbs),
+            "open": open_cbs,
+        }
+    except Exception as e:
+        checks["circuit_breakers"] = {"status": "error", "detail": str(e)[:200]}
+
+    # ── 5. Hot wallet ────────────────────────────────────
+    try:
+        from app.services.wallet_manager import get_wallet_manager
+        wm = get_wallet_manager(8453)
+        balance = await wm.get_hot_balance()
+        balance_eth = balance / 10**18
+        needs_refill = await wm.needs_refill()
+        checks["hot_wallet"] = {
+            "status": "warn" if needs_refill else "ok",
+            "balance_eth": round(balance_eth, 6),
+            "needs_refill": needs_refill,
+        }
+    except Exception as e:
+        checks["hot_wallet"] = {"status": "unknown", "detail": str(e)[:200]}
+
+    # ── 6. WebSocket connections ─────────────────────────
+    checks["websocket"] = {
+        "status": "ok",
+        "active_connections": feed_manager.active_connections,
+    }
+
+    # ── 7. Notification service ──────────────────────────
+    settings_obj = get_settings()
+    checks["notifications"] = {
+        "status": "ok" if settings_obj.telegram_bot_token else "unconfigured",
+        "telegram_configured": bool(settings_obj.telegram_bot_token and settings_obj.telegram_chat_id),
+    }
+
+    all_ok = critical_ok and not any(
+        c.get("status") == "error" for c in checks.values()
+    )
+
+    return JSONResponse(
+        status_code=200 if all_ok else 503,
+        content={
+            "status": "healthy" if all_ok else "degraded",
+            "service": "rpagos-sweep-pipeline",
+            "checks": checks,
+        },
+    )
 
 
 @app.get("/health/deep")

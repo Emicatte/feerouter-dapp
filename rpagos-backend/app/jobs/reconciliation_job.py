@@ -1,5 +1,5 @@
 """
-RSend Backend — Reconciliation Job.
+RSends Backend — Reconciliation Job.
 
 Job periodico (ogni ora) che esegue tutte le verifiche di riconciliazione:
   1. check_ledger_balance — per-transaction DEBIT == CREDIT

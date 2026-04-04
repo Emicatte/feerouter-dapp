@@ -325,7 +325,7 @@ event PaymentExecuted(
         <span style={GRAD}>Developers</span>
       </h2>
       <p style={{ fontFamily: C.M, fontSize: 12, color: C.dim, marginBottom: 28 }}>
-        Build on RSend — smart contracts, APIs, and integration guides
+        Build on RSends — smart contracts, APIs, and integration guides
       </p>
 
       {/* ═══ A) Smart Contract ═══ */}

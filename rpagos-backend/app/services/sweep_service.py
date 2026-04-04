@@ -1,5 +1,5 @@
 """
-RSend Backend — Sweep Execution Service v3
+RSends Backend — Sweep Execution Service v3
 
 Full Command Center sweep pipeline:
   - Multi-chain EVM (Base, Ethereum, Arbitrum)
@@ -535,7 +535,7 @@ async def _send_notification(
     tx_hash = details.get("tx_hash", "")
 
     msg = (
-        f"*RSend Sweep — {status.upper()}*\n"
+        f"*RSends Sweep — {status.upper()}*\n"
         f"Chain: {chain}\n"
         f"Amount: {amount} {token}\n"
         f"To: `{details.get('destination', rule.destination_wallet)}`\n"
@@ -548,7 +548,7 @@ async def _send_notification(
     if rule.notify_channel == "telegram" and rule.telegram_chat_id:
         await _notify_telegram(rule.telegram_chat_id, msg)
     elif rule.notify_channel == "email" and rule.email_address:
-        await _notify_email(rule.email_address, f"RSend: {event}", msg)
+        await _notify_email(rule.email_address, f"RSends: {event}", msg)
 
 
 # ═══════════════════════════════════════════════════════════════

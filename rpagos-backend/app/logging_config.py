@@ -1,5 +1,5 @@
 """
-RSend Backend — Structured JSON Logging Configuration.
+RSends Backend — Structured JSON Logging Configuration.
 
 Formato JSON strutturato con python-json-logger.
 Ogni log include: timestamp, level, message, request_id, module, extra fields.

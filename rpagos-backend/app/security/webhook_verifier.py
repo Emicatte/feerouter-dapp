@@ -1,5 +1,5 @@
 """
-RSend Backend — Alchemy Webhook Verifier.
+RSends Backend — Alchemy Webhook Verifier.
 
 Five-layer verification for incoming Alchemy webhooks:
   1. HMAC-SHA256 body signature  (ALCHEMY_WEBHOOK_SECRET)

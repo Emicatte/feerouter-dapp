@@ -3,8 +3,8 @@ pragma solidity ^0.8.24;
 
 /**
  * @title RSendBatchDistributor
- * @author RSend Team
- * @notice Production batch distributor for RSend payment gateway on Base L2.
+ * @author RSends Team
+ * @notice Production batch distributor for RSends payment gateway on Base L2.
  *         Distributes ETH or ERC20 tokens from one sender to up to 500 recipients
  *         in a single transaction, with a configurable fee (basis points) to treasury.
  *

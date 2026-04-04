@@ -1,5 +1,5 @@
 """
-RSend Backend — Celery Sweep Tasks.
+RSends Backend — Celery Sweep Tasks.
 
 Tasks:
   process_incoming_tx(payload)     — parse webhook, find rules, create batch,

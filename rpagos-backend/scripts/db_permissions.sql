@@ -1,5 +1,5 @@
 -- ═══════════════════════════════════════════════════════════════
---  RSend Backend — Database Roles & Permissions
+--  RSends Backend — Database Roles & Permissions
 --
 --  Roles:
 --    rsend_app   — Application user (SELECT/INSERT/UPDATE, no DELETE)

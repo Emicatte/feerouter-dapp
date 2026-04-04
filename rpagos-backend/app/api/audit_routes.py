@@ -1,5 +1,5 @@
 """
-RSend Backend — Audit Log API Routes.
+RSends Backend — Audit Log API Routes.
 
 GET /api/v1/audit/log — Cursor-based paginated audit log.
 Accesso riservato ad admin (header X-Admin-Token).

@@ -125,26 +125,21 @@ def _sign_payload(payload: dict, secret: str = WEBHOOK_SECRET) -> str:
 
 @pytest.mark.asyncio
 async def test_webhook_valid_signature(client: AsyncClient, rule_in_db):
-    """Firma HMAC valida → 200 accepted."""
+    """Firma HMAC valida → 200 accepted (via verify_webhook security chain)."""
+    import asyncio as _asyncio
     payload = _alchemy_payload()
-    sig = _sign_payload(payload)
 
-    with patch("app.api.sweeper_routes.get_settings") as mock_settings:
-        s = mock_settings.return_value
-        s.alchemy_webhook_secret = WEBHOOK_SECRET
-
-        # Mock process_incoming_tx to avoid RPC calls
-        with patch("app.api.sweeper_routes.process_incoming_tx", new_callable=AsyncMock) as mock_proc:
-            mock_proc.return_value = 1
+    # Mock verify_webhook to return parsed payload (security chain tested in test_cc06)
+    with patch("app.api.sweeper_routes.verify_webhook", new_callable=AsyncMock, return_value=payload):
+        with patch("app.tasks.sweep_tasks.process_incoming_tx") as mock_celery:
+            mock_celery.delay = lambda p: None
 
             r = await client.post(
                 "/api/v1/webhooks/alchemy",
                 content=json.dumps(payload),
-                headers={
-                    "x-alchemy-signature": sig,
-                    "content-type": "application/json",
-                },
+                headers={"content-type": "application/json"},
             )
+            await _asyncio.sleep(0.1)
 
     assert r.status_code == 200
     data = r.json()
@@ -154,13 +149,16 @@ async def test_webhook_valid_signature(client: AsyncClient, rule_in_db):
 
 @pytest.mark.asyncio
 async def test_webhook_missing_signature(client: AsyncClient):
-    """Firma mancante → 401."""
+    """Firma mancante → 401 (raised by verify_webhook)."""
+    from app.security.webhook_verifier import WebhookVerificationError
+
     payload = _alchemy_payload()
 
-    with patch("app.api.sweeper_routes.get_settings") as mock_settings:
-        s = mock_settings.return_value
-        s.alchemy_webhook_secret = WEBHOOK_SECRET
-
+    with patch(
+        "app.api.sweeper_routes.verify_webhook",
+        new_callable=AsyncMock,
+        side_effect=WebhookVerificationError("Missing X-Alchemy-Signature header", 401),
+    ):
         r = await client.post(
             "/api/v1/webhooks/alchemy",
             content=json.dumps(payload),
@@ -173,13 +171,16 @@ async def test_webhook_missing_signature(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_webhook_invalid_signature(client: AsyncClient):
-    """Firma errata → 401."""
+    """Firma errata → 401 (raised by verify_webhook)."""
+    from app.security.webhook_verifier import WebhookVerificationError
+
     payload = _alchemy_payload()
 
-    with patch("app.api.sweeper_routes.get_settings") as mock_settings:
-        s = mock_settings.return_value
-        s.alchemy_webhook_secret = WEBHOOK_SECRET
-
+    with patch(
+        "app.api.sweeper_routes.verify_webhook",
+        new_callable=AsyncMock,
+        side_effect=WebhookVerificationError("Invalid webhook signature", 401),
+    ):
         r = await client.post(
             "/api/v1/webhooks/alchemy",
             content=json.dumps(payload),
@@ -195,21 +196,20 @@ async def test_webhook_invalid_signature(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_webhook_no_secret_configured(client: AsyncClient, rule_in_db):
-    """Nessun secret configurato → accetta senza verifica firma (dev mode)."""
+    """verify_webhook passes → 200 accepted."""
+    import asyncio as _asyncio
     payload = _alchemy_payload()
 
-    with patch("app.api.sweeper_routes.get_settings") as mock_settings:
-        s = mock_settings.return_value
-        s.alchemy_webhook_secret = ""  # Not configured
-
-        with patch("app.api.sweeper_routes.process_incoming_tx", new_callable=AsyncMock) as mock_proc:
-            mock_proc.return_value = 1
+    with patch("app.api.sweeper_routes.verify_webhook", new_callable=AsyncMock, return_value=payload):
+        with patch("app.tasks.sweep_tasks.process_incoming_tx") as mock_celery:
+            mock_celery.delay = lambda p: None
 
             r = await client.post(
                 "/api/v1/webhooks/alchemy",
                 content=json.dumps(payload),
                 headers={"content-type": "application/json"},
             )
+            await _asyncio.sleep(0.1)
 
     assert r.status_code == 200
     assert r.json()["status"] == "accepted"
@@ -227,10 +227,7 @@ async def test_webhook_empty_activity(client: AsyncClient):
         "event": {"network": "BASE_MAINNET", "activity": []},
     }
 
-    with patch("app.api.sweeper_routes.get_settings") as mock_settings:
-        s = mock_settings.return_value
-        s.alchemy_webhook_secret = ""
-
+    with patch("app.api.sweeper_routes.verify_webhook", new_callable=AsyncMock, return_value=payload):
         r = await client.post(
             "/api/v1/webhooks/alchemy",
             content=json.dumps(payload),
@@ -244,11 +241,14 @@ async def test_webhook_empty_activity(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_webhook_invalid_json(client: AsyncClient):
-    """Payload non-JSON → 400."""
-    with patch("app.api.sweeper_routes.get_settings") as mock_settings:
-        s = mock_settings.return_value
-        s.alchemy_webhook_secret = ""
+    """Payload non-JSON → 400 (raised by verify_webhook)."""
+    from app.security.webhook_verifier import WebhookVerificationError
 
+    with patch(
+        "app.api.sweeper_routes.verify_webhook",
+        new_callable=AsyncMock,
+        side_effect=WebhookVerificationError("Invalid JSON body", 400),
+    ):
         r = await client.post(
             "/api/v1/webhooks/alchemy",
             content=b"not json {{{",
@@ -288,18 +288,17 @@ async def test_webhook_multiple_activities(client: AsyncClient, rule_in_db):
         },
     }
 
-    with patch("app.api.sweeper_routes.get_settings") as mock_settings:
-        s = mock_settings.return_value
-        s.alchemy_webhook_secret = ""
-
-        with patch("app.api.sweeper_routes.process_incoming_tx", new_callable=AsyncMock) as mock_proc:
-            mock_proc.return_value = 1
+    with patch("app.api.sweeper_routes.verify_webhook", new_callable=AsyncMock, return_value=payload):
+        with patch("app.tasks.sweep_tasks.process_incoming_tx") as mock_celery:
+            mock_celery.delay = lambda p: None
 
             r = await client.post(
                 "/api/v1/webhooks/alchemy",
                 content=json.dumps(payload),
                 headers={"content-type": "application/json"},
             )
+            import asyncio
+            await asyncio.sleep(0.1)
 
     assert r.status_code == 200
     assert r.json()["activity_count"] == 2
@@ -322,18 +321,17 @@ async def test_webhook_erc20_activity(client: AsyncClient, rule_in_db):
         },
     )
 
-    with patch("app.api.sweeper_routes.get_settings") as mock_settings:
-        s = mock_settings.return_value
-        s.alchemy_webhook_secret = ""
-
-        with patch("app.api.sweeper_routes.process_incoming_tx", new_callable=AsyncMock) as mock_proc:
-            mock_proc.return_value = 1
+    with patch("app.api.sweeper_routes.verify_webhook", new_callable=AsyncMock, return_value=payload):
+        with patch("app.tasks.sweep_tasks.process_incoming_tx") as mock_celery:
+            mock_celery.delay = lambda p: None  # Celery stub
 
             r = await client.post(
                 "/api/v1/webhooks/alchemy",
                 content=json.dumps(payload),
                 headers={"content-type": "application/json"},
             )
+            import asyncio
+            await asyncio.sleep(0.1)  # Let background task complete
 
     assert r.status_code == 200
 
@@ -343,20 +341,21 @@ async def test_webhook_zero_value_skipped(client: AsyncClient, rule_in_db):
     """TX con value=0 viene ignorata (approval, contract call)."""
     payload = _alchemy_payload(value=0)
 
-    with patch("app.api.sweeper_routes.get_settings") as mock_settings:
-        s = mock_settings.return_value
-        s.alchemy_webhook_secret = ""
+    with patch("app.api.sweeper_routes.verify_webhook", new_callable=AsyncMock, return_value=payload):
+        with patch("app.tasks.sweep_tasks.process_incoming_tx") as mock_celery:
+            mock_delay = mock_celery.delay = AsyncMock()
 
-        with patch("app.api.sweeper_routes.process_incoming_tx", new_callable=AsyncMock) as mock_proc:
             r = await client.post(
                 "/api/v1/webhooks/alchemy",
                 content=json.dumps(payload),
                 headers={"content-type": "application/json"},
             )
+            import asyncio
+            await asyncio.sleep(0.1)
 
     assert r.status_code == 200
-    # process_incoming_tx should NOT have been called for zero-value
-    mock_proc.assert_not_called()
+    # Celery .delay() should NOT have been called for zero-value
+    mock_delay.assert_not_called()
 
 
 # ═══════════════════════════════════════════════════════════

@@ -1,5 +1,5 @@
 """
-RSend Backend — Test Suite: State Machine, Idempotency, Ledger.
+RSends Backend — Test Suite: State Machine, Idempotency, Ledger.
 
 Testa:
   - Transizioni state machine valide e invalide
@@ -77,7 +77,7 @@ async def three_accounts(session):
     treasury = Account(
         account_type="TREASURY",
         currency="USDC",
-        label="RSend Treasury",
+        label="RSends Treasury",
     )
     session.add_all([sender, recipient, treasury])
     await session.flush()

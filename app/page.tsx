@@ -7,16 +7,23 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAccount, useChainId, useSwitchChain } from 'wagmi'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { Variants, Transition } from 'framer-motion'
+import dynamic from 'next/dynamic'
 
-// STATIC IMPORTS - No lazy loading, instant component availability
+// STATIC IMPORTS
 import TransferForm from './TransferForm'
 import SwapModule from './SwapModule'
-import CommandCenter from './CommandCenter'
 import AccountHeader from './AccountHeader'
 import ComplianceOverlay from './ComplianceOverlay'
 import DevelopersOverlay from './DevelopersOverlay'
 import PricingOverlay from './PricingOverlay'
 import { useSweepWebSocket } from '../lib/useSweepWebSocket'
+import { useSweepStats } from '../lib/useSweepStats'
+
+// Dynamic import — CommandCenter uses Recharts + heavy WebSocket logic
+const CommandCenter = dynamic(() => import('./CommandCenter'), {
+  ssr: false,
+  loading: () => <SkeletonLoader />,
+})
 
 
 
@@ -359,12 +366,14 @@ function NetworkGasWidget() {
 //  LIQUID GLASS NAVBAR
 // ═══════════════════════════════════════════════════════════
 function Navbar({
-  view, setView, activeOverlay, setActiveOverlay,
+  view, setView, activeOverlay, setActiveOverlay, sweeps24h, vol24h,
 }: {
   view: View
   setView: (v: View) => void
   activeOverlay: Overlay
   setActiveOverlay: (o: Overlay) => void
+  sweeps24h: number
+  vol24h: number
 }) {
   const [hoveredLink, setHoveredLink] = useState<string | null>(null)
   const links: { key: Overlay; label: string }[] = [
@@ -439,8 +448,29 @@ function Navbar({
         ))}
       </div>
 
-      {/* Right: Wallet */}
+      {/* Right: Stats + Wallet */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {/* Live stats pills */}
+        {(sweeps24h > 0 || vol24h > 0) && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 2,
+            padding: '4px 6px', borderRadius: 10,
+            background: 'rgba(255,255,255,0.03)',
+            border: `1px solid ${C.border}`,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 6px', borderRight: `1px solid ${C.border}` }}>
+              <div style={{ width: 4, height: 4, borderRadius: '50%', background: C.blue, boxShadow: `0 0 4px ${C.blue}50` }} />
+              <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>Sweeps</span>
+              <span style={{ fontFamily: C.D, fontSize: 11, fontWeight: 700, color: C.text }}>{sweeps24h}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 6px' }}>
+              <div style={{ width: 4, height: 4, borderRadius: '50%', background: C.purple, boxShadow: `0 0 4px ${C.purple}50` }} />
+              <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>Vol 24h</span>
+              <span style={{ fontFamily: C.D, fontSize: 11, fontWeight: 700, color: C.text }}>{vol24h.toFixed(4)}</span>
+              <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>ETH</span>
+            </div>
+          </div>
+        )}
         <EngineStatus />
         <AccountHeader />
       </div>
@@ -1084,10 +1114,17 @@ function HeroTitle({ view, setView, isConnected }: { view: View; setView: (v: Vi
 // ═══════════════════════════════════════════════════════════
 export default function Home() {
   const { address, isConnected } = useAccount()
+  const chainId = useChainId()
   const [view, setView] = useState<View>('send')
   const [activeOverlay, setActiveOverlay] = useState<Overlay>(null)
   const [showIntro, setShowIntro] = useState(false)
   const [ready, setReady] = useState(false)
+
+  // Sweep stats for top bar
+  const { daily } = useSweepStats(address)
+  const today = daily.length > 0 ? daily[daily.length - 1] : null
+  const sweeps24h = today?.sweep_count ?? 0
+  const vol24h = today?.volume_eth ?? 0
 
   // Track unseen sweep events for Command Center badge
   const { events: sweepEvents } = useSweepWebSocket(address)
@@ -1142,7 +1179,7 @@ export default function Home() {
       </div>
 
       {/* Navbar */}
-      <Navbar view={view} setView={setView} activeOverlay={activeOverlay} setActiveOverlay={setActiveOverlay} />
+      <Navbar view={view} setView={setView} activeOverlay={activeOverlay} setActiveOverlay={setActiveOverlay} sweeps24h={sweeps24h} vol24h={vol24h} />
 
       {/* Network + Gas — fixed top-right below navbar */}
       {ready && <NetworkGasWidget />}
@@ -1293,7 +1330,7 @@ export default function Home() {
 
           {/* Command Center — always mounted */}
           <div style={view === 'command' ? panelActive : panelHidden}>
-            <CommandCenter />
+            <CommandCenter ownerAddress={address} chainId={chainId} />
           </div>
         </div>
 

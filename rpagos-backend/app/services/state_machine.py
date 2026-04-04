@@ -1,5 +1,5 @@
 """
-RSend Backend — Transaction State Machine.
+RSends Backend — Transaction State Machine.
 
 Transizioni valide:
   PENDING    → AUTHORIZED

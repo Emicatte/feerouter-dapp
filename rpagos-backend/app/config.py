@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
 
+    # ── Notification Rate Limit ───────────────────────────
+    notification_rate_limit: int = 30          # max messages per minute per chat
+    notification_rate_window: int = 60         # sliding window in seconds
+
     # ── Celery ────────────────────────────────────────────
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"

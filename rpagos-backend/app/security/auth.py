@@ -1,5 +1,5 @@
 """
-RSend Backend — Wallet Signature Authentication (EIP-191).
+RSends Backend — Wallet Signature Authentication (EIP-191).
 
 Verifies wallet ownership via personal_sign (EIP-191).
 
@@ -9,7 +9,7 @@ Headers required:
   X-Timestamp:        ISO 8601 timestamp
 
 Message format signed by the wallet:
-  "RSend:{address}:{timestamp}"
+  "RSends:{address}:{timestamp}"
 
 Security:
   - Recovered address must match claimed address (case-insensitive)
@@ -79,7 +79,7 @@ def verify_wallet_signature(
 ) -> bool:
     """Verify EIP-191 personal_sign signature.
 
-    The wallet signs the message:  "RSend:{address}:{timestamp}"
+    The wallet signs the message:  "RSends:{address}:{timestamp}"
     We recover the signer address and compare.
 
     Args:
@@ -93,7 +93,7 @@ def verify_wallet_signature(
     from eth_account.messages import encode_defunct
     from eth_account import Account
 
-    message_text = f"RSend:{address}:{timestamp}"
+    message_text = f"RSends:{address}:{timestamp}"
     signable = encode_defunct(text=message_text)
 
     try:

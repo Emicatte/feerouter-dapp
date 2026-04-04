@@ -170,7 +170,7 @@ export default function PricingOverlay() {
             background: 'rgba(255,255,255,0.02)',
           }}>
             <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Feature</span>
-            <span style={{ fontFamily: C.D, fontSize: 10, fontWeight: 700, color: C.blue, textAlign: 'center' }}>RSend</span>
+            <span style={{ fontFamily: C.D, fontSize: 10, fontWeight: 700, color: C.blue, textAlign: 'center' }}>RSends</span>
             <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim, textAlign: 'center' }}>Traditional</span>
             <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim, textAlign: 'center' }}>Other Web3</span>
           </div>

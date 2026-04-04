@@ -1,5 +1,5 @@
 """
-RSend Backend — Idempotency Service.
+RSends Backend — Idempotency Service.
 
 Gestisce idempotency keys per prevenire doppia esecuzione di transazioni.
 

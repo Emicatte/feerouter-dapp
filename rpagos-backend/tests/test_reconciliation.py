@@ -1,5 +1,5 @@
 """
-RSend Backend — Test Suite: Reconciliation Service & Health Checks.
+RSends Backend — Test Suite: Reconciliation Service & Health Checks.
 
 Testa:
   - check_ledger_balance: rileva transazioni sbilanciate (DEBIT != CREDIT)
@@ -71,7 +71,7 @@ async def three_accounts(session):
     treasury = Account(
         account_type="TREASURY",
         currency="USDC",
-        label="RSend Treasury",
+        label="RSends Treasury",
     )
     session.add_all([sender, recipient, treasury])
     await session.flush()

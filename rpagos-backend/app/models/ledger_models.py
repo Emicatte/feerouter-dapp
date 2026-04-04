@@ -1,5 +1,5 @@
 """
-RSend Backend — Ledger Models (Double-Entry Bookkeeping).
+RSends Backend — Ledger Models (Double-Entry Bookkeeping).
 
 Tabelle:
   - accounts: conti contabili (merchant, fee, escrow, ecc.)

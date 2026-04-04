@@ -1,1 +1,1 @@
-# RSend Backend — Celery Tasks Package
+# RSends Backend — Celery Tasks Package

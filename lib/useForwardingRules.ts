@@ -1,8 +1,13 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useSignMessage } from 'wagmi'
 
 const BACKEND = process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:8000'
+
+// ═══════════════════════════════════════════════════════════
+//  TYPES
+// ═══════════════════════════════════════════════════════════
 
 export interface ForwardingRule {
   id: number
@@ -63,12 +68,21 @@ export interface CreateRulePayload {
   email_address?: string
   schedule_json?: Record<string, any> | null
   chain_id?: number
+  signature?: string
+  sign_timestamp?: number
 }
+
+// ═══════════════════════════════════════════════════════════
+//  HOOK
+// ═══════════════════════════════════════════════════════════
 
 export function useForwardingRules(address: string | undefined) {
   const [rules, setRules] = useState<ForwardingRule[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const { signMessageAsync } = useSignMessage()
+
+  // ── Fetch ──────────────────────────────────────────────
 
   const fetchRules = useCallback(async (silent = false) => {
     if (!address) return
@@ -96,11 +110,23 @@ export function useForwardingRules(address: string | undefined) {
     return () => clearInterval(iv)
   }, [address, fetchRules])
 
+  // ── Create (single rule, wallet signature) ─────────────
+
   const createRule = useCallback(async (payload: CreateRulePayload) => {
+    const timestamp = Math.floor(Date.now() / 1000)
+    const message = [
+      'RSends: Create forwarding rule',
+      `From: ${payload.source_wallet}`,
+      `To: ${payload.destination_wallet}`,
+      `Chain: ${payload.chain_id ?? 8453}`,
+      `Timestamp: ${timestamp}`,
+    ].join('\n')
+    const signature = await signMessageAsync({ message })
+
     const res = await fetch(`${BACKEND}/api/v1/forwarding/rules`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...payload, signature, sign_timestamp: timestamp }),
     })
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
@@ -108,7 +134,38 @@ export function useForwardingRules(address: string | undefined) {
     }
     await fetchRules()
     return res.json()
-  }, [fetchRules])
+  }, [fetchRules, signMessageAsync])
+
+  // ── Create batch (multiple rules, single wallet signature) ──
+
+  const createRuleBatch = useCallback(async (payloads: CreateRulePayload[]) => {
+    if (payloads.length === 0) return
+    const timestamp = Math.floor(Date.now() / 1000)
+    const dests = payloads.map(p => p.destination_wallet.slice(0, 10)).join(', ')
+    const message = [
+      `RSends: Create ${payloads.length} forwarding rule(s)`,
+      `From: ${payloads[0].source_wallet}`,
+      `To: ${dests}`,
+      `Chain: ${payloads[0].chain_id ?? 8453}`,
+      `Timestamp: ${timestamp}`,
+    ].join('\n')
+    const signature = await signMessageAsync({ message })
+
+    for (const payload of payloads) {
+      const res = await fetch(`${BACKEND}/api/v1/forwarding/rules`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...payload, signature, sign_timestamp: timestamp }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.detail || `HTTP ${res.status}`)
+      }
+    }
+    await fetchRules()
+  }, [fetchRules, signMessageAsync])
+
+  // ── Update ─────────────────────────────────────────────
 
   const updateRule = useCallback(async (ruleId: number, updates: Record<string, any>) => {
     const res = await fetch(`${BACKEND}/api/v1/forwarding/rules/${ruleId}`, {
@@ -120,15 +177,27 @@ export function useForwardingRules(address: string | undefined) {
     await fetchRules()
   }, [address, fetchRules])
 
+  // ── Delete (wallet signature) ──────────────────────────
+
   const deleteRule = useCallback(async (ruleId: number) => {
+    const timestamp = Math.floor(Date.now() / 1000)
+    const message = [
+      `RSends: Delete forwarding rule #${ruleId}`,
+      `Owner: ${address}`,
+      `Timestamp: ${timestamp}`,
+    ].join('\n')
+    const signature = await signMessageAsync({ message })
+
     const res = await fetch(`${BACKEND}/api/v1/forwarding/rules/${ruleId}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ owner_address: address }),
+      body: JSON.stringify({ owner_address: address, signature, sign_timestamp: timestamp }),
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     await fetchRules()
-  }, [address, fetchRules])
+  }, [address, fetchRules, signMessageAsync])
+
+  // ── Pause / Resume ─────────────────────────────────────
 
   const pauseRule = useCallback(async (ruleId: number) => {
     const res = await fetch(`${BACKEND}/api/v1/forwarding/rules/${ruleId}/pause`, {
@@ -150,6 +219,8 @@ export function useForwardingRules(address: string | undefined) {
     await fetchRules()
   }, [address, fetchRules])
 
+  // ── Emergency Stop ─────────────────────────────────────
+
   const emergencyStop = useCallback(async () => {
     const res = await fetch(`${BACKEND}/api/v1/forwarding/emergency-stop`, {
       method: 'POST',
@@ -165,7 +236,7 @@ export function useForwardingRules(address: string | undefined) {
   return {
     rules, loading, error,
     refresh: () => fetchRules(),
-    createRule, updateRule, deleteRule,
+    createRule, createRuleBatch, updateRule, deleteRule,
     pauseRule, resumeRule, emergencyStop,
   }
 }

@@ -1,5 +1,5 @@
 """
-Alembic env.py — async engine support per RSend Backend.
+Alembic env.py — async engine support per RSends Backend.
 
 Pattern:
   - async_engine_from_config + pool.NullPool (obbligatorio per DDL migrations)

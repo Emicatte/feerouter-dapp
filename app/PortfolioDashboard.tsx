@@ -3,7 +3,7 @@
 /**
  * PortfolioDashboard.tsx V6 — Complete Rewrite
  *
- * Institutional-grade portfolio overlay for RSend (Base L2 payment gateway)
+ * Institutional-grade portfolio overlay for RSends (Base L2 payment gateway)
  * Design language: Uniswap/Stripe/Revolut dark theme
  *
  * Improvements over V5:

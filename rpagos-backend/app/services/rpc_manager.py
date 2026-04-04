@@ -1,5 +1,5 @@
 """
-RSend Backend — RPC Manager (Multi-Provider Failover + Consensus).
+RSends Backend — RPC Manager (Multi-Provider Failover + Consensus).
 
 Features:
   - Multiple RPC providers per chain with priority ordering

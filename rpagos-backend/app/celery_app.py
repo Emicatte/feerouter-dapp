@@ -1,5 +1,5 @@
 """
-RSend Backend — Celery Application Configuration.
+RSends Backend — Celery Application Configuration.
 
 Broker: Redis (DB 1)
 Result backend: Redis (DB 2)
@@ -65,6 +65,8 @@ celery.conf.update(
         "app.tasks.periodic_tasks.check_hot_wallet": {"queue": "sweep"},
         "app.tasks.periodic_tasks.aggregate_daily_stats": {"queue": "analytics"},
         "app.tasks.periodic_tasks.cleanup_old_locks": {"queue": "analytics"},
+        "app.tasks.notification_tasks.send_notification_task": {"queue": "notify"},
+        "app.tasks.notification_tasks.send_daily_digest": {"queue": "notify"},
     },
 
     # Default queue for unrouted tasks
@@ -74,6 +76,7 @@ celery.conf.update(
     include=[
         "app.tasks.sweep_tasks",
         "app.tasks.periodic_tasks",
+        "app.tasks.notification_tasks",
     ],
 )
 
@@ -101,5 +104,9 @@ celery.conf.beat_schedule = {
     "cleanup-old-locks": {
         "task": "app.tasks.periodic_tasks.cleanup_old_locks",
         "schedule": 600.0,  # every 10 minutes
+    },
+    "send-daily-digest": {
+        "task": "app.tasks.notification_tasks.send_daily_digest",
+        "schedule": crontab(hour=0, minute=30),  # daily 00:30 UTC
     },
 }

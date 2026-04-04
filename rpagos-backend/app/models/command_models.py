@@ -1,5 +1,5 @@
 """
-RSend Backend — Command Center Models.
+RSends Backend — Command Center Models.
 
 Tabelle:
   - distribution_lists: liste di distribuzione multi-destinatario

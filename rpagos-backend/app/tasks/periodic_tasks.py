@@ -1,5 +1,5 @@
 """
-RSend Backend — Celery Beat Periodic Tasks.
+RSends Backend — Celery Beat Periodic Tasks.
 
 Tasks:
   update_gas_oracle       — every 10s  — refresh cached gas prices

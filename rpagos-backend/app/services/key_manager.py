@@ -1,5 +1,5 @@
 """
-RSend Backend — Key Management Service.
+RSends Backend — Key Management Service.
 
 Signers:
   LocalSigner  — private key from env var (dev/testnet only, warns on mainnet)

@@ -1,5 +1,5 @@
 """
-RSend Backend — Circuit Breaker Service (Redis-backed).
+RSends Backend — Circuit Breaker Service (Redis-backed).
 
 States:
   CLOSED    → normal operation, failures are counted

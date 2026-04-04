@@ -1,5 +1,5 @@
 """
-RSend Backend — Request Context Middleware.
+RSends Backend — Request Context Middleware.
 
 Genera un request_id UUID per ogni richiesta HTTP e lo salva
 in contextvars insieme a client_ip e user_agent.

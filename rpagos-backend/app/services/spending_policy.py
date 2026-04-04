@@ -1,5 +1,5 @@
 """
-RSend Backend — Multi-Tier Spending Policy.
+RSends Backend — Multi-Tier Spending Policy.
 
 Enforces five layers of spending limits before any sweep executes.
 

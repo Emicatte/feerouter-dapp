@@ -1,5 +1,5 @@
 """
-RSend Backend — Database Seed Script.
+RSends Backend — Database Seed Script.
 
 Seeds initial data required for the system to operate:
   - Ledger accounts (fee, escrow, treasury, gas_reserve)
@@ -200,7 +200,7 @@ async def seed_genesis_audit(session: AsyncSession) -> int:
 
 async def main() -> None:
     """Run all seed functions."""
-    print("RSend Database Seed Script")
+    print("RSends Database Seed Script")
     print("=" * 50)
 
     # Ensure tables exist

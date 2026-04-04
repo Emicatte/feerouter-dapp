@@ -10,9 +10,15 @@ export interface SweepEvent {
   timestamp: string
 }
 
+export interface WsStats {
+  totalEvents: number
+  reconnects: number
+}
+
 export function useSweepWebSocket(address: string | undefined) {
   const [events, setEvents] = useState<SweepEvent[]>([])
   const [connected, setConnected] = useState(false)
+  const [wsStats, setWsStats] = useState<WsStats>({ totalEvents: 0, reconnects: 0 })
   const wsRef = useRef<WebSocket | null>(null)
   const retryRef = useRef(0)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -35,14 +41,16 @@ export function useSweepWebSocket(address: string | undefined) {
           const msg = JSON.parse(e.data)
           if (msg.type === 'heartbeat' || msg.type === 'stats') return
           setEvents(prev =>
-            [{ type: msg.type, data: msg.data ?? msg, timestamp: msg.timestamp || new Date().toISOString() }, ...prev].slice(0, 100)
+            [{ type: msg.type, data: msg.data ?? msg, timestamp: msg.timestamp || new Date().toISOString() }, ...prev].slice(0, 50)
           )
+          setWsStats(prev => ({ ...prev, totalEvents: prev.totalEvents + 1 }))
         } catch { /* malformed message */ }
       }
 
       ws.onclose = () => {
         setConnected(false)
         wsRef.current = null
+        setWsStats(prev => ({ ...prev, reconnects: prev.reconnects + 1 }))
         const delay = Math.min(1000 * Math.pow(2, retryRef.current), 30000)
         retryRef.current++
         timerRef.current = setTimeout(connect, delay)
@@ -70,5 +78,5 @@ export function useSweepWebSocket(address: string | undefined) {
     connect()
   }, [connect])
 
-  return { events, connected, reconnect }
+  return { events, connected, reconnect, wsStats }
 }

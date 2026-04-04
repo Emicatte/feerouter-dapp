@@ -1,5 +1,5 @@
 """
-RSend Backend — Alchemy Webhook Manager
+RSends Backend — Alchemy Webhook Manager
 
 Gestisce webhook Alchemy Address Activity via Alchemy Notify API:
   - Registra/aggiorna webhook quando l'utente crea/elimina regole

@@ -1,5 +1,5 @@
 """
-RSend Backend — Reconciliation Prometheus Metrics.
+RSends Backend — Reconciliation Prometheus Metrics.
 
 Metriche esposte:
   - rsend_ledger_discrepancies_total (counter)

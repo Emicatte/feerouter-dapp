@@ -1,5 +1,5 @@
 """
-RSend Backend — Hot Wallet Balance Monitor.
+RSends Backend — Hot Wallet Balance Monitor.
 
 Tracks the hot wallet's balance, estimates gas costs, and
 triggers refill alerts when balance drops below thresholds.

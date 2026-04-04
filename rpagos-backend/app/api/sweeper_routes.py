@@ -1,17 +1,20 @@
 """
-RSend Backend — Sweeper API Routes (Command Center)
+RSends Backend — Sweeper API Routes (Command Center) — CC-07
 
 POST /api/v1/webhooks/alchemy             → Alchemy webhook (incoming TX)
 
-POST /api/v1/forwarding/rules             → Crea regola
+POST /api/v1/forwarding/rules             → Crea regola (@require_wallet_auth)
 GET  /api/v1/forwarding/rules             → Lista regole utente
 GET  /api/v1/forwarding/rules/{id}        → Dettaglio regola
-PUT  /api/v1/forwarding/rules/{id}        → Aggiorna regola
-DELETE /api/v1/forwarding/rules/{id}      → Elimina regola
+PUT  /api/v1/forwarding/rules/{id}        → Aggiorna regola (@require_wallet_auth)
+DELETE /api/v1/forwarding/rules/{id}      → Elimina regola (@require_wallet_auth)
 
-POST /api/v1/forwarding/rules/{id}/pause  → Pausa regola
-POST /api/v1/forwarding/rules/{id}/resume → Riprendi regola
-POST /api/v1/forwarding/emergency-stop    → Emergency stop
+POST /api/v1/forwarding/rules/{id}/pause  → Pausa regola (@require_wallet_auth)
+POST /api/v1/forwarding/rules/{id}/resume → Riprendi regola (@require_wallet_auth)
+POST /api/v1/forwarding/emergency-stop    → Emergency stop (@require_wallet_auth)
+
+GET  /api/v1/forwarding/rules/{id}/batches → Batches (paginate)
+GET  /api/v1/forwarding/spending-limits    → Spending limits status
 
 GET  /api/v1/forwarding/logs              → Sweep logs (paginati)
 GET  /api/v1/forwarding/logs/export       → Export CSV/JSON
@@ -22,23 +25,22 @@ GET  /api/v1/forwarding/stats/daily       → Volume giornaliero
 
 import asyncio
 import csv
-import hashlib
-import hmac
 import io
-import json
 import logging
 import re
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import delete, func, select, update, case, cast, Date
+from sqlalchemy import func, select, case, cast, Date
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db.session import get_db
+from app.middleware.request_context import get_request_id
 from app.models.forwarding_models import (
     AuditLog,
     ForwardingRule,
@@ -46,8 +48,14 @@ from app.models.forwarding_models import (
     SweepLog,
     SweepStatus,
 )
+from app.models.command_models import SweepBatch, SweepBatchItem
 from app.services.sweep_service import process_incoming_tx, queue_sweep
 from app.services import alchemy_webhook_manager
+from app.security.auth import require_wallet_auth
+from app.security.webhook_verifier import (
+    WebhookVerificationError,
+    verify_webhook,
+)
 from app.api.websocket_routes import feed_manager
 
 logger = logging.getLogger("sweeper_routes")
@@ -55,7 +63,7 @@ logger = logging.getLogger("sweeper_routes")
 sweeper_router = APIRouter(prefix="/api/v1", tags=["sweeper"])
 
 ETH_ADDR_RE = re.compile(r"^0x[a-fA-F0-9]{40}$")
-MAX_RULES_PER_OWNER = 10
+MAX_RULES_PER_OWNER = 20
 
 
 # ═══════════════════════════════════════════════════════════
@@ -75,9 +83,9 @@ def _validate_optional_eth_address(v: Optional[str]) -> Optional[str]:
 
 
 class CreateRulePayload(BaseModel):
-    owner_address: str = Field(..., min_length=42, max_length=42, description="Wallet owner")
     source_wallet: str = Field(..., min_length=42, max_length=42)
-    destination_wallet: str = Field(..., min_length=42, max_length=42)
+    destination_wallet: Optional[str] = Field(None, min_length=42, max_length=42)
+    distribution_list_id: Optional[str] = Field(None, description="UUID of distribution list")
     label: Optional[str] = Field(None, max_length=100)
 
     # Split
@@ -114,12 +122,12 @@ class CreateRulePayload(BaseModel):
     # Chain
     chain_id: int = Field(8453)
 
-    @field_validator("owner_address", "source_wallet", "destination_wallet")
+    @field_validator("source_wallet")
     @classmethod
-    def validate_addresses(cls, v: str) -> str:
+    def validate_source(cls, v: str) -> str:
         return _validate_eth_address(v)
 
-    @field_validator("split_destination", "token_address", "swap_to_token")
+    @field_validator("destination_wallet", "split_destination", "token_address", "swap_to_token")
     @classmethod
     def validate_optional_addresses(cls, v: Optional[str]) -> Optional[str]:
         return _validate_optional_eth_address(v)
@@ -140,9 +148,10 @@ class CreateRulePayload(BaseModel):
 
 
 class UpdateRulePayload(BaseModel):
-    owner_address: str = Field(..., min_length=42, max_length=42, description="Caller wallet for auth")
+    version: int = Field(..., description="Current version for optimistic locking")
     label: Optional[str] = None
     destination_wallet: Optional[str] = Field(None, min_length=42, max_length=42)
+    distribution_list_id: Optional[str] = Field(None, description="UUID of distribution list")
     is_active: Optional[bool] = None
     min_threshold: Optional[float] = Field(None, ge=0.0001)
     gas_strategy: Optional[str] = None
@@ -166,24 +175,10 @@ class UpdateRulePayload(BaseModel):
 
     schedule_json: Optional[dict] = None
 
-    @field_validator("owner_address")
-    @classmethod
-    def validate_owner(cls, v: str) -> str:
-        return _validate_eth_address(v)
-
     @field_validator("destination_wallet", "split_destination", "swap_to_token")
     @classmethod
     def validate_optional_addr(cls, v: Optional[str]) -> Optional[str]:
         return _validate_optional_eth_address(v)
-
-
-class OwnerPayload(BaseModel):
-    owner_address: str = Field(..., min_length=42, max_length=42)
-
-    @field_validator("owner_address")
-    @classmethod
-    def validate_owner(cls, v: str) -> str:
-        return _validate_eth_address(v)
 
 
 # ═══════════════════════════════════════════════════════════
@@ -205,6 +200,14 @@ async def _verify_owner(rule: ForwardingRule, owner_address: str) -> None:
         raise HTTPException(status_code=403, detail="Not the owner of this rule")
 
 
+def _response(data: dict) -> dict:
+    """Inject request_id into response."""
+    rid = get_request_id()
+    if rid:
+        data["request_id"] = str(rid)
+    return data
+
+
 def _serialize_rule(r: ForwardingRule) -> dict:
     return {
         "id": r.id,
@@ -212,6 +215,7 @@ def _serialize_rule(r: ForwardingRule) -> dict:
         "label": r.label,
         "source_wallet": r.source_wallet,
         "destination_wallet": r.destination_wallet,
+        "distribution_list_id": str(r.distribution_list_id) if r.distribution_list_id else None,
         "split_enabled": r.split_enabled,
         "split_percent": r.split_percent,
         "split_destination": r.split_destination,
@@ -233,6 +237,7 @@ def _serialize_rule(r: ForwardingRule) -> dict:
         "telegram_chat_id": r.telegram_chat_id,
         "email_address": r.email_address,
         "schedule_json": r.schedule_json,
+        "version": r.version,
         "chain_id": r.chain_id,
         "created_at": r.created_at.isoformat() if r.created_at else None,
         "updated_at": r.updated_at.isoformat() if r.updated_at else None,
@@ -284,34 +289,27 @@ def _period_to_timedelta(period: str) -> Optional[timedelta]:
 
 @sweeper_router.post("/webhooks/alchemy")
 async def alchemy_webhook(request: Request):
+    """Alchemy Address Activity Webhook with five-layer security.
+
+    Security chain (all in verify_webhook):
+      1. Rate limit   — 100/min per source IP
+      2. IP whitelist — known Alchemy egress IPs
+      3. HMAC-SHA256  — body signature verification
+      4. Timestamp    — createdAt freshness < 5 min
+      5. Idempotency  — webhook_id dedup via Redis SETNX
+
+    Responds 200 immediately; background task dispatches to Celery.
     """
-    Riceve notifiche da Alchemy Address Activity Webhook.
-    Valida la firma HMAC, parsa il payload, e processa in background.
-    Risponde 200 OK immediatamente per non bloccare Alchemy.
-    """
-    settings = get_settings()
-    signing_key = settings.alchemy_webhook_secret
-
-    # ── 1. Leggi body raw per verifica firma ─────────────
-    body = await request.body()
-
-    # ── 2. Verifica firma HMAC-SHA256 ────────────────────
-    if signing_key:
-        sig = request.headers.get("x-alchemy-signature", "")
-        if not sig:
-            raise HTTPException(status_code=401, detail="Missing webhook signature")
-        expected = hmac.new(
-            signing_key.encode(), body, hashlib.sha256
-        ).hexdigest()
-        if not hmac.compare_digest(sig, expected):
-            raise HTTPException(status_code=401, detail="Invalid webhook signature")
-
-    # ── 3. Parsa il payload ──────────────────────────────
+    # ── Full security pipeline ────────────────────────────
     try:
-        payload = json.loads(body)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
+        payload = await verify_webhook(request)
+    except WebhookVerificationError as exc:
+        if exc.status_code == 200:
+            # Duplicate webhook — ACK so Alchemy doesn't retry
+            return {"status": "duplicate", "reason": exc.reason}
+        raise HTTPException(status_code=exc.status_code, detail=exc.reason)
 
+    # ── Extract activity ──────────────────────────────────
     webhook_id = payload.get("webhookId", "")
     event = payload.get("event", {})
     network = event.get("network", "")
@@ -321,23 +319,24 @@ async def alchemy_webhook(request: Request):
         return {"status": "ignored", "reason": "no_activity"}
 
     logger.info(
-        "[webhook] Received %d activity entries from webhook %s (network: %s)",
+        "[webhook] Verified & accepted %d activities from %s (network: %s)",
         len(activity), webhook_id[:12], network,
     )
 
-    # ── 4. Processa in background, rispondi 200 subito ───
+    # ── Respond 200 immediately, process in background ────
     asyncio.create_task(_process_alchemy_activity(activity))
 
     return {"status": "accepted", "activity_count": len(activity)}
 
 
 async def _process_alchemy_activity(activity: list) -> None:
-    """
-    Process Alchemy Address Activity webhook entries in background.
+    """Process Alchemy Address Activity webhook entries in background.
 
-    Extracts: fromAddress, toAddress, value, hash, blockNum, asset,
-    rawContract (address, decimals) for ERC-20 transfers.
+    Dispatches each valid TX to Celery ``process_incoming_tx.delay()``.
+    Falls back to direct async call if Celery broker is unavailable.
     """
+    from app.tasks.sweep_tasks import process_incoming_tx as celery_process_tx
+
     for tx in activity:
         from_addr = (tx.get("fromAddress") or "").lower()
         to_addr = (tx.get("toAddress") or "").lower()
@@ -345,7 +344,7 @@ async def _process_alchemy_activity(activity: list) -> None:
         tx_hash = tx.get("hash", "")
         asset = tx.get("asset", "ETH")
         block_num = tx.get("blockNum")
-        category = tx.get("category", "")  # external, internal, erc20, erc721, etc.
+        category = tx.get("category", "")
 
         if not to_addr or value <= 0:
             continue
@@ -355,8 +354,6 @@ async def _process_alchemy_activity(activity: list) -> None:
         token_address = (raw_contract.get("address") or "").lower() or None
         token_decimals = int(raw_contract.get("decimals") or 18)
 
-        # For ERC-20 transfers (category=token/erc20), the 'to' in activity
-        # is the actual recipient (not the contract), and 'value' is human-readable
         if token_address and token_address == "0x":
             token_address = None
 
@@ -367,22 +364,42 @@ async def _process_alchemy_activity(activity: list) -> None:
             value, asset, category, block_num,
         )
 
+        # Build Celery payload matching sweep_tasks.process_incoming_tx schema
+        payload = {
+            "tx_hash": tx_hash,
+            "from_address": from_addr,
+            "to_address": to_addr,
+            "value_wei": str(int(value * 10**token_decimals)) if value else "0",
+            "chain_id": 8453,  # Default Base; extended by network mapping
+            "token_address": token_address,
+            "token_symbol": asset,
+            "block_number": block_num,
+        }
+
         try:
-            await process_incoming_tx(
-                from_addr=from_addr,
-                to_addr=to_addr,
-                value=value,
-                tx_hash=tx_hash,
-                asset=asset,
-                token_address=token_address,
-                token_decimals=token_decimals,
-                block_num=block_num,
+            celery_process_tx.delay(payload)
+        except Exception:
+            # Celery broker down — fall back to direct async processing
+            logger.warning(
+                "[webhook] Celery unavailable, processing TX %s directly",
+                tx_hash[:16] if tx_hash else "?",
             )
-        except Exception as e:
-            logger.error(
-                "[webhook] process_incoming_tx failed for TX %s: %s",
-                tx_hash[:16] if tx_hash else "?", e,
-            )
+            try:
+                await process_incoming_tx(
+                    from_addr=from_addr,
+                    to_addr=to_addr,
+                    value=value,
+                    tx_hash=tx_hash,
+                    asset=asset,
+                    token_address=token_address,
+                    token_decimals=token_decimals,
+                    block_num=block_num,
+                )
+            except Exception as e:
+                logger.error(
+                    "[webhook] process_incoming_tx failed for TX %s: %s",
+                    tx_hash[:16] if tx_hash else "?", e,
+                )
 
 
 # ═══════════════════════════════════════════════════════════
@@ -390,11 +407,42 @@ async def _process_alchemy_activity(activity: list) -> None:
 # ═══════════════════════════════════════════════════════════
 
 @sweeper_router.post("/forwarding/rules")
+@require_wallet_auth
 async def create_rule(
+    request: Request,
     payload: CreateRulePayload,
     db: AsyncSession = Depends(get_db),
+    wallet_address: str = "",
 ):
-    owner = payload.owner_address
+    owner = wallet_address.lower()
+
+    # Must have either destination_wallet or distribution_list_id
+    if not payload.destination_wallet and not payload.distribution_list_id:
+        raise HTTPException(
+            status_code=422,
+            detail="Either destination_wallet or distribution_list_id is required",
+        )
+
+    # Validate distribution_list_id if provided
+    dist_list_id = None
+    if payload.distribution_list_id:
+        try:
+            dist_list_id = uuid.UUID(payload.distribution_list_id)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid distribution_list_id format")
+
+        from app.models.command_models import DistributionList
+        dl_result = await db.execute(
+            select(DistributionList).where(
+                DistributionList.id == dist_list_id,
+                DistributionList.is_active == True,  # noqa: E712
+            )
+        )
+        dl = dl_result.scalar_one_or_none()
+        if not dl:
+            raise HTTPException(status_code=404, detail="Distribution list not found")
+        if dl.owner_address != owner:
+            raise HTTPException(status_code=403, detail="Not the owner of this distribution list")
 
     # Limite regole per owner
     count_result = await db.execute(
@@ -419,6 +467,7 @@ async def create_rule(
         user_id=owner,
         source_wallet=payload.source_wallet,
         destination_wallet=payload.destination_wallet,
+        distribution_list_id=dist_list_id,
         label=payload.label,
         split_enabled=payload.split_enabled,
         split_percent=payload.split_percent,
@@ -440,6 +489,7 @@ async def create_rule(
         email_address=payload.email_address,
         schedule_json=payload.schedule_json,
         chain_id=payload.chain_id,
+        version=1,
     )
     db.add(rule)
     await db.flush()
@@ -460,7 +510,7 @@ async def create_rule(
         )
     )
 
-    return {"status": "created", "rule": _serialize_rule(rule)}
+    return _response({"status": "created", "rule": _serialize_rule(rule)})
 
 
 # ═══════════════════════════════════════════════════════════
@@ -497,7 +547,7 @@ async def list_rules(
         item["last_sweep"] = stats.last_sweep.isoformat() if stats.last_sweep else None
         items.append(item)
 
-    return {"rules": items, "total": len(items)}
+    return _response({"rules": items, "total": len(items)})
 
 
 # ═══════════════════════════════════════════════════════════
@@ -536,7 +586,7 @@ async def get_rule(
         "success_rate": round(stats.completed / stats.total_sweeps * 100, 1) if stats.total_sweeps > 0 else 0,
     }
 
-    return {"rule": data}
+    return _response({"rule": data})
 
 
 # ═══════════════════════════════════════════════════════════
@@ -544,23 +594,59 @@ async def get_rule(
 # ═══════════════════════════════════════════════════════════
 
 @sweeper_router.put("/forwarding/rules/{rule_id}")
+@require_wallet_auth
 async def update_rule(
+    request: Request,
     rule_id: int,
     payload: UpdateRulePayload,
     db: AsyncSession = Depends(get_db),
+    wallet_address: str = "",
 ):
     rule = await _get_rule_or_404(db, rule_id)
-    await _verify_owner(rule, payload.owner_address)
+    await _verify_owner(rule, wallet_address)
+
+    # Optimistic locking: version must match
+    if rule.version != payload.version:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "VERSION_CONFLICT",
+                "message": "Rule was modified by another request. Refresh and retry.",
+                "current_version": rule.version,
+                "submitted_version": payload.version,
+            },
+        )
 
     old_values = _serialize_rule(rule)
 
     # Build update dict — only include explicitly set fields
     updates = {}
-    update_fields = payload.model_dump(exclude={"owner_address"}, exclude_unset=True)
+    update_fields = payload.model_dump(exclude={"version"}, exclude_unset=True)
 
-    # source_wallet è immutabile
+    # source_wallet is immutable (security)
     if "source_wallet" in update_fields:
         raise HTTPException(status_code=422, detail="Cannot modify source_wallet")
+
+    # Handle distribution_list_id
+    if "distribution_list_id" in update_fields:
+        dl_id_str = update_fields.pop("distribution_list_id")
+        if dl_id_str is not None:
+            try:
+                dl_uuid = uuid.UUID(dl_id_str)
+            except ValueError:
+                raise HTTPException(status_code=422, detail="Invalid distribution_list_id format")
+            from app.models.command_models import DistributionList
+            dl_result = await db.execute(
+                select(DistributionList).where(
+                    DistributionList.id == dl_uuid,
+                    DistributionList.is_active == True,  # noqa: E712
+                )
+            )
+            if not dl_result.scalar_one_or_none():
+                raise HTTPException(status_code=404, detail="Distribution list not found")
+            updates["distribution_list_id"] = dl_uuid
+        else:
+            updates["distribution_list_id"] = None
 
     for field, value in update_fields.items():
         if field == "gas_strategy" and value is not None:
@@ -583,6 +669,9 @@ async def update_rule(
     for field, value in updates.items():
         setattr(rule, field, value)
 
+    # Increment version
+    rule.version += 1
+
     await db.flush()
 
     new_values = _serialize_rule(rule)
@@ -590,14 +679,14 @@ async def update_rule(
     changed_old = {}
     changed_new = {}
     for key in new_values:
-        if old_values.get(key) != new_values.get(key) and key not in ("updated_at",):
+        if old_values.get(key) != new_values.get(key) and key not in ("updated_at", "version"):
             changed_old[key] = old_values.get(key)
             changed_new[key] = new_values.get(key)
 
     audit = AuditLog(
         rule_id=rule.id,
         action="update",
-        actor=payload.owner_address,
+        actor=wallet_address.lower(),
         old_values=changed_old,
         new_values=changed_new,
     )
@@ -605,14 +694,14 @@ async def update_rule(
     await db.commit()
 
     # ── WS: rule_updated ────────────────────────────
-    await feed_manager.broadcast(payload.owner_address, "rule_updated", {
+    await feed_manager.broadcast(wallet_address.lower(), "rule_updated", {
         "rule_id": rule.id,
         "action": "update",
         "changed_fields": list(changed_new.keys()),
         "new_values": changed_new,
     })
 
-    return {"status": "updated", "rule": new_values}
+    return _response({"status": "updated", "rule": new_values})
 
 
 # ═══════════════════════════════════════════════════════════
@@ -620,13 +709,15 @@ async def update_rule(
 # ═══════════════════════════════════════════════════════════
 
 @sweeper_router.delete("/forwarding/rules/{rule_id}")
+@require_wallet_auth
 async def delete_rule(
+    request: Request,
     rule_id: int,
-    payload: OwnerPayload,
     db: AsyncSession = Depends(get_db),
+    wallet_address: str = "",
 ):
     rule = await _get_rule_or_404(db, rule_id)
-    await _verify_owner(rule, payload.owner_address)
+    await _verify_owner(rule, wallet_address)
 
     # Controlla se ci sono sweep logs
     log_count = await db.execute(
@@ -647,7 +738,7 @@ async def delete_rule(
     audit = AuditLog(
         rule_id=rule_id,
         action=action,
-        actor=payload.owner_address,
+        actor=wallet_address.lower(),
         old_values=_serialize_rule(rule) if has_logs else {"id": rule_id},
     )
     db.add(audit)
@@ -660,7 +751,7 @@ async def delete_rule(
         )
     )
 
-    return {"status": "deleted", "mode": "soft" if has_logs else "hard", "rule_id": rule_id}
+    return _response({"status": "deleted", "mode": "soft" if has_logs else "hard", "rule_id": rule_id})
 
 
 # ═══════════════════════════════════════════════════════════
@@ -668,27 +759,29 @@ async def delete_rule(
 # ═══════════════════════════════════════════════════════════
 
 @sweeper_router.post("/forwarding/rules/{rule_id}/pause")
+@require_wallet_auth
 async def pause_rule(
+    request: Request,
     rule_id: int,
-    payload: OwnerPayload,
     db: AsyncSession = Depends(get_db),
+    wallet_address: str = "",
 ):
     rule = await _get_rule_or_404(db, rule_id)
-    await _verify_owner(rule, payload.owner_address)
+    await _verify_owner(rule, wallet_address)
 
     if rule.is_paused:
         raise HTTPException(status_code=409, detail="Rule is already paused")
 
     rule.is_paused = True
-    audit = AuditLog(rule_id=rule_id, action="pause", actor=payload.owner_address)
+    audit = AuditLog(rule_id=rule_id, action="pause", actor=wallet_address.lower())
     db.add(audit)
     await db.commit()
 
-    await feed_manager.broadcast(payload.owner_address, "rule_updated", {
+    await feed_manager.broadcast(wallet_address.lower(), "rule_updated", {
         "rule_id": rule_id, "action": "pause",
     })
 
-    return {"status": "paused", "rule_id": rule_id}
+    return _response({"status": "paused", "rule_id": rule_id})
 
 
 # ═══════════════════════════════════════════════════════════
@@ -696,27 +789,29 @@ async def pause_rule(
 # ═══════════════════════════════════════════════════════════
 
 @sweeper_router.post("/forwarding/rules/{rule_id}/resume")
+@require_wallet_auth
 async def resume_rule(
+    request: Request,
     rule_id: int,
-    payload: OwnerPayload,
     db: AsyncSession = Depends(get_db),
+    wallet_address: str = "",
 ):
     rule = await _get_rule_or_404(db, rule_id)
-    await _verify_owner(rule, payload.owner_address)
+    await _verify_owner(rule, wallet_address)
 
     if not rule.is_paused:
         raise HTTPException(status_code=409, detail="Rule is not paused")
 
     rule.is_paused = False
-    audit = AuditLog(rule_id=rule_id, action="resume", actor=payload.owner_address)
+    audit = AuditLog(rule_id=rule_id, action="resume", actor=wallet_address.lower())
     db.add(audit)
     await db.commit()
 
-    await feed_manager.broadcast(payload.owner_address, "rule_updated", {
+    await feed_manager.broadcast(wallet_address.lower(), "rule_updated", {
         "rule_id": rule_id, "action": "resume",
     })
 
-    return {"status": "resumed", "rule_id": rule_id}
+    return _response({"status": "resumed", "rule_id": rule_id})
 
 
 # ═══════════════════════════════════════════════════════════
@@ -724,11 +819,13 @@ async def resume_rule(
 # ═══════════════════════════════════════════════════════════
 
 @sweeper_router.post("/forwarding/emergency-stop")
+@require_wallet_auth
 async def emergency_stop(
-    payload: OwnerPayload,
+    request: Request,
     db: AsyncSession = Depends(get_db),
+    wallet_address: str = "",
 ):
-    owner = payload.owner_address
+    owner = wallet_address.lower()
 
     result = await db.execute(
         select(ForwardingRule).where(
@@ -740,7 +837,7 @@ async def emergency_stop(
     rules = result.scalars().all()
 
     if not rules:
-        return {"status": "no_active_rules", "paused_count": 0}
+        return _response({"status": "no_active_rules", "paused_count": 0})
 
     paused_ids = []
     for rule in rules:
@@ -756,11 +853,11 @@ async def emergency_stop(
         "paused_rule_ids": paused_ids,
     })
 
-    return {
+    return _response({
         "status": "emergency_stop",
         "paused_count": len(paused_ids),
         "paused_rule_ids": paused_ids,
-    }
+    })
 
 
 # ═══════════════════════════════════════════════════════════
@@ -818,7 +915,7 @@ async def list_logs(
     result = await db.execute(q)
     logs = result.scalars().all()
 
-    return {
+    return _response({
         "logs": [_serialize_log(lg) for lg in logs],
         "pagination": {
             "page": page,
@@ -826,7 +923,7 @@ async def list_logs(
             "total": total,
             "pages": (total + per_page - 1) // per_page if total else 0,
         },
-    }
+    })
 
 
 # ═══════════════════════════════════════════════════════════
@@ -932,7 +1029,7 @@ async def get_stats(
     total = row.total_sweeps
     success_rate = round(row.completed / total * 100, 1) if total > 0 else 0
 
-    return {
+    return _response({
         "period": period,
         "total_sweeps": total,
         "completed": row.completed,
@@ -942,7 +1039,7 @@ async def get_stats(
         "total_gas_spent_eth": round(float(row.total_gas_spent), 8),
         "avg_sweep_time_sec": round(float(row.avg_sweep_seconds), 1) if row.avg_sweep_seconds else None,
         "success_rate": success_rate,
-    }
+    })
 
 
 # ═══════════════════════════════════════════════════════════
@@ -977,7 +1074,7 @@ async def get_daily_stats(
     )
     rows = result.all()
 
-    return {
+    return _response({
         "period_days": days,
         "data": [
             {
@@ -989,7 +1086,139 @@ async def get_daily_stats(
             }
             for row in rows
         ],
+    })
+
+
+# ═══════════════════════════════════════════════════════════
+#  13. GET /forwarding/rules/{rule_id}/batches — Sweep batches
+# ═══════════════════════════════════════════════════════════
+
+def _serialize_batch(b: SweepBatch) -> dict:
+    return {
+        "id": str(b.id),
+        "incoming_tx_hash": b.incoming_tx_hash,
+        "source_address": b.source_address,
+        "chain_id": b.chain_id,
+        "total_amount_wei": b.total_amount_wei,
+        "token_symbol": b.token_symbol,
+        "status": b.status,
+        "item_count": len(b.items) if b.items else 0,
+        "gas_price_wei": b.gas_price_wei,
+        "total_gas_cost_wei": b.total_gas_cost_wei,
+        "error_message": b.error_message,
+        "retry_count": b.retry_count,
+        "created_at": b.created_at.isoformat() if b.created_at else None,
+        "completed_at": b.completed_at.isoformat() if b.completed_at else None,
+        "items": [
+            {
+                "id": str(item.id),
+                "recipient_address": item.recipient_address,
+                "amount_wei": item.amount_wei,
+                "percent_bps": item.percent_bps,
+                "tx_hash": item.tx_hash,
+                "status": item.status,
+                "gas_used": item.gas_used,
+                "error_message": item.error_message,
+            }
+            for item in (b.items or [])
+        ],
     }
+
+
+@sweeper_router.get("/forwarding/rules/{rule_id}/batches")
+async def list_batches(
+    rule_id: int,
+    status: Optional[str] = Query(None, description="PENDING|PROCESSING|COMPLETED|FAILED|PARTIAL"),
+    date_from: Optional[datetime] = Query(None),
+    date_to: Optional[datetime] = Query(None),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+):
+    # Verify rule exists
+    await _get_rule_or_404(db, rule_id)
+
+    q = select(SweepBatch).where(SweepBatch.forwarding_rule_id == rule_id)
+    count_q = select(func.count()).select_from(SweepBatch).where(
+        SweepBatch.forwarding_rule_id == rule_id,
+    )
+
+    if status:
+        valid_statuses = {"PENDING", "PROCESSING", "COMPLETED", "FAILED", "PARTIAL"}
+        if status.upper() not in valid_statuses:
+            raise HTTPException(status_code=422, detail=f"Invalid status: {status}")
+        q = q.where(SweepBatch.status == status.upper())
+        count_q = count_q.where(SweepBatch.status == status.upper())
+    if date_from:
+        q = q.where(SweepBatch.created_at >= date_from)
+        count_q = count_q.where(SweepBatch.created_at >= date_from)
+    if date_to:
+        q = q.where(SweepBatch.created_at <= date_to)
+        count_q = count_q.where(SweepBatch.created_at <= date_to)
+
+    total = (await db.execute(count_q)).scalar()
+    offset = (page - 1) * per_page
+    q = q.order_by(SweepBatch.created_at.desc()).offset(offset).limit(per_page)
+    result = await db.execute(q)
+    batches = result.scalars().all()
+
+    return _response({
+        "batches": [_serialize_batch(b) for b in batches],
+        "pagination": {
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "pages": (total + per_page - 1) // per_page if total else 0,
+        },
+    })
+
+
+# ═══════════════════════════════════════════════════════════
+#  14. GET /forwarding/spending-limits — Spending limits status
+# ═══════════════════════════════════════════════════════════
+
+@sweeper_router.get("/forwarding/spending-limits")
+async def spending_limits_status(
+    source_address: str = Query(..., description="Source wallet address"),
+    chain_id: int = Query(8453),
+):
+    source = source_address.lower()
+    if not ETH_ADDR_RE.match(source_address):
+        raise HTTPException(status_code=422, detail="Invalid source_address format")
+
+    try:
+        from app.services.spending_policy import SpendingPolicy
+        policy = SpendingPolicy()
+        status = await policy.get_status(source, chain_id)
+
+        return _response({
+            "source_address": status.source,
+            "chain_id": status.chain_id,
+            "limits": {
+                "per_hour": {
+                    "spent_wei": status.per_hour_spent_wei,
+                    "limit_wei": status.per_hour_limit_wei,
+                },
+                "per_day": {
+                    "spent_wei": status.per_day_spent_wei,
+                    "limit_wei": status.per_day_limit_wei,
+                },
+                "global_daily": {
+                    "spent_wei": status.global_daily_spent_wei,
+                    "limit_wei": status.global_daily_limit_wei,
+                },
+                "velocity": {
+                    "sweeps_this_hour": status.sweeps_this_hour,
+                    "max_sweeps_per_hour": status.max_sweeps_per_hour,
+                },
+            },
+        })
+    except Exception as exc:
+        logger.warning("[spending] Failed to get status: %s", exc)
+        raise HTTPException(
+            status_code=503,
+            detail="Spending limits status temporarily unavailable",
+        )
 
 
 # ═══════════════════════════════════════════════════════════

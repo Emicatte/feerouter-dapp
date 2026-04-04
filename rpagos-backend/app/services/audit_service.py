@@ -1,5 +1,5 @@
 """
-RSend Backend — Audit Service (Immutable Audit Trail).
+RSends Backend — Audit Service (Immutable Audit Trail).
 
 Scrive nella tabella audit_log (append-only, BIGSERIAL).
 L'utente database dell'applicazione non deve avere permessi

@@ -1,5 +1,5 @@
 """
-RSend Backend — Test Suite: Audit Service, Request Context, Audit Endpoint.
+RSends Backend — Test Suite: Audit Service, Request Context, Audit Endpoint.
 
 Testa:
   - log_event scrive nella tabella audit_log

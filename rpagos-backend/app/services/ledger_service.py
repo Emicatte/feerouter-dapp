@@ -1,5 +1,5 @@
 """
-RSend Backend — Ledger Service (Double-Entry Bookkeeping).
+RSends Backend — Ledger Service (Double-Entry Bookkeeping).
 
 Operazioni contabili:
   - create_payment_entries: crea scritture DEBIT/CREDIT bilanciate

@@ -1,5 +1,5 @@
 """
-RSend Backend — Nonce Manager (Redis-backed Atomic Nonce Management).
+RSends Backend — Nonce Manager (Redis-backed Atomic Nonce Management).
 
 Provides atomic nonce allocation for the hot wallet using Redis.
 Prevents nonce collisions across multiple Celery workers.

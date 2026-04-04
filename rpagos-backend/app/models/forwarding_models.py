@@ -1,5 +1,5 @@
 """
-RSend Backend — Forwarding Models (Command Center)
+RSends Backend — Forwarding Models (Command Center)
 
 Modelli:
   - ForwardingRule: regola di auto-forwarding con split routing, swap, scheduling
@@ -96,6 +96,9 @@ class ForwardingRule(Base):
 
     # ── Chain ───────────────────────────────────────────────
     chain_id = Column(Integer, default=8453, nullable=False)
+
+    # ── Optimistic locking ──────────────────────────────────
+    version = Column(Integer, default=1, nullable=False)
 
     # ── Timestamps ──────────────────────────────────────────
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

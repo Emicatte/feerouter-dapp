@@ -1,5 +1,5 @@
 """
-RSend Backend — Input Validation Service.
+RSends Backend — Input Validation Service.
 
 Pure validation functions for all user-facing inputs.
 

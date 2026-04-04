@@ -4,11 +4,11 @@ RPagos Backend — Test: Forwarding Rules CRUD
 Testa il ciclo completo delle regole di auto-forwarding:
   - Creazione con validazione address/split/chain
   - Lettura singola e lista con stats
-  - Update con audit log e diff
+  - Update con audit log, diff, e optimistic locking
   - Delete (soft e hard)
   - Pause / Resume
   - Emergency stop
-  - Limite 10 regole per owner
+  - Limite 20 regole per owner
 
 Come eseguire:
   cd rpagos-backend
@@ -18,6 +18,7 @@ Come eseguire:
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
+from unittest.mock import patch, AsyncMock
 
 from app.main import app
 from app.db.session import engine, async_session
@@ -30,6 +31,18 @@ SOURCE = "0x" + "bb" * 20      # 0xbbbb...bb
 DEST = "0x" + "cc" * 20        # 0xcccc...cc
 SPLIT_DEST = "0x" + "dd" * 20  # 0xdddd...dd
 OTHER = "0x" + "ee" * 20       # 0xeeee...ee
+
+
+# ── Auth helpers ──────────────────────────────────────────
+
+def auth_headers(address: str = OWNER) -> dict:
+    """Debug auth headers for testnet bypass."""
+    return {
+        "X-Wallet-Address": address,
+        "X-Wallet-Signature": "0x" + "ab" * 65,
+        "X-Timestamp": "2026-01-01T00:00:00Z",
+        "X-Chain-Id": "84532",
+    }
 
 
 # ── Fixtures ──────────────────────────────────────────────
@@ -57,7 +70,6 @@ async def client():
 def _rule_payload(**overrides) -> dict:
     """Payload base per creare una regola."""
     base = {
-        "owner_address": OWNER,
         "source_wallet": SOURCE,
         "destination_wallet": DEST,
         "label": "Test Rule",
@@ -74,7 +86,13 @@ def _rule_payload(**overrides) -> dict:
 
 async def _create_rule(client: AsyncClient, **overrides) -> dict:
     """Helper: crea una regola e restituisce il response JSON."""
-    r = await client.post("/api/v1/forwarding/rules", json=_rule_payload(**overrides))
+    with patch("app.api.sweeper_routes.alchemy_webhook_manager") as mock_wm:
+        mock_wm.add_address_to_webhook = AsyncMock()
+        r = await client.post(
+            "/api/v1/forwarding/rules",
+            json=_rule_payload(**overrides),
+            headers=auth_headers(),
+        )
     assert r.status_code == 200, f"Create rule failed: {r.text}"
     return r.json()
 
@@ -96,13 +114,16 @@ async def test_create_rule_success(client: AsyncClient):
     assert rule["chain_id"] == 8453
     assert rule["gas_strategy"] == "normal"
     assert rule["id"] is not None
+    assert rule["version"] == 1
 
 
 @pytest.mark.asyncio
 async def test_create_rule_invalid_address(client: AsyncClient):
     """Indirizzo non valido rifiutato con 422."""
     payload = _rule_payload(source_wallet="not-an-address")
-    r = await client.post("/api/v1/forwarding/rules", json=payload)
+    r = await client.post(
+        "/api/v1/forwarding/rules", json=payload, headers=auth_headers(),
+    )
     assert r.status_code == 422
 
 
@@ -110,7 +131,9 @@ async def test_create_rule_invalid_address(client: AsyncClient):
 async def test_create_rule_invalid_gas_strategy(client: AsyncClient):
     """Gas strategy non valida rifiutata."""
     payload = _rule_payload(gas_strategy="turbo")
-    r = await client.post("/api/v1/forwarding/rules", json=payload)
+    r = await client.post(
+        "/api/v1/forwarding/rules", json=payload, headers=auth_headers(),
+    )
     assert r.status_code == 422
 
 
@@ -133,7 +156,11 @@ async def test_create_rule_with_split(client: AsyncClient):
 async def test_create_rule_split_without_destination(client: AsyncClient):
     """Split enabled senza destination → 422."""
     payload = _rule_payload(split_enabled=True, split_percent=70)
-    r = await client.post("/api/v1/forwarding/rules", json=payload)
+    with patch("app.api.sweeper_routes.alchemy_webhook_manager") as mock_wm:
+        mock_wm.add_address_to_webhook = AsyncMock()
+        r = await client.post(
+            "/api/v1/forwarding/rules", json=payload, headers=auth_headers(),
+        )
     assert r.status_code == 422
     assert "split_destination" in r.json()["detail"].lower()
 
@@ -144,7 +171,11 @@ async def test_create_rule_split_100_percent(client: AsyncClient):
     payload = _rule_payload(
         split_enabled=True, split_percent=100, split_destination=SPLIT_DEST,
     )
-    r = await client.post("/api/v1/forwarding/rules", json=payload)
+    with patch("app.api.sweeper_routes.alchemy_webhook_manager") as mock_wm:
+        mock_wm.add_address_to_webhook = AsyncMock()
+        r = await client.post(
+            "/api/v1/forwarding/rules", json=payload, headers=auth_headers(),
+        )
     assert r.status_code == 422
 
 
@@ -235,7 +266,7 @@ async def test_get_rule_not_found(client: AsyncClient):
 
 
 # ═══════════════════════════════════════════════════════════
-#  3. Update con audit log
+#  3. Update con audit log e optimistic locking
 # ═══════════════════════════════════════════════════════════
 
 @pytest.mark.asyncio
@@ -244,20 +275,24 @@ async def test_update_rule(client: AsyncClient):
     created = await _create_rule(client)
     rule_id = created["rule"]["id"]
 
-    r = await client.put(
-        f"/api/v1/forwarding/rules/{rule_id}",
-        json={
-            "owner_address": OWNER,
-            "label": "Updated Label",
-            "min_threshold": 0.05,
-            "gas_limit_gwei": 80,
-        },
-    )
+    with patch("app.api.sweeper_routes.feed_manager") as mock_fm:
+        mock_fm.broadcast = AsyncMock()
+        r = await client.put(
+            f"/api/v1/forwarding/rules/{rule_id}",
+            json={
+                "version": 1,
+                "label": "Updated Label",
+                "min_threshold": 0.05,
+                "gas_limit_gwei": 80,
+            },
+            headers=auth_headers(),
+        )
     assert r.status_code == 200
     rule = r.json()["rule"]
     assert rule["label"] == "Updated Label"
     assert rule["min_threshold"] == 0.05
     assert rule["gas_limit_gwei"] == 80
+    assert rule["version"] == 2
 
 
 @pytest.mark.asyncio
@@ -268,7 +303,8 @@ async def test_update_rule_wrong_owner(client: AsyncClient):
 
     r = await client.put(
         f"/api/v1/forwarding/rules/{rule_id}",
-        json={"owner_address": OTHER, "label": "Hacked"},
+        json={"version": 1, "label": "Hacked"},
+        headers=auth_headers(OTHER),
     )
     assert r.status_code == 403
 
@@ -281,7 +317,8 @@ async def test_update_rule_no_fields(client: AsyncClient):
 
     r = await client.put(
         f"/api/v1/forwarding/rules/{rule_id}",
-        json={"owner_address": OWNER},
+        json={"version": 1},
+        headers=auth_headers(),
     )
     assert r.status_code == 422
 
@@ -295,10 +332,11 @@ async def test_update_split_validation(client: AsyncClient):
     r = await client.put(
         f"/api/v1/forwarding/rules/{rule_id}",
         json={
-            "owner_address": OWNER,
+            "version": 1,
             "split_enabled": True,
             "split_percent": 60,
         },
+        headers=auth_headers(),
     )
     assert r.status_code == 422
 
@@ -309,14 +347,7 @@ async def test_update_split_validation(client: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_delete_rule_soft_with_logs(client: AsyncClient):
-    """Delete con sweep logs → soft delete (is_active=False, is_paused=True).
-
-    Nota: il path 'hard delete' causa IntegrityError su SQLite perché
-    la relazione ForwardingRule.audit_logs setta rule_id=NULL al cascade
-    del delete, violando il vincolo NOT NULL. Su PostgreSQL con ON DELETE
-    CASCADE funziona. Testiamo solo il soft delete path che è quello
-    usato in produzione (quasi tutte le regole hanno almeno un audit log).
-    """
+    """Delete con sweep logs → soft delete (is_active=False, is_paused=True)."""
     created = await _create_rule(client)
     rule_id = created["rule"]["id"]
 
@@ -334,11 +365,13 @@ async def test_delete_rule_soft_with_logs(client: AsyncClient):
         db.add(log)
         await db.commit()
 
-    r = await client.request(
-        "DELETE",
-        f"/api/v1/forwarding/rules/{rule_id}",
-        json={"owner_address": OWNER},
-    )
+    with patch("app.api.sweeper_routes.alchemy_webhook_manager") as mock_wm:
+        mock_wm.remove_address_from_webhook = AsyncMock()
+        r = await client.request(
+            "DELETE",
+            f"/api/v1/forwarding/rules/{rule_id}",
+            headers=auth_headers(),
+        )
     assert r.status_code == 200
     data = r.json()
     assert data["mode"] == "soft"
@@ -360,7 +393,7 @@ async def test_delete_rule_wrong_owner(client: AsyncClient):
     r = await client.request(
         "DELETE",
         f"/api/v1/forwarding/rules/{rule_id}",
-        json={"owner_address": OTHER},
+        headers=auth_headers(OTHER),
     )
     assert r.status_code == 403
 
@@ -375,35 +408,38 @@ async def test_pause_resume(client: AsyncClient):
     created = await _create_rule(client)
     rule_id = created["rule"]["id"]
 
-    # Pause
-    r = await client.post(
-        f"/api/v1/forwarding/rules/{rule_id}/pause",
-        json={"owner_address": OWNER},
-    )
-    assert r.status_code == 200
-    assert r.json()["status"] == "paused"
+    with patch("app.api.sweeper_routes.feed_manager") as mock_fm:
+        mock_fm.broadcast = AsyncMock()
 
-    # Double pause → 409
-    r2 = await client.post(
-        f"/api/v1/forwarding/rules/{rule_id}/pause",
-        json={"owner_address": OWNER},
-    )
-    assert r2.status_code == 409
+        # Pause
+        r = await client.post(
+            f"/api/v1/forwarding/rules/{rule_id}/pause",
+            headers=auth_headers(),
+        )
+        assert r.status_code == 200
+        assert r.json()["status"] == "paused"
 
-    # Resume
-    r3 = await client.post(
-        f"/api/v1/forwarding/rules/{rule_id}/resume",
-        json={"owner_address": OWNER},
-    )
-    assert r3.status_code == 200
-    assert r3.json()["status"] == "resumed"
+        # Double pause → 409
+        r2 = await client.post(
+            f"/api/v1/forwarding/rules/{rule_id}/pause",
+            headers=auth_headers(),
+        )
+        assert r2.status_code == 409
 
-    # Double resume → 409
-    r4 = await client.post(
-        f"/api/v1/forwarding/rules/{rule_id}/resume",
-        json={"owner_address": OWNER},
-    )
-    assert r4.status_code == 409
+        # Resume
+        r3 = await client.post(
+            f"/api/v1/forwarding/rules/{rule_id}/resume",
+            headers=auth_headers(),
+        )
+        assert r3.status_code == 200
+        assert r3.json()["status"] == "resumed"
+
+        # Double resume → 409
+        r4 = await client.post(
+            f"/api/v1/forwarding/rules/{rule_id}/resume",
+            headers=auth_headers(),
+        )
+        assert r4.status_code == 409
 
 
 @pytest.mark.asyncio
@@ -414,7 +450,7 @@ async def test_pause_wrong_owner(client: AsyncClient):
 
     r = await client.post(
         f"/api/v1/forwarding/rules/{rule_id}/pause",
-        json={"owner_address": OTHER},
+        headers=auth_headers(OTHER),
     )
     assert r.status_code == 403
 
@@ -434,10 +470,12 @@ async def test_emergency_stop(client: AsyncClient):
             source_wallet=f"0x{i:02d}" + "bb" * 19,
         )
 
-    r = await client.post(
-        "/api/v1/forwarding/emergency-stop",
-        json={"owner_address": OWNER},
-    )
+    with patch("app.api.sweeper_routes.feed_manager") as mock_fm:
+        mock_fm.broadcast = AsyncMock()
+        r = await client.post(
+            "/api/v1/forwarding/emergency-stop",
+            headers=auth_headers(),
+        )
     assert r.status_code == 200
     data = r.json()
     assert data["status"] == "emergency_stop"
@@ -455,10 +493,12 @@ async def test_emergency_stop(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_emergency_stop_no_active(client: AsyncClient):
     """Emergency stop senza regole attive."""
-    r = await client.post(
-        "/api/v1/forwarding/emergency-stop",
-        json={"owner_address": OTHER},
-    )
+    with patch("app.api.sweeper_routes.feed_manager") as mock_fm:
+        mock_fm.broadcast = AsyncMock()
+        r = await client.post(
+            "/api/v1/forwarding/emergency-stop",
+            headers=auth_headers(OTHER),
+        )
     assert r.status_code == 200
     assert r.json()["paused_count"] == 0
 
@@ -471,43 +511,50 @@ async def test_emergency_stop_skips_already_paused(client: AsyncClient):
         client, label="Pre-paused",
         source_wallet="0x" + "11" * 20,
     )
-    # Pause the second one first
-    await client.post(
-        f"/api/v1/forwarding/rules/{created2['rule']['id']}/pause",
-        json={"owner_address": OWNER},
-    )
 
-    r = await client.post(
-        "/api/v1/forwarding/emergency-stop",
-        json={"owner_address": OWNER},
-    )
+    with patch("app.api.sweeper_routes.feed_manager") as mock_fm:
+        mock_fm.broadcast = AsyncMock()
+        # Pause the second one first
+        await client.post(
+            f"/api/v1/forwarding/rules/{created2['rule']['id']}/pause",
+            headers=auth_headers(),
+        )
+
+        r = await client.post(
+            "/api/v1/forwarding/emergency-stop",
+            headers=auth_headers(),
+        )
     assert r.status_code == 200
     assert r.json()["paused_count"] == 1  # Only the active one
 
 
 # ═══════════════════════════════════════════════════════════
-#  7. Limite 10 regole per owner
+#  7. Limite 20 regole per owner
 # ═══════════════════════════════════════════════════════════
 
 @pytest.mark.asyncio
 async def test_max_rules_per_owner(client: AsyncClient):
-    """Limite di 10 regole attive per owner."""
-    # Crea 10 regole con source_wallet diversi
-    for i in range(10):
+    """Limite di 20 regole attive per owner."""
+    # Crea 20 regole con source_wallet diversi
+    for i in range(20):
         await _create_rule(
             client,
             label=f"Rule {i}",
             source_wallet=f"0x{i:02d}" + "bb" * 19,
         )
 
-    # L'undicesima deve fallire con 409
+    # La 21esima deve fallire con 409
     payload = _rule_payload(
-        label="Rule 11",
+        label="Rule 21",
         source_wallet="0x" + "ff" * 20,
     )
-    r = await client.post("/api/v1/forwarding/rules", json=payload)
+    with patch("app.api.sweeper_routes.alchemy_webhook_manager") as mock_wm:
+        mock_wm.add_address_to_webhook = AsyncMock()
+        r = await client.post(
+            "/api/v1/forwarding/rules", json=payload, headers=auth_headers(),
+        )
     assert r.status_code == 409
-    assert "10" in r.json()["detail"]
+    assert "20" in r.json()["detail"]
 
 
 # ═══════════════════════════════════════════════════════════
