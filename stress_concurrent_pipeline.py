@@ -30,7 +30,7 @@ CONTRACT = "0x481062Ba5843BbF8BcC7781EF84D42e49D0D77c3"
 CHAIN_ID = 84532  # Base Sepolia
 
 TARGET_CONCURRENT_TXS = 50
-RECIPIENTS_PER_TX = 2         # 2 recipients per call (gas efficient)
+RECIPIENTS_PER_TX = 5         # 5 recipients per call (as specified)
 VALUE_PER_TX_WEI = 100_000    # minimal value — test is about nonce, not amounts
 GAS_MARGIN = 1.3              # 30% gas margin
 CONFIRMATION_TIMEOUT = 180    # seconds
