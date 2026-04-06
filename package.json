@@ -10,7 +10,7 @@
     "test": "jest --verbose"
   },
   "dependencies": {
-    "@rainbow-me/rainbowkit": "2.1.7",
+    "@rainbow-me/rainbowkit": "^2.2.10",
     "@tanstack/react-query": "^5.45.1",
     "framer-motion": "^12.38.0",
     "jspdf": "^4.2.1",
@@ -31,9 +31,11 @@
     "@types/node": "20.14.10",
     "@types/react": "18.3.3",
     "@types/react-dom": "18.3.0",
+    "@typescript-eslint/parser": "^8.58.0",
+    "@typescript-eslint/typescript-estree": "^8.58.0",
     "autoprefixer": "10.4.19",
-    "eslint": "8.57.0",
-    "eslint-config-next": "14.2.5",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "15.5.14",
     "identity-obj-proxy": "^3.0.0",
     "jest": "^30.3.0",
     "jest-environment-jsdom": "^30.3.0",

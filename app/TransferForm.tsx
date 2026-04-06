@@ -25,6 +25,11 @@ import {
 } from '../lib/contractRegistry'
 import { useSwapQuote, useDirectQuote } from '../lib/useSwapQuote'
 import { useBackendCallback } from '../lib/useBackendCallback'
+import { mutationHeaders } from '../lib/rsendFetch'
+import TxConfirmationSheet from './TxConfirmationSheet'
+import AddressIntelligence, { recordSuccessfulTx } from './AddressIntelligence'
+import { useTabLock } from '../lib/useTabLock'
+import { useIdempotencyKey } from '../lib/useIdempotencyKey'
 
 // ── Theme ──────────────────────────────────────────────────────────────────
 const T = {
@@ -43,7 +48,7 @@ const T = {
   M:       'var(--font-mono)',
 }
 
-// ── ABI FeeRouterV4 ────────────────────────────────────────────────────────
+// ── ABI FeeRouterV3/V4 ─────────────────────────────────────────────────────
 const FEE_ROUTER_ABI: Abi = [
   {
     name: 'transferWithOracle', type: 'function', stateMutability: 'nonpayable',
@@ -77,6 +82,19 @@ const FEE_ROUTER_ABI: Abi = [
       { name: 'deadline', type: 'uint256' }, { name: 'oracleSignature', type: 'bytes' },
     ], outputs: [],
   },
+  // View helpers
+  { name: 'oracleSigner', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'address' }] },
+  { name: 'domainSeparator', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ name: '', type: 'bytes32' }] },
+  // Custom errors — per decodifica errori leggibili
+  { name: 'ZeroAddress', type: 'error', inputs: [] },
+  { name: 'ZeroAmount', type: 'error', inputs: [] },
+  { name: 'FeeTooHigh', type: 'error', inputs: [] },
+  { name: 'ETHTransferFailed', type: 'error', inputs: [] },
+  { name: 'DeadlineExpired', type: 'error', inputs: [] },
+  { name: 'OracleSignatureInvalid', type: 'error', inputs: [] },
+  { name: 'NonceAlreadyUsed', type: 'error', inputs: [] },
+  { name: 'RecipientBlacklisted', type: 'error', inputs: [] },
+  { name: 'TokenNotAllowed', type: 'error', inputs: [] },
 ]
 
 type Phase    = 'idle' | 'preflight' | 'approving' | 'wait_approve' | 'signing' | 'wait_send' | 'done' | 'error'
@@ -366,6 +384,8 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
   const { generateRecord }       = useComplianceEngine()
   const complianceApi            = useComplianceAPI()
   const sendBackend              = useBackendCallback()
+  const { isLocked, acquireLock, releaseLock } = useTabLock()
+  const { generateKey: generateIdempotencyKey, getKey: getIdempotencyKey } = useIdempotencyKey()
 
   // ── Registry ──────────────────────────────────────────────────────────
   const [registry,  setRegistry]  = useState<NetworkRegistry | null>(null)
@@ -390,6 +410,7 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
   const [fiscalRef,  setFiscalRef]  = useState('')
   const [copied,     setCopied]     = useState(false)
   const [toast,      setToast]      = useState<{ msg: string; color?: string } | null>(null)
+  const [showConfirmation, setShowConfirmation] = useState(false)
 
   // ── Oracle ─────────────────────────────────────────────────────────────
   const [oracleData,     setOracleData]     = useState<OracleResponse | null>(null)
@@ -473,7 +494,7 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
       setOracleChecking(true); setOracleData(null); setOracleDenied(false)
       try {
         const res = await fetch('/api/oracle/sign', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: mutationHeaders(),
           body: JSON.stringify({
             sender: address,
             recipient,
@@ -637,22 +658,36 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
       }).catch(err => console.warn('[RPagos Backend] callback error:', err))
     })
     txLog('tx.completed', { hash: sendHash, isSwap: isSwapMode, tokenIn: tokenIn.symbol, tokenOut: outToken.symbol })
+    if (recipient && isAddress(recipient)) recordSuccessfulTx(recipient)
+    releaseLock()
     setPhase('done')
   }, [sendOk, phase])
 
   function handleErr(e: unknown) {
+    releaseLock()
     const m    = e instanceof Error ? e.message : String(e)
     const code = (e as { code?: number })?.code
     if (code === 4001 || m.includes('rejected') || m.includes('denied') || m.includes('cancel')) {
       setToast({ msg: 'Transazione annullata.', color: T.amber }); setPhase('idle')
-    } else if (m.includes('MEVGuard'))            { setTxError('MEV Guard: slippage non configurato.'); setPhase('error') }
+    } else if (m.includes('OracleSignatureInvalid')){ setTxError('Firma Oracle non valida: il signer on-chain non corrisponde. Verifica ORACLE_PRIVATE_KEY.'); setPhase('error') }
+    else if (m.includes('DeadlineExpired'))       { setTxError('Deadline scaduto. Riprova.'); setPhase('error') }
+    else if (m.includes('NonceAlreadyUsed'))      { setTxError('Nonce già usato. Riprova.'); setPhase('error') }
+    else if (m.includes('MEVGuard'))              { setTxError('MEV Guard: slippage non configurato.'); setPhase('error') }
     else if (m.includes('InsufficientLiquidity')) { setTxError('Liquidità insufficiente nel pool. Riduci l\'importo.'); setPhase('error') }
     else if (m.includes('SlippageExceeded'))      { setTxError('Slippage superato. Riprova.'); setPhase('error') }
-    else                                          { setTxError('Errore: ' + m.slice(0, 100)); setPhase('error') }
+    else                                          { setTxError('Errore: ' + m.slice(0, 200)); setPhase('error') }
   }
 
   const handleTransfer = async () => {
     const r = parseAmtIn(); if (!r || !tokenIn || !validateAddr(recipient) || !registry) return
+
+    // ── GUARD: tab lock — TX in corso su altra scheda ─────────────────────
+    if (isLocked) {
+      setToast({ msg: "Transazione in corso su un'altra scheda", color: T.amber })
+      return
+    }
+    acquireLock()
+    const txIdempotencyKey = generateIdempotencyKey()
 
     // ── GUARD: contratto non deployato su questa chain ─────────────────────
     const ZERO_ADDR = '0x0000000000000000000000000000000000000000'
@@ -661,6 +696,7 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
         msg: `⚠ Contratto non configurato su ${registry.chainName}. Passa a Base Sepolia o aggiungi NEXT_PUBLIC_FEE_ROUTER_V4_BASE_SEPOLIA su Vercel.`,
         color: T.red,
       })
+      releaseLock()
       return
     }
     if (!tokenIn.isNative) {
@@ -670,6 +706,7 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
         if (targetChain) {
           setToast({ msg: `${tokenIn.symbol} non disponibile su questa rete. Cambio rete…`, color: T.amber })
           switchChain({ chainId: targetChain as 1 | 8453 | 84532 | 11155111 })
+          releaseLock()
           return
         }
       }
@@ -679,7 +716,7 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
       setPhase('preflight')
       try {
         const res = await fetch('/api/oracle/sign', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: mutationHeaders(),
           body: JSON.stringify({
             sender: address,
             recipient,
@@ -700,10 +737,11 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
         console.error('[TransferForm] Oracle fetch failed:', msg, err)
         setTxError(`Oracle non raggiungibile: ${msg}`)
         setPhase('error')
+        releaseLock()
         return
       }
     }
-    if (!oracle?.approved) { setOracleDenied(true); setOracleData(oracle); setPhase('idle'); return }
+    if (!oracle?.approved) { setOracleDenied(true); setOracleData(oracle); setPhase('idle'); releaseLock(); return }
     txLog('tx.initiated', { isSwap: isSwapMode, token: tokenIn.symbol, chain: chainId })
     try {
       if (isSwapMode) {
@@ -870,7 +908,8 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
                 </div>
                 <div style={{ flex:1, textAlign:'right' as const }}>
                   <input
-                    ref={inputRef} type="number" placeholder="0.00" min="0" step="any"
+                    ref={inputRef} type="number" inputMode="decimal" placeholder="0.00" min="0" step="any"
+                    autoComplete="off" autoCorrect="off" spellCheck={false}
                     value={amount} onChange={e => setAmount(e.target.value)}
                     onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
                     disabled={busy}
@@ -967,23 +1006,28 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
                 <span style={{ fontFamily:T.D, fontSize:11, fontWeight:700, textTransform:'uppercase' as const, letterSpacing:'0.08em', color:T.muted }}>
                   To
                 </span>
-                {recipient && !addrError && (
-                  <span style={{ fontFamily:T.M, fontSize:10, color:T.emerald }}>✓</span>
-                )}
-                {addrError && (
-                  <span style={{ fontFamily:T.D, fontSize:10, fontWeight:600, color:T.red }}>{addrError}</span>
-                )}
               </div>
-              <input
-                type="text" placeholder="0x... o ENS"
+              <AddressIntelligence
                 value={recipient}
-                onChange={e => { setRecipient(e.target.value); validateAddr(e.target.value); setOracleData(null); setOracleDenied(false) }}
+                onChange={(addr: string) => { setRecipient(addr); validateAddr(addr); setOracleData(null); setOracleDenied(false) }}
+                onValidation={(valid: boolean, error: string) => { setAddrError(error) }}
+                chainId={chainId}
                 disabled={busy}
-                style={{ ...C.input, borderColor:addrError?`${T.red}40`:recipient&&!addrError?`${T.emerald}25`:T.border }}
+                inputStyle={{ ...C.input }}
               />
               <AddressVerifier address={recipient} />
             </div>
           </div>
+
+          {/* Tab lock warning */}
+          {isLocked && (
+            <div style={{ marginTop:6, padding:'10px 12px', borderRadius:12, background:`${T.amber}0d`, border:`1px solid ${T.amber}30`, display:'flex', alignItems:'center', gap:8 }}>
+              <span style={{ fontSize:14 }}>🔒</span>
+              <span style={{ fontFamily:T.D, fontSize:11, fontWeight:700, color:T.amber }}>
+                Transazione in corso su un&apos;altra scheda
+              </span>
+            </div>
+          )}
 
           {/* Oracle denial */}
           {oracleDenied && oracleData && !busy && (
@@ -1007,8 +1051,8 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
               <div style={{ fontFamily:T.D, fontSize:10, fontWeight:700, textTransform:'uppercase' as const, letterSpacing:'0.08em', color:T.muted, marginBottom:8 }}>
                 MiCA/DAC8
               </div>
-              <input type="text" placeholder="Rif. pagamento (es. INV-001)" value={paymentRef} onChange={e => setPaymentRef(e.target.value)} disabled={busy} style={{ ...C.input, marginBottom:6 }} />
-              <input type="text" placeholder="ID Fiscale" value={fiscalRef} onChange={e => setFiscalRef(e.target.value)} disabled={busy} style={C.input} />
+              <input type="text" placeholder="Rif. pagamento (es. INV-001)" autoComplete="off" autoCorrect="off" spellCheck={false} value={paymentRef} onChange={e => setPaymentRef(e.target.value)} disabled={busy} style={{ ...C.input, fontSize:16, marginBottom:6 }} />
+              <input type="text" placeholder="ID Fiscale" autoComplete="off" autoCorrect="off" spellCheck={false} value={fiscalRef} onChange={e => setFiscalRef(e.target.value)} disabled={busy} style={{ ...C.input, fontSize:16 }} />
               {oracleData?.dac8Reportable && (
                 <div style={{ fontFamily:T.D, fontSize:10, color:T.amber, marginTop:5 }}>⚠ DAC8 reportable (≥ €1.000)</div>
               )}
@@ -1044,7 +1088,7 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
               <button
                 onClick={
                   ctaState === 'wrong_network' ? () => switchChain({ chainId: 8453 })
-                  : ctaState === 'ready' ? handleTransfer
+                  : ctaState === 'ready' ? () => setShowConfirmation(true)
                   : undefined
                 }
                 disabled={['busy','insufficient','no_recipient','no_amount','oracle_denied','no_liquidity'].includes(ctaState)}
@@ -1115,6 +1159,26 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
       , document.body)}
 
       {toast && <Toast message={toast.msg} color={toast.color} onDismiss={() => setToast(null)} />}
+
+      {/* TX Confirmation Sheet */}
+      {(() => {
+        const fiatNum = amount && tokenIn ? parseFloat(amount) * (EUR_RATES[tokenIn.symbol] ?? 1) : 0
+        return (
+          <TxConfirmationSheet
+            isOpen={showConfirmation}
+            onConfirm={() => { setShowConfirmation(false); handleTransfer() }}
+            onCancel={() => setShowConfirmation(false)}
+            amount={amount}
+            token={sym}
+            recipient={recipient}
+            fiatValue={fiatNum > 0 ? `€${fiatNum.toFixed(2)}` : undefined}
+            network={regChain?.chainName ?? 'Base'}
+            gasFee={isL2 ? '~$0.003' : '~$0.50'}
+            estimatedTime={isL2 ? '~4 secondi' : '~15 secondi'}
+            isHighValue={fiatNum >= 1000}
+          />
+        )
+      })()}
     </>
   )
 }

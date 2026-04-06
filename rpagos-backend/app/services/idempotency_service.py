@@ -1,20 +1,107 @@
 """
 RSends Backend — Idempotency Service.
 
-Gestisce idempotency keys per prevenire doppia esecuzione di transazioni.
+Due livelli di idempotency:
 
-Logica:
-  - Se la chiave non esiste → None (procedi con l'operazione)
-  - Se esiste e status COMPLETED → restituisce la Transaction (skip riesecuzione)
-  - Se esiste e status PENDING/PROCESSING → solleva ConflictError (409)
+1. WEBHOOK DEDUP (Redis SETNX) — previeni doppia esecuzione di webhook Alchemy.
+   REGOLA: Se Redis è down, il webhook viene RIFIUTATO (fail-closed).
+   Meglio perdere un webhook (Alchemy lo re-invia) che eseguire un doppio pagamento.
+
+2. TRANSACTION DEDUP (DB) — previeni doppia esecuzione di transazioni ledger.
+   - Se la chiave non esiste → None (procedi con l'operazione)
+   - Se esiste e status COMPLETED → restituisce la Transaction (skip riesecuzione)
+   - Se esiste e status PENDING/PROCESSING → solleva ConflictError (409)
 """
 
+import logging
 from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ledger_models import Transaction
+
+logger = logging.getLogger("idempotency")
+
+# TTL di 2 ore: Alchemy non re-invia dopo 1h, ma teniamo margine
+WEBHOOK_DEDUP_TTL = 7200
+
+
+# ═══════════════════════════════════════════════════════════════
+#  1. Webhook Dedup (Redis — fail-closed)
+# ═══════════════════════════════════════════════════════════════
+
+
+async def check_and_mark(webhook_id: str, tx_hash: str = "") -> tuple:
+    """
+    Verifica se questo webhook è già stato processato.
+
+    Returns:
+        (is_new: bool, reason: str):
+        - (True, "new") → webhook nuovo, deve essere processato
+        - (False, "duplicate") → già processato, skip
+        - (False, "redis_unavailable") → Redis down, rifiuta (fail-closed)
+        - (False, "redis_error") → errore Redis, rifiuta (fail-closed)
+    """
+    from app.services.cache_service import get_redis
+
+    # Componi dedup key: combina webhook_id e tx_hash per sicurezza
+    if tx_hash:
+        dedup_key = f"wh:idem:{webhook_id}:{tx_hash}"
+    else:
+        dedup_key = f"wh:idem:{webhook_id}"
+
+    r = await get_redis()
+    if r is None:
+        # Redis down → RIFIUTA il webhook (fail-closed)
+        # Alchemy lo re-invierà, e quando Redis torna su, lo processeremo
+        logger.warning(
+            "Redis unavailable — rejecting webhook %s for safety (will be retried by Alchemy)",
+            webhook_id[:12],
+        )
+        return False, "redis_unavailable"
+
+    try:
+        # SETNX atomico: se la key non esiste, la crea e ritorna True
+        is_new = await r.set(dedup_key, "1", nx=True, ex=WEBHOOK_DEDUP_TTL)
+        if not is_new:
+            logger.info("Duplicate webhook detected: %s (tx: %s)", webhook_id[:12], tx_hash[:16] if tx_hash else "n/a")
+            return False, "duplicate"
+        return True, "new"
+    except Exception as e:
+        logger.error("Idempotency check failed: %s — rejecting for safety", e)
+        return False, "redis_error"
+
+
+async def is_tx_processed(tx_hash: str) -> bool:
+    """Check if a TX hash has already been processed (for polling fallback)."""
+    from app.services.cache_service import get_redis
+
+    r = await get_redis()
+    if r is None:
+        return False
+    try:
+        return bool(await r.exists(f"wh:idem:poll:{tx_hash}"))
+    except Exception:
+        return False
+
+
+async def mark_tx_processed(tx_hash: str) -> None:
+    """Mark a TX hash as processed (for polling fallback)."""
+    from app.services.cache_service import get_redis
+
+    r = await get_redis()
+    if r is None:
+        return
+    try:
+        await r.set(f"wh:idem:poll:{tx_hash}", "1", ex=WEBHOOK_DEDUP_TTL)
+    except Exception:
+        pass
+
+
+# ═══════════════════════════════════════════════════════════════
+#  2. Transaction Dedup (DB)
+# ═══════════════════════════════════════════════════════════════
 
 
 class ConflictError(Exception):

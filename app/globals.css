@@ -854,3 +854,133 @@ html, body {
   -webkit-backdrop-filter: blur(32px) saturate(180%);
 }
 
+/* ═══════════════════════════════════════════════════════════
+   MOBILE RESPONSIVE — Layout only, zero aesthetic changes
+   ═══════════════════════════════════════════════════════════ */
+
+/* Safe area per iPhone notch/dynamic island/home indicator */
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+
+/* Fix iOS Safari 100vh bug — usa dvh dove supportato */
+@supports (height: 100dvh) {
+  .mobile-full-height {
+    min-height: 100dvh;
+  }
+}
+
+/* ── Tablet & Below (< 768px) ────────────────────── */
+@media (max-width: 768px) {
+
+  /* Navbar: riduci padding, nascondi menu links centrali */
+  .navbar-center-links {
+    display: none !important;
+  }
+
+  /* Navbar: riduci gap e padding */
+  .navbar-right-stats {
+    display: none !important;
+  }
+
+  /* Footer: da 4 colonne a 2 */
+  .footer-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 24px !important;
+  }
+
+  /* Widget container: full width con padding laterale */
+  .widget-container {
+    max-width: 100% !important;
+    border-radius: 16px !important;
+    margin-left: 4px;
+    margin-right: 4px;
+  }
+
+  /* Tab switcher: testo più piccolo, meno padding */
+  .tab-switcher {
+    padding: 4px 4px !important;
+  }
+  .tab-switcher button {
+    padding: 8px 14px !important;
+    font-size: 12px !important;
+  }
+}
+
+/* ── Mobile (< 480px) ────────────────────────────── */
+@media (max-width: 480px) {
+
+  /* Main content: meno padding top su mobile */
+  .main-content {
+    padding-top: 80px !important;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+    padding-bottom: calc(24px + var(--sab)) !important;
+  }
+
+  /* Hero title: scala font per schermi piccoli */
+  .hero-title {
+    font-size: clamp(28px, 8vw, 40px) !important;
+  }
+
+  /* Hero subtitle */
+  .hero-subtitle {
+    font-size: clamp(11px, 3vw, 14px) !important;
+  }
+
+  /* Footer: singola colonna */
+  .footer-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Tab labels: abbrevia "Command Center" → "CMD" */
+  .tab-label-full {
+    display: none !important;
+  }
+  .tab-label-short {
+    display: inline !important;
+  }
+}
+
+/* Input touch targets — 48px minimo per WCAG */
+@media (max-width: 768px) {
+  input[type="text"],
+  input[type="number"],
+  input[inputmode="decimal"] {
+    min-height: 48px !important;
+    font-size: 16px !important; /* Previene zoom su iOS Safari */
+  }
+
+  button {
+    min-height: 44px;
+  }
+}
+
+/* Keyboard open: previeni scroll body su iOS */
+@media (max-width: 768px) {
+  body.keyboard-open {
+    position: fixed;
+    width: 100%;
+  }
+}
+
+/* Short labels: nascosti su desktop, visibili su mobile */
+.tab-label-short {
+  display: none;
+}
+
+/* Overlay content: previeni overflow testo su mobile */
+@media (max-width: 768px) {
+  .overlay-content * {
+    max-width: 100% !important;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+  .overlay-content [style*="gridTemplateColumns"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+

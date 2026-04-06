@@ -18,7 +18,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings, validate_settings
-from app.db.session import init_db
+from app.db.session import init_db, close_db, async_session, _is_sqlite, engine
 from app.api.routes import router
 from app.services.cache_service import close_redis
 from app.services.polling_service import start_polling_if_needed, stop_polling
@@ -57,6 +57,42 @@ async def lifespan(app: FastAPI):
     # ── Init DB ──────────────────────────────────────
     await init_db()
 
+    # ── Verifica connessione DB ─────────────────────
+    from sqlalchemy import text
+    try:
+        async with async_session() as test_db:
+            await test_db.execute(text("SELECT 1"))
+        db_status = "connected"
+    except Exception as e:
+        db_status = f"ERROR: {e}"
+        if not settings.debug:
+            raise SystemExit(f"Cannot connect to database: {e}")
+
+    if _is_sqlite:
+        pool_display = "SQLite (test only)"
+    else:
+        pool_display = f"{engine.pool.size()}/{engine.pool.size() + engine.pool.overflow()}"
+
+    logger.info("DB status: %s | Pool: %s", db_status, pool_display)
+
+    # ── Verifica connessione Redis ──────────────────
+    from app.services.cache_service import get_redis, is_redis_healthy
+    try:
+        r = await get_redis()
+        if r:
+            await r.ping()
+            redis_status = "connected"
+        else:
+            redis_status = "NOT CONFIGURED"
+    except Exception as e:
+        redis_status = f"ERROR: {e}"
+
+    logger.info("Redis status: %s", redis_status)
+    if redis_status != "connected":
+        logger.warning(
+            "Redis required for idempotency — webhooks will be rejected (fail-closed) without Redis"
+        )
+
     # ── Start WebSocket background tasks ─────────────
     feed_manager.start_background_tasks()
 
@@ -91,6 +127,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # Cleanup
+    await close_db()
     await stop_reconciliation_job()
     await stop_polling()
     await feed_manager.shutdown()
@@ -110,6 +147,7 @@ app = FastAPI(
 settings = get_settings()
 if settings.debug:
     cors_origins = [
+        "http://localhost:3001"
         "http://localhost:3000",
         "http://localhost:5173",
     ]
@@ -141,6 +179,18 @@ app.add_middleware(InputSanitizationMiddleware)
 from app.middleware.rate_limit import RateLimitMiddleware
 app.add_middleware(RateLimitMiddleware)
 
+# ── Idempotency Middleware ──────────────────────────────
+from app.middleware.idempotency import IdempotencyMiddleware
+app.add_middleware(IdempotencyMiddleware)
+
+# ── Global Error Handler ───────────────────────────────
+from app.middleware.error_handler import ErrorHandlerMiddleware
+app.add_middleware(ErrorHandlerMiddleware)
+
+# ── API Key Authentication (production only) ───────────
+from app.middleware.api_auth import APIKeyMiddleware
+app.add_middleware(APIKeyMiddleware)
+
 # ── Prometheus Metrics ───────────────────────────────────
 try:
     from prometheus_fastapi_instrumentator import Instrumentator
@@ -161,15 +211,21 @@ app.include_router(distribution_router)
 app.include_router(ws_router)
 from app.api.audit_routes import audit_router
 app.include_router(audit_router)
+from app.api.ledger_routes import ledger_router
+app.include_router(ledger_router)
 
 
 # ── Health checks ────────────────────────────────────────
 @app.get("/health")
 async def health():
+    from app.services.cache_service import is_redis_healthy
+    redis_ok = await is_redis_healthy()
     return {
-        "status": "healthy",
+        "status": "healthy" if redis_ok else "degraded",
         "service": "rpagos-backend-core",
         "version": "2.0.0",
+        "redis": "connected" if redis_ok else "disconnected",
+        "idempotency": "active" if redis_ok else "FAIL-CLOSED (webhooks rejected)",
         "ws_connections": feed_manager.active_connections,
     }
 
@@ -218,6 +274,17 @@ async def health_dependencies():
     """External services health: circuit breaker states for all dependencies."""
     from app.services.external_health import get_dependency_summary
     return await get_dependency_summary()
+
+
+@app.get("/health/rpc")
+async def health_rpc():
+    """RPC provider health: per-chain provider status, block heights, circuit states."""
+    from app.services.rpc_manager import get_rpc_manager
+    chains = {8453: "base_mainnet", 84532: "base_sepolia", 1: "ethereum", 42161: "arbitrum"}
+    return {
+        label: get_rpc_manager(chain_id).info()
+        for chain_id, label in chains.items()
+    }
 
 
 @app.get("/health/sweep")

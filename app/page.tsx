@@ -365,7 +365,7 @@ function NetworkGasWidget() {
 //  LIQUID GLASS NAVBAR
 // ═══════════════════════════════════════════════════════════
 function Navbar({
-  view, setView, activeOverlay, setActiveOverlay, sweeps24h, vol24h,
+  view, setView, activeOverlay, setActiveOverlay, sweeps24h, vol24h, unseenCount,
 }: {
   view: View
   setView: (v: View) => void
@@ -373,8 +373,18 @@ function Navbar({
   setActiveOverlay: (o: Overlay) => void
   sweeps24h: number
   vol24h: number
+  unseenCount: number
 }) {
   const [hoveredLink, setHoveredLink] = useState<string | null>(null)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
   const links: { key: Overlay; label: string }[] = [
     { key: 'about',      label: 'About' },
     { key: 'how',        label: 'How It Works' },
@@ -385,93 +395,164 @@ function Navbar({
   ]
 
   return (
+    <>
     <nav className="bf-blur-24s" style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1000,
-      height: 60,
+      height: isMobile ? 52 : 60,
+      paddingTop: 'var(--sat, 0px)',
       background: 'linear-gradient(180deg, rgba(10,10,15,0.8) 0%, rgba(10,10,15,0.7) 100%)',
       borderBottom: '1px solid rgba(255,255,255,0.08)',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '0 24px',
+      padding: isMobile ? '0 12px' : '0 24px',
     }}>
-      {/* Left: Logo */}
-      <button
-        onClick={() => { setView('send'); setActiveOverlay(null) }}
-        style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          background: 'none', border: 'none', cursor: 'pointer',
-        }}
-      >
-        {/* Logo: lightning splitting into two flows */}
-        <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-          <rect width="28" height="28" rx="7" fill="url(#lg)" />
-          <path d="M15.5 5L10 15h4l-1.5 8L19 13h-4l1.5-8z" fill="white" fillOpacity="0.95" />
-          <path d="M12.5 15l-3 6" stroke="white" strokeOpacity="0.5" strokeWidth="1.2" strokeLinecap="round" />
-          <path d="M14 15l3.5 5.5" stroke="white" strokeOpacity="0.5" strokeWidth="1.2" strokeLinecap="round" />
-          <defs>
-            <linearGradient id="lg" x1="0" y1="0" x2="28" y2="28">
-              <stop stopColor="#3B82F6" />
-              <stop offset="1" stopColor="#8B5CF6" />
-            </linearGradient>
-          </defs>
-        </svg>
-        <span style={{ fontFamily: C.D, fontSize: 16, fontWeight: 800, color: C.text, letterSpacing: '-0.03em' }}>
-          RSends
-        </span>
-      </button>
+        {/* Left: Logo */}
+        <button
+          onClick={() => { setView('send'); setActiveOverlay(null) }}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: 'none', border: 'none', cursor: 'pointer',
+          }}
+        >
+          {/* Logo: lightning splitting into two flows */}
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <rect width="28" height="28" rx="7" fill="url(#lg)" />
+            <path d="M15.5 5L10 15h4l-1.5 8L19 13h-4l1.5-8z" fill="white" fillOpacity="0.95" />
+            <path d="M12.5 15l-3 6" stroke="white" strokeOpacity="0.5" strokeWidth="1.2" strokeLinecap="round" />
+            <path d="M14 15l3.5 5.5" stroke="white" strokeOpacity="0.5" strokeWidth="1.2" strokeLinecap="round" />
+            <defs>
+              <linearGradient id="lg" x1="0" y1="0" x2="28" y2="28">
+                <stop stopColor="#3B82F6" />
+                <stop offset="1" stopColor="#8B5CF6" />
+              </linearGradient>
+            </defs>
+          </svg>
+          <span style={{ fontFamily: C.D, fontSize: 16, fontWeight: 800, color: C.text, letterSpacing: '-0.03em' }}>
+            RSends
+          </span>
+        </button>
 
-      {/* Center: Menu links */}
-      <div style={{ display: 'flex', gap: 4, position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>
-        {links.map(link => (
+        {/* Hamburger — mobile only */}
+        {isMobile && (
           <button
-            key={link.key}
-            onClick={() => setActiveOverlay(activeOverlay === link.key ? null : link.key)}
-            onMouseEnter={() => setHoveredLink(link.key)}
-            onMouseLeave={() => setHoveredLink(null)}
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             style={{
-              padding: '7px 16px', borderRadius: 10, border: 'none',
-              background: activeOverlay === link.key
-                ? 'rgba(255,255,255,0.08)'
-                : hoveredLink === link.key
-                  ? 'rgba(255,255,255,0.04)'
-                  : 'transparent',
-              color: activeOverlay === link.key ? C.text : C.sub,
-              fontFamily: C.D, fontSize: 12, fontWeight: 500,
-              cursor: 'pointer',
-              transition: 'all 0.25s ease',
+              background: 'none', border: 'none', cursor: 'pointer',
+              padding: 8, display: 'flex', alignItems: 'center',
             }}
           >
-            {link.label}
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+              {mobileMenuOpen ? (
+                <path d="M4 4L16 16M16 4L4 16" stroke={C.text} strokeWidth="1.5" strokeLinecap="round"/>
+              ) : (
+                <>
+                  <path d="M3 5H17" stroke={C.sub} strokeWidth="1.5" strokeLinecap="round"/>
+                  <path d="M3 10H17" stroke={C.sub} strokeWidth="1.5" strokeLinecap="round"/>
+                  <path d="M3 15H17" stroke={C.sub} strokeWidth="1.5" strokeLinecap="round"/>
+                </>
+              )}
+            </svg>
           </button>
-        ))}
-      </div>
-
-      {/* Right: Stats + Wallet */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        {/* Live stats pills */}
-        {(sweeps24h > 0 || vol24h > 0) && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 2,
-            padding: '4px 6px', borderRadius: 10,
-            background: 'rgba(255,255,255,0.03)',
-            border: `1px solid ${C.border}`,
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 6px', borderRight: `1px solid ${C.border}` }}>
-              <div style={{ width: 4, height: 4, borderRadius: '50%', background: C.blue, boxShadow: `0 0 4px ${C.blue}50` }} />
-              <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>Sweeps</span>
-              <span style={{ fontFamily: C.D, fontSize: 11, fontWeight: 700, color: C.text }}>{sweeps24h}</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 6px' }}>
-              <div style={{ width: 4, height: 4, borderRadius: '50%', background: C.purple, boxShadow: `0 0 4px ${C.purple}50` }} />
-              <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>Vol 24h</span>
-              <span style={{ fontFamily: C.D, fontSize: 11, fontWeight: 700, color: C.text }}>{vol24h.toFixed(4)}</span>
-              <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>ETH</span>
-            </div>
-          </div>
         )}
-        <EngineStatus />
-        <AccountHeader />
-      </div>
+
+        {/* Center: Menu links */}
+        <div className="navbar-center-links" style={{ display: 'flex', gap: 4, position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>
+          {links.map(link => (
+            <button
+              key={link.key}
+              onClick={() => setActiveOverlay(activeOverlay === link.key ? null : link.key)}
+              onMouseEnter={() => setHoveredLink(link.key)}
+              onMouseLeave={() => setHoveredLink(null)}
+              style={{
+                padding: '7px 16px', borderRadius: 10, border: 'none',
+                background: activeOverlay === link.key
+                  ? 'rgba(255,255,255,0.08)'
+                  : hoveredLink === link.key
+                    ? 'rgba(255,255,255,0.04)'
+                    : 'transparent',
+                color: activeOverlay === link.key ? C.text : C.sub,
+                fontFamily: C.D, fontSize: 12, fontWeight: 500,
+                cursor: 'pointer',
+                transition: 'all 0.25s ease',
+              }}
+            >
+              {link.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Right: Stats + Wallet */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Live stats pills */}
+          {(sweeps24h > 0 || vol24h > 0) && (
+            <div className="navbar-right-stats" style={{
+              display: 'flex', alignItems: 'center', gap: 2,
+              padding: '4px 6px', borderRadius: 10,
+              background: 'rgba(255,255,255,0.03)',
+              border: `1px solid ${C.border}`,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 6px', borderRight: `1px solid ${C.border}` }}>
+                <div style={{ width: 4, height: 4, borderRadius: '50%', background: C.blue, boxShadow: `0 0 4px ${C.blue}50` }} />
+                <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>Sweeps</span>
+                <span style={{ fontFamily: C.D, fontSize: 11, fontWeight: 700, color: C.text }}>{sweeps24h}</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 6px' }}>
+                <div style={{ width: 4, height: 4, borderRadius: '50%', background: C.purple, boxShadow: `0 0 4px ${C.purple}50` }} />
+                <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>Vol 24h</span>
+                <span style={{ fontFamily: C.D, fontSize: 11, fontWeight: 700, color: C.text }}>{vol24h.toFixed(4)}</span>
+                <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>ETH</span>
+              </div>
+            </div>
+          )}
+          <EngineStatus />
+          <AccountHeader />
+        </div>
     </nav>
+
+    {/* Mobile menu panel */}
+    <AnimatePresence>
+      {mobileMenuOpen && isMobile && (
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -10 }}
+          transition={{ duration: 0.2, ease: EASE }}
+          style={{
+            position: 'fixed',
+            top: 52,
+            left: 0, right: 0,
+            zIndex: 999,
+            background: 'rgba(10,10,15,0.95)',
+            backdropFilter: 'blur(24px) saturate(180%)',
+            WebkitBackdropFilter: 'blur(24px) saturate(180%)',
+            borderBottom: '1px solid rgba(255,255,255,0.08)',
+            padding: '12px 16px',
+            paddingTop: 'calc(12px + var(--sat, 0px))',
+            display: 'flex', flexDirection: 'column', gap: 4,
+          }}
+        >
+          {links.map(link => (
+            <button
+              key={link.key}
+              onClick={() => {
+                setActiveOverlay(activeOverlay === link.key ? null : link.key)
+                setMobileMenuOpen(false)
+              }}
+              style={{
+                padding: '14px 16px', borderRadius: 12, border: 'none',
+                background: activeOverlay === link.key ? 'rgba(255,255,255,0.08)' : 'transparent',
+                color: activeOverlay === link.key ? C.text : C.sub,
+                fontFamily: C.D, fontSize: 14, fontWeight: 500,
+                cursor: 'pointer', textAlign: 'left',
+                width: '100%',
+              }}
+            >
+              {link.label}
+            </button>
+          ))}
+        </motion.div>
+      )}
+    </AnimatePresence>
+    </>
   )
 }
 
@@ -501,7 +582,7 @@ function EngineStatus() {
 // ═══════════════════════════════════════════════════════════
 //  OVERLAYS — About / How / Security
 // ═══════════════════════════════════════════════════════════
-function OverlayShell({ active, onClose, children }: { active: boolean; onClose: () => void; children: React.ReactNode }) {
+function OverlayShell({ active, onClose, children, isMobile }: { active: boolean; onClose: () => void; children: React.ReactNode; isMobile: boolean }) {
   useEffect(() => {
     if (!active) return
     const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -536,28 +617,48 @@ function OverlayShell({ active, onClose, children }: { active: boolean; onClose:
             exit="hidden"
             transition={{ duration: 0.5, ease: EASE }}
             style={{
-              position: 'fixed', top: 72, left: '50%', transform: 'translateX(-50%)',
-              width: '90%', maxWidth: 700, maxHeight: 'calc(100vh - 100px)',
-              overflowY: 'auto', zIndex: 950,
-              background: C.surface, border: `1px solid ${C.border}`,
-              borderRadius: 20, padding: '32px 36px',
-              boxShadow: '0 40px 100px rgba(0,0,0,0.6)',
+              position: 'fixed',
+              top: isMobile ? 0 : 72,
+              left: isMobile ? 0 : '50%',
+              right: isMobile ? 0 : 'auto',
+              bottom: isMobile ? 0 : 'auto',
+              transform: isMobile ? 'none' : 'translateX(-50%)',
+              width: isMobile ? '100%' : '90%',
+              maxWidth: isMobile ? '100%' : 700,
+              maxHeight: isMobile ? '100%' : 'calc(100vh - 100px)',
+              height: isMobile ? '100%' : 'auto',
+              overflowY: 'auto',
+              WebkitOverflowScrolling: 'touch',
+              zIndex: 950,
+              background: C.surface,
+              border: isMobile ? 'none' : `1px solid ${C.border}`,
+              borderRadius: isMobile ? 0 : 20,
+              padding: isMobile ? '16px 16px 32px' : '32px 36px',
+              paddingTop: isMobile ? 'calc(16px + var(--sat, 0px))' : '32px',
+              boxShadow: isMobile ? 'none' : '0 40px 100px rgba(0,0,0,0.6)',
             }}
           >
             {/* Close button */}
             <button
               onClick={onClose}
               style={{
-                position: 'absolute', top: 16, right: 16,
-                width: 32, height: 32, borderRadius: 10,
+                position: isMobile ? 'fixed' : 'absolute',
+                top: isMobile ? 'calc(12px + var(--sat, 0px))' : 16,
+                right: 16,
+                width: isMobile ? 40 : 32,
+                height: isMobile ? 40 : 32,
+                borderRadius: 10,
                 background: 'rgba(255,255,255,0.04)',
                 border: `1px solid ${C.border}`, color: C.dim,
-                cursor: 'pointer', fontSize: 14,
+                cursor: 'pointer', fontSize: isMobile ? 18 : 14,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 transition: 'all 0.2s',
+                zIndex: 10,
               }}
             >✕</button>
-            {children}
+            <div className="overlay-content">
+              {children}
+            </div>
           </motion.div>
         </>
       )}
@@ -1030,7 +1131,7 @@ function SecurityOverlay() {
 //  HERO TITLE — AnimatePresence mode="wait" for no overlap
 // ═══════════════════════════════════════════════════════════
 
-function HeroTitle({ view, setView, isConnected }: { view: View; setView: (v: View) => void; isConnected: boolean }) {
+function HeroTitle({ view, setView, isMobile }: { view: View; setView: (v: View) => void; isMobile?: boolean }) {
   return (
     <div style={{ display: 'grid', placeItems: 'center', position: 'relative', width: '100%' }}>
       {/* Tagline */}
@@ -1038,9 +1139,10 @@ function HeroTitle({ view, setView, isConnected }: { view: View; setView: (v: Vi
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: EASE }}
+        className="hero-title"
         style={{
           fontFamily: C.D,
-          fontSize: 'clamp(40px, 6.0vw, 58px)',
+          fontSize: isMobile ? 'clamp(20px, 6vw, 28px)' : 'clamp(40px, 6.0vw, 58px)',
           fontWeight: 700,
           letterSpacing: '-0.02em',
           textAlign: 'center',
@@ -1057,43 +1159,28 @@ function HeroTitle({ view, setView, isConnected }: { view: View; setView: (v: Vi
         }}>Crypto Payments. Fully Compliant.</span>
       </motion.div>
 
-      {/* Subtitle */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: EASE, delay: 0.1 }}
-        style={{
-          fontFamily: C.S,
-          fontSize: 'clamp(12px, 1.5vw, 20px)',
-          fontWeight: 400,
-          letterSpacing: '0.02em',
-          textAlign: 'center',
-          color: C.sub,
-          marginBottom: 1,
-        }}
-      >
-        Built for European Businesses
-        </motion.div>
-
-      {/* CTA — only when wallet not connected */}
-      {!isConnected && (
-        <motion.button
+      {/* Subtitle — hidden on mobile */}
+      {!isMobile && (
+        <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.65, duration: 0.5, ease: EASE }}
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.98 }}
+          transition={{ duration: 0.6, ease: EASE, delay: 0.1 }}
+          className="hero-subtitle"
           style={{
-            padding: '12px 32px', borderRadius: 14, border: 'none',
-            background: 'linear-gradient(135deg, #3B82F6, #6366F1)',
-            color: '#fff', fontFamily: C.D, fontSize: 14, fontWeight: 600,
-            cursor: 'pointer', letterSpacing: '-0.01em',
-            boxShadow: '0 4px 20px rgba(59,130,246,0.25)',
+            fontFamily: C.S,
+            fontSize: 'clamp(12px, 1.5vw, 20px)',
+            fontWeight: 400,
+            letterSpacing: '0.02em',
+            textAlign: 'center',
+            color: C.sub,
+            marginBottom: 1,
           }}
         >
-          Connect Wallet
-        </motion.button>
+          Built for European Businesses
+        </motion.div>
       )}
+
+      {/* CTA removed — wallet connection via navbar button */}
     </div>
   )
 }
@@ -1115,6 +1202,13 @@ export default function Home() {
   const [activeOverlay, setActiveOverlay] = useState<Overlay>(null)
   const [showIntro, setShowIntro] = useState(false)
   const [ready, setReady] = useState(false)
+  const [isMobileHome, setIsMobileHome] = useState(false)
+  useEffect(() => {
+    const check = () => setIsMobileHome(window.innerWidth < 768)
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
 
   // Sweep stats for top bar
   const { daily } = useSweepStats(address)
@@ -1175,43 +1269,43 @@ export default function Home() {
       </div>
 
       {/* Navbar */}
-      <Navbar view={view} setView={setView} activeOverlay={activeOverlay} setActiveOverlay={setActiveOverlay} sweeps24h={sweeps24h} vol24h={vol24h} />
+      <Navbar view={view} setView={setView} activeOverlay={activeOverlay} setActiveOverlay={setActiveOverlay} sweeps24h={sweeps24h} vol24h={vol24h} unseenCount={unseenCount} />
 
       {/* Network + Gas — fixed top-right below navbar */}
-      {ready && <NetworkGasWidget />}
+      {ready && !isMobileHome && <NetworkGasWidget />}
 
       {/* Overlays */}
-      <OverlayShell active={activeOverlay === 'about'} onClose={() => setActiveOverlay(null)}>
+      <OverlayShell isMobile={isMobileHome} active={activeOverlay === 'about'} onClose={() => setActiveOverlay(null)}>
         <AboutOverlay />
       </OverlayShell>
-      <OverlayShell active={activeOverlay === 'how'} onClose={() => setActiveOverlay(null)}>
+      <OverlayShell isMobile={isMobileHome} active={activeOverlay === 'how'} onClose={() => setActiveOverlay(null)}>
         <HowOverlay />
       </OverlayShell>
-      <OverlayShell active={activeOverlay === 'security'} onClose={() => setActiveOverlay(null)}>
+      <OverlayShell isMobile={isMobileHome} active={activeOverlay === 'security'} onClose={() => setActiveOverlay(null)}>
         <SecurityOverlay />
       </OverlayShell>
-      <OverlayShell active={activeOverlay === 'compliance'} onClose={() => setActiveOverlay(null)}>
+      <OverlayShell isMobile={isMobileHome} active={activeOverlay === 'compliance'} onClose={() => setActiveOverlay(null)}>
         <ComplianceOverlay />
       </OverlayShell>
-      <OverlayShell active={activeOverlay === 'developers'} onClose={() => setActiveOverlay(null)}>
+      <OverlayShell isMobile={isMobileHome} active={activeOverlay === 'developers'} onClose={() => setActiveOverlay(null)}>
         <DevelopersOverlay />
       </OverlayShell>
-      <OverlayShell active={activeOverlay === 'pricing'} onClose={() => setActiveOverlay(null)}>
+      <OverlayShell isMobile={isMobileHome} active={activeOverlay === 'pricing'} onClose={() => setActiveOverlay(null)}>
         <PricingOverlay />
       </OverlayShell>
 
       {/* Main content — padded below navbar */}
-      <main style={{
-        minHeight: '100vh',
-        paddingTop: 'clamp(90px, 12vh, 140px)',
-        paddingBottom: 60, paddingLeft: 16, paddingRight: 16,
+      <main className="main-content" style={{
+        minHeight: '100dvh',
+        paddingTop: isMobileHome ? '60px' : 'clamp(80px, 12vh, 140px)',
+        paddingBottom: `calc(60px + var(--sab, 0px))`, paddingLeft: 16, paddingRight: 16,
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         opacity: ready ? 1 : 0, transition: 'opacity 0.9s ease',
       }}>
 
         {/* Hero */}
-        <div style={{ marginBottom: 28, width: '100%', maxWidth: 900 }}>
-          <HeroTitle view={view} setView={setView} isConnected={isConnected} />
+        <div style={{ marginBottom: isMobileHome ? 8 : 28, width: '100%', maxWidth: 900 }}>
+          <HeroTitle view={view} setView={setView} isMobile={isMobileHome} />
         </div>
 
         {/* === TAB SWITCHER — sliding pill indicator === */}
@@ -1220,15 +1314,15 @@ export default function Home() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease: SPRING, delay: 0.15 }}
-            className="bf-blur-16"
+            className="tab-switcher bf-blur-16"
             style={{
               zIndex: 2,
               position: 'relative',
               background: 'rgba(255,255,255,0.04)',
               border: '1px solid rgba(255,255,255,0.10)',
               borderRadius: 18,
-              marginBottom: 28,
-              padding: '5px 6px',
+              marginBottom: isMobileHome ? 6 : 28,
+              padding: isMobileHome ? '3px 4px' : '5px 6px',
               boxShadow: '0 4px 24px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.06)',
               display: 'flex',
               gap: 2,
@@ -1247,13 +1341,13 @@ export default function Home() {
                 onClick={() => setView(v.key)}
                 style={{
                   position: 'relative',
-                  padding: '10px 22px',
+                  padding: isMobileHome ? '7px 12px' : '10px 22px',
                   borderRadius: 13,
                   border: 'none',
                   background: 'transparent',
                   color: view === v.key ? '#fff' : 'rgba(255,255,255,0.45)',
                   fontFamily: C.D,
-                  fontSize: 13,
+                  fontSize: isMobileHome ? 11 : 13,
                   fontWeight: 700,
                   letterSpacing: '-0.01em',
                   cursor: 'pointer',
@@ -1275,7 +1369,12 @@ export default function Home() {
                     transition={{ type: 'spring', stiffness: 420, damping: 38 }}
                   />
                 )}
-                <span style={{ position: 'relative', zIndex: 1 }}>{v.label}</span>
+                <span style={{ position: 'relative', zIndex: 1 }}>
+                  <span className="tab-label-full">{v.label}</span>
+                  <span className="tab-label-short">
+                    {v.key === 'send' ? '↗ Send' : v.key === 'swap' ? '↗ Swap' : '↗ CMD'}
+                  </span>
+                </span>
                 {/* Notification badge for Command Center */}
                 {v.key === 'command' && unseenCount > 0 && (
                   <motion.span
@@ -1306,7 +1405,7 @@ export default function Home() {
           maxWidth: 480,
           background: 'rgba(8,12,30,0.72)',
           border: '1px solid rgba(255,255,255,0.18)',
-          borderRadius: 20,
+          borderRadius: isMobileHome ? 16 : 20,
           boxShadow: '0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.15)',
           overflow: 'hidden',
           position: 'relative',
@@ -1323,7 +1422,7 @@ export default function Home() {
 
           {/* Command Center — always mounted */}
           <div style={view === 'command' ? panelActive : panelHidden}>
-            <CommandCenter ownerAddress={address} chainId={chainId} />
+            <CommandCenter ownerAddress={address} chainId={chainId} isVisible={view === 'command'} />
           </div>
         </div>
 
@@ -1339,7 +1438,7 @@ export default function Home() {
         maxWidth: 960, margin: '0 auto',
       }}>
         {/* 4-column grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 32, marginBottom: 36 }}>
+        <div className="footer-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 32, marginBottom: 36 }}>
           {/* Product */}
           <div>
             <div style={{ fontFamily: C.D, fontSize: 11, fontWeight: 700, color: C.text, textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 14 }}>

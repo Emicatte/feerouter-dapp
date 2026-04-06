@@ -33,6 +33,7 @@ from app.models.forwarding_models import (
 )
 from app.services.cache_service import get_redis
 from app.services.circuit_breaker import CircuitBreaker, CircuitOpenError
+from app.services.rpc_manager import get_rpc_manager
 
 logger = logging.getLogger("sweep_service")
 
@@ -82,20 +83,8 @@ async def refresh_active_rules_gauge():
 #  CONSTANTS
 # ═══════════════════════════════════════════════════════════════
 
-RPC_URLS: dict[int, str] = {
-    8453:  "https://mainnet.base.org",
-    84532: "https://sepolia.base.org",
-    1:     "https://eth.llamarpc.com",
-    42161: "https://arb1.arbitrum.io/rpc",
-}
-
-# Fallback RPC URLs — tried when primary is down (circuit open)
-RPC_FALLBACK_URLS: dict[int, list[str]] = {
-    8453:  ["https://base.llamarpc.com", "https://1rpc.io/base"],
-    84532: ["https://sepolia.base.org"],
-    1:     ["https://1rpc.io/eth", "https://rpc.ankr.com/eth"],
-    42161: ["https://1rpc.io/arb", "https://rpc.ankr.com/arbitrum"],
-}
+# Supported chains (provider URLs are managed by RPCManager)
+SUPPORTED_CHAINS: set[int] = {8453, 84532, 1, 42161}
 
 CHAIN_NAMES: dict[int, str] = {
     8453: "Base", 84532: "Base Sepolia",
@@ -131,63 +120,6 @@ RETRY_BASE_DELAY = 10  # seconds
 LOCK_TTL = 300          # 5 minutes
 
 
-# ═══════════════════════════════════════════════════════════════
-#  RPC HELPER (with circuit breaker + fallback)
-# ═══════════════════════════════════════════════════════════════
-
-_rpc_cb = CircuitBreaker(
-    name="alchemy_rpc",
-    failure_threshold=5,
-    recovery_timeout=30.0,
-    half_open_max_calls=1,
-)
-
-
-async def _rpc_call_raw(
-    url: str, method: str, params: list, chain_id: int, timeout: int = 10,
-) -> Any:
-    """Low-level JSON-RPC call to a specific URL."""
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            url,
-            json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params},
-            timeout=timeout,
-        )
-        data = resp.json()
-    if "error" in data:
-        raise RuntimeError(f"RPC {method} error on chain {chain_id}: {data['error']}")
-    return data.get("result")
-
-
-async def _rpc_call(chain_id: int, method: str, params: list, timeout: int = 10) -> Any:
-    """
-    Execute a JSON-RPC call with circuit breaker protection.
-
-    If the primary RPC is down (circuit OPEN), tries fallback URLs sequentially.
-    """
-    rpc = RPC_URLS.get(chain_id, RPC_URLS[8453])
-
-    try:
-        return await _rpc_cb.call(
-            _rpc_call_raw, rpc, method, params, chain_id, timeout,
-        )
-    except CircuitOpenError:
-        # Primary is down — try fallback URLs directly (no CB)
-        fallbacks = RPC_FALLBACK_URLS.get(chain_id, [])
-        for fb_url in fallbacks:
-            try:
-                logger.info(
-                    "RPC circuit open — trying fallback %s for chain %d",
-                    fb_url, chain_id,
-                )
-                return await _rpc_call_raw(fb_url, method, params, chain_id, timeout)
-            except Exception as fb_err:
-                logger.warning("Fallback RPC %s failed: %s", fb_url, fb_err)
-                continue
-        raise RuntimeError(
-            f"All RPC endpoints failed for chain {chain_id} (primary circuit OPEN, "
-            f"{len(fallbacks)} fallbacks exhausted)"
-        )
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -310,7 +242,8 @@ def _check_token_filter(rule: ForwardingRule, incoming_symbol: str) -> tuple[boo
 async def _check_gas_limit(chain_id: int, gas_limit_gwei: int) -> tuple[bool, float, Optional[str]]:
     """Check that current gas price doesn't exceed the rule's gas_limit_gwei."""
     try:
-        raw = await _rpc_call(chain_id, "eth_gasPrice", [])
+        rpc = get_rpc_manager(chain_id)
+        raw = await rpc.call("eth_gasPrice", [])
         gas_wei = int(raw, 16)
         gas_gwei = gas_wei / 1e9
     except Exception as e:
@@ -486,9 +419,11 @@ async def estimate_gas_cost(
     mult = GAS_MULT.get(strategy, 1.1)
 
     # Gas limit estimation
+    rpc = get_rpc_manager(chain_id)
+
     if tx_params:
         try:
-            raw_estimate = await _rpc_call(chain_id, "eth_estimateGas", [tx_params])
+            raw_estimate = await rpc.call("eth_estimateGas", [tx_params])
             gas_limit = int(int(raw_estimate, 16) * 1.2)  # 20% buffer
         except Exception:
             gas_limit = 65000 if tx_params.get("data") else 21000
@@ -496,13 +431,13 @@ async def estimate_gas_cost(
         gas_limit = 21000
 
     # Gas price
-    raw_price = await _rpc_call(chain_id, "eth_gasPrice", [])
+    raw_price = await rpc.call("eth_gasPrice", [])
     base_gas_wei = int(raw_price, 16)
 
     if chain_id in EIP1559_CHAINS:
         # EIP-1559 type 2 transaction
         try:
-            raw_priority = await _rpc_call(chain_id, "eth_maxPriorityFeePerGas", [])
+            raw_priority = await rpc.call("eth_maxPriorityFeePerGas", [])
             priority_fee = int(raw_priority, 16)
         except Exception:
             priority_fee = int(0.001 * 1e9)  # 0.001 gwei fallback (Base has very low priority fees)
@@ -722,7 +657,7 @@ async def execute_single_sweep(
     """
     _t0 = _time.monotonic()
 
-    if chain_id not in RPC_URLS:
+    if chain_id not in SUPPORTED_CHAINS:
         SWEEP_TOTAL.labels(status="failed", chain_id=str(chain_id)).inc()
         return {"status": "failed", "error": f"Chain {chain_id} not supported"}
 
@@ -769,7 +704,8 @@ async def execute_single_sweep(
 
             # ── Build TX params for gas estimation ─────────
             account = Account.from_key(pk)
-            nonce_raw = await _rpc_call(chain_id, "eth_getTransactionCount", [source, "latest"])
+            rpc = get_rpc_manager(chain_id)
+            nonce_raw = await rpc.consensus_call("eth_getTransactionCount", [source, "latest"])
             nonce = int(nonce_raw, 16)
 
             if is_erc20:
@@ -850,10 +786,10 @@ async def execute_single_sweep(
             signed = account.sign_transaction(tx)
             raw_hex = "0x" + signed.raw_transaction.hex()
 
-            # ── Send transaction ──────────────────────────
-            result_raw = await _rpc_call(chain_id, "eth_sendRawTransaction", [raw_hex], timeout=15)
+            # ── Send transaction (primary only — never duplicate) ──
+            result_raw = await rpc.send_raw_transaction(raw_hex)
 
-            # If _rpc_call didn't raise, result_raw is the tx hash
+            # If send_raw_transaction didn't raise, result_raw is the tx hash
             tx_hash = result_raw if isinstance(result_raw, str) else ""
 
             await db.execute(
@@ -888,6 +824,63 @@ async def execute_single_sweep(
                 f"{amount_human:.6f}", token_symbol,
                 destination[:10], tx_hash[:16] if tx_hash else "?",
             )
+
+            # ── Ledger double-entry recording (non-blocking) ──
+            try:
+                from app.services.ledger_service import create_payment_entries
+                from app.models.ledger_models import Account, Transaction
+                from decimal import Decimal
+                import uuid as _uuid
+
+                async with async_session() as ledger_db:
+                    # Trova o crea account per source e destination
+                    from sqlalchemy import select as _sel
+
+                    src_acc = (await ledger_db.execute(
+                        _sel(Account).where(Account.address == source.lower())
+                    )).scalar_one_or_none()
+                    dst_acc = (await ledger_db.execute(
+                        _sel(Account).where(Account.address == destination.lower())
+                    )).scalar_one_or_none()
+
+                    if src_acc and dst_acc:
+                        # Crea la transazione ledger
+                        tx_obj = Transaction(
+                            idempotency_key=f"sweep:{sweep_id}:{tx_hash or _uuid.uuid4()}",
+                            tx_type="SWEEP",
+                            status="COMPLETED",
+                            tx_hash=tx_hash,
+                            chain_id=chain_id,
+                            reference=f"Sweep #{sweep_id}",
+                        )
+                        ledger_db.add(tx_obj)
+                        await ledger_db.flush()
+
+                        # Trova un account treasury per le fee (se esiste)
+                        treasury = (await ledger_db.execute(
+                            _sel(Account).where(
+                                Account.account_type == "treasury",
+                                Account.currency == token_symbol,
+                            )
+                        )).scalar_one_or_none()
+
+                        fee = Decimal("0")
+                        await create_payment_entries(
+                            session=ledger_db,
+                            tx_id=tx_obj.id,
+                            sender_account_id=src_acc.id,
+                            recipient_account_id=dst_acc.id,
+                            treasury_account_id=treasury.id if treasury else dst_acc.id,
+                            gross_amount=Decimal(str(amount_wei)) / Decimal(10 ** token_decimals),
+                            fee_amount=fee,
+                            currency=token_symbol,
+                        )
+                        await ledger_db.commit()
+                        logger.info("[sweep] Ledger recorded for sweep #%d", sweep_id)
+                    else:
+                        logger.debug("[sweep] Ledger skip: accounts not found for %s / %s", source[:10], destination[:10])
+            except Exception as ledger_err:
+                logger.warning("[sweep] Ledger recording failed (non-blocking): %s", ledger_err)
 
             await _release_lock(f"exec:{sweep_id}")
             SWEEP_TOTAL.labels(status="completed", chain_id=str(chain_id)).inc()
@@ -1189,6 +1182,16 @@ async def process_incoming_tx(
 
     to_lower = to_addr.lower()
     processed = 0
+
+    # ── AML screening (non-blocking on failure) ──────────
+    try:
+        from app.services.aml_service import screen_transaction
+        aml_result = await screen_transaction(from_addr, to_addr, str(int(Decimal(str(value)) * Decimal(10 ** 18))))
+        if aml_result["blocked"]:
+            logger.warning("AML BLOCKED TX from %s to %s: %s", from_addr[:10], to_addr[:10], aml_result["flags"])
+            return 0  # Non processare
+    except Exception as e:
+        logger.warning("AML screening failed (fail-open): %s", e)
 
     async with async_session() as db:
         # Find active, unpaused rules for this source address

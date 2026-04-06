@@ -1,5 +1,5 @@
 # ── Core ──────────────────────────────────────
-fastapi==0.115.0
+fastapi==0.116.2
 uvicorn[standard]==0.30.0
 pydantic==2.9.0
 pydantic-settings==2.5.0
@@ -36,7 +36,7 @@ boto3>=1.34.0
 python-json-logger==3.2.1
 
 # ── Monitoring ────────────────────────────────
-sentry-sdk[fastapi]==1.40.0
+sentry-sdk[fastapi]==2.8.0
 prometheus-fastapi-instrumentator==7.0.0
 prometheus-client>=0.20.0
 
@@ -46,6 +46,7 @@ eth-abi>=5.0.0
 
 # ── HTTP Client ───────────────────────────────
 httpx==0.27.0
+urllib3>=2.6.3
 
 # ── Testing ───────────────────────────────────
 pytest==8.3.0

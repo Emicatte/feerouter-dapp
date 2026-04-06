@@ -308,6 +308,13 @@ async def alchemy_webhook(request: Request):
         if exc.status_code == 200:
             # Duplicate webhook — ACK so Alchemy doesn't retry
             return {"status": "duplicate", "reason": exc.reason}
+        if exc.status_code == 503:
+            # Redis down — tell Alchemy to retry later (fail-closed)
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=503,
+                content={"status": "retry_later", "reason": "idempotency_unavailable"},
+            )
         raise HTTPException(status_code=exc.status_code, detail=exc.reason)
 
     # ── Extract activity ──────────────────────────────────

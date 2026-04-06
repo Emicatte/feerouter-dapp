@@ -1,5 +1,5 @@
 """
-RPagos Backend — Redis Cache Service
+RSend Cache Service — Redis connection con health tracking.
 
 Cache per:
   - Token metadata da Alchemy (TTL: 10 min)
@@ -7,7 +7,7 @@ Cache per:
   - Portfolio data (TTL: 30 sec)
   - Rate limiting per IP (sliding window)
 
-Graceful degradation:
+Graceful degradation (solo per cache, NON per idempotency):
   - Redis down → in-memory LRU cache fallback
   - Circuit breaker tracks Redis health for /health/dependencies
 """
@@ -24,9 +24,14 @@ import redis.asyncio as redis
 from app.config import get_settings
 from app.services.circuit_breaker import CircuitBreaker, CircuitOpenError
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("cache_service")
 
 _pool: Optional[redis.Redis] = None
+
+# ── Health tracking (cached 5s) ──────────────────────────
+_redis_healthy: bool = False
+_last_health_check: float = 0
+_HEALTH_CHECK_INTERVAL = 5  # secondi
 
 _redis_cb = CircuitBreaker(
     name="redis",
@@ -85,28 +90,54 @@ _redis_down_warned = False
 #  Redis Connection
 # ═══════════════════════════════════════════════════════════
 
-async def get_redis() -> redis.Redis:
-    """Lazy-init Redis connection pool."""
+async def get_redis() -> Optional[redis.Redis]:
+    """Lazy-init Redis connection pool. Returns None if not configured."""
     global _pool
     if _pool is None:
         settings = get_settings()
-        url = getattr(settings, 'redis_url', 'redis://localhost:6379/0')
-        _pool = redis.from_url(
-            url,
-            decode_responses=True,
-            max_connections=20,
-        )
+        url = getattr(settings, 'redis_url', None)
+        if not url:
+            return None
+        try:
+            _pool = redis.from_url(
+                url,
+                decode_responses=True,
+                max_connections=20,
+                socket_connect_timeout=3,
+                socket_timeout=3,
+                retry_on_timeout=True,
+                health_check_interval=30,
+            )
+            await _pool.ping()
+            logger.info("Redis connected: %s", url)
+        except Exception as e:
+            logger.error("Redis connection failed: %s", e)
+            _pool = None
     return _pool
+
+
+async def is_redis_healthy() -> bool:
+    """Check Redis health con cache di 5 secondi."""
+    global _redis_healthy, _last_health_check
+    now = time.time()
+    if now - _last_health_check < _HEALTH_CHECK_INTERVAL:
+        return _redis_healthy
+    try:
+        r = await get_redis()
+        if r:
+            await r.ping()
+            _redis_healthy = True
+        else:
+            _redis_healthy = False
+    except Exception:
+        _redis_healthy = False
+    _last_health_check = now
+    return _redis_healthy
 
 
 async def _redis_ping() -> bool:
     """Check if Redis is reachable (used by health checks)."""
-    try:
-        r = await get_redis()
-        await r.ping()
-        return True
-    except Exception:
-        return False
+    return await is_redis_healthy()
 
 
 # ═══════════════════════════════════════════════════════════
@@ -257,7 +288,8 @@ async def check_rate_limit(
 
 async def close_redis() -> None:
     """Chiudi il pool Redis."""
-    global _pool
+    global _pool, _redis_healthy
     if _pool:
         await _pool.close()
         _pool = None
+        _redis_healthy = False

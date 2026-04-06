@@ -28,6 +28,7 @@ import { useForwardingRules, type CreateRulePayload } from '../lib/useForwarding
 import { useSweepWebSocket } from '../lib/useSweepWebSocket'
 import { useSweepStats } from '../lib/useSweepStats'
 import { useDistributionList, type DistributionEntry } from '../lib/useDistributionList'
+import { mutationHeaders, parseRSendError } from '../lib/rsendFetch'
 
 
 // ═══════════════════════════════════════════════════════════
@@ -274,9 +275,11 @@ function Tip({ text, children }: { text: string; children: React.ReactNode }) {
 export default function CommandCenter({
   ownerAddress,
   chainId: chainIdProp,
+  isVisible = true,
 }: {
   ownerAddress?: string
   chainId?: number
+  isVisible?: boolean
 }) {
   const { address: hookAddr, isConnected } = useAccount()
   const hookChainId = useChainId()
@@ -456,7 +459,7 @@ export default function CommandCenter({
                 <HistoryTab address={address!} ethPrice={ethPrice} stats={stats} rules={rules} />
               )}
               {tab === 'analytics' && (
-                <AnalyticsTab stats={stats} daily={daily} loading={statsLoading} ethPrice={ethPrice} />
+                <AnalyticsTab stats={stats} daily={daily} loading={statsLoading} ethPrice={ethPrice} isVisible={isVisible} />
               )}
               {tab === 'groups' && (
                 <GroupsTab
@@ -2399,8 +2402,8 @@ function HistoryTab({ address, ethPrice, stats: overallStats, rules }: { address
 //  ANALYTICS TAB
 // ═══════════════════════════════════════════════════════════
 
-function AnalyticsTab({ stats: parentStats, daily: parentDaily, loading: parentLoading, ethPrice }: {
-  stats: any; daily: any[]; loading: boolean; ethPrice: number
+function AnalyticsTab({ stats: parentStats, daily: parentDaily, loading: parentLoading, ethPrice, isVisible = true }: {
+  stats: any; daily: any[]; loading: boolean; ethPrice: number; isVisible?: boolean
 }) {
   const [tokenBreakdown, setTokenBreakdown] = useState<{ name: string; value: number }[]>([])
   const [topRoutes, setTopRoutes] = useState<{ label: string; volume: number }[]>([])
@@ -2565,7 +2568,9 @@ function AnalyticsTab({ stats: parentStats, daily: parentDaily, loading: parentL
         <div style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 10 }}>
           Volume ({period === 'all' ? 'All Time' : period})
         </div>
-        {loading ? (
+        {!isVisible ? (
+          <div style={{ height: 140 }} />
+        ) : loading ? (
           <Sk w="100%" h={140} r={8} />
         ) : daily.length > 0 ? (
           <ResponsiveContainer width="100%" height={140}>
@@ -2643,7 +2648,9 @@ function AnalyticsTab({ stats: parentStats, daily: parentDaily, loading: parentL
           <div style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 8, paddingLeft: 4 }}>
             Token Split
           </div>
-          {tokenBreakdown.length > 0 ? (
+          {!isVisible ? (
+            <div style={{ height: 80 }} />
+          ) : tokenBreakdown.length > 0 ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <ResponsiveContainer width={80} height={80}>
                 <PieChart>
@@ -2677,7 +2684,9 @@ function AnalyticsTab({ stats: parentStats, daily: parentDaily, loading: parentL
           <div style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 8, paddingLeft: 4 }}>
             Status
           </div>
-          {statusBreakdown.length > 0 ? (
+          {!isVisible ? (
+            <div style={{ height: 80 }} />
+          ) : statusBreakdown.length > 0 ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <ResponsiveContainer width={80} height={80}>
                 <PieChart>
@@ -2719,7 +2728,9 @@ function AnalyticsTab({ stats: parentStats, daily: parentDaily, loading: parentL
             </span>
           )}
         </div>
-        {loading ? (
+        {!isVisible ? (
+          <div style={{ height: 120 }} />
+        ) : loading ? (
           <Sk w="100%" h={120} r={8} />
         ) : daily.length > 0 ? (
           <ResponsiveContainer width="100%" height={120}>
@@ -3112,7 +3123,7 @@ function SettingsTab({
     try {
       const res = await fetch(`${BACKEND}/api/v1/dac8/generate?fiscal_year=${dac8Year}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: mutationHeaders(),
         body: JSON.stringify({ owner_address: address }),
       })
       if (res.ok) {
@@ -3125,8 +3136,7 @@ function SettingsTab({
         URL.revokeObjectURL(url)
         setDac8Result('Report downloaded')
       } else {
-        const err = await res.json().catch(() => ({}))
-        setDac8Result(err.detail || `Error ${res.status}`)
+        setDac8Result(await parseRSendError(res))
       }
     } catch (e) {
       setDac8Result(e instanceof Error ? e.message : 'Network error')

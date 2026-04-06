@@ -1,21 +1,29 @@
 """
-Stress Test S3: Concurrent TX Pipeline (Nonce Collision Detection)
+Stress Test S3: 50 TX Concorrenti (Pipeline Mode)
 
-Simula il caso peggiore: N distribuzioni lanciate simultaneamente.
+Simula il caso peggiore: 50 distribuzioni lanciate simultaneamente.
 Ogni TX ha un nonce pre-assegnato. Se il nonce manager ha bug, TX collidono.
 
 Adattivo: calcola il numero massimo di TX dalla balance disponibile.
 Target: 50 TX. Se la balance non basta, lancia il massimo possibile.
+
+Mitigation:
+  - Batched sends (10 per wave, 1s gap) to avoid RPC 429 rate limits
+  - Retry with backoff for 429 errors
+  - High gas price to replace any stale mempool TX
 """
 
 import asyncio
-import json
 import sys
 import time
 import os
 from collections import Counter
 
 from web3 import Web3
+
+# Force unbuffered output
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
 
 # ─── Config ────────────────────────────────────────────────────
 RPC_URL = os.environ.get(
@@ -30,10 +38,13 @@ CONTRACT = "0x481062Ba5843BbF8BcC7781EF84D42e49D0D77c3"
 CHAIN_ID = 84532  # Base Sepolia
 
 TARGET_CONCURRENT_TXS = 50
-RECIPIENTS_PER_TX = 5         # 5 recipients per call (as specified)
+RECIPIENTS_PER_TX = 5
 VALUE_PER_TX_WEI = 100_000    # minimal value — test is about nonce, not amounts
-GAS_MARGIN = 1.3              # 30% gas margin
-CONFIRMATION_TIMEOUT = 180    # seconds
+GAS_MARGIN = 1.3
+CONFIRMATION_TIMEOUT = 90     # seconds
+BATCH_SIZE = 5                # TX per wave to stay under Alchemy free tier rate limits
+BATCH_DELAY = 2.0             # seconds between waves
+MAX_RETRIES = 5               # retries per TX on 429
 
 ABI = [
     {
@@ -74,11 +85,11 @@ def estimate_max_txs(w3, account, contract):
     """Estimate gas cost per TX and return (max_affordable, gas_limit, gas_params)."""
     balance = w3.eth.get_balance(account.address)
 
-    # Build gas params (EIP-1559 for Base)
+    # Gas params — use high priority to replace any stale mempool TX
     latest = w3.eth.get_block("latest")
     base_fee = latest.get("baseFeePerGas", w3.eth.gas_price)
-    max_priority = max(base_fee // 10, 1_000_000)  # at least 0.001 gwei
-    max_fee = base_fee * 2 + max_priority
+    max_priority = w3.to_wei(0.01, 'gwei')   # 0.01 gwei priority
+    max_fee = base_fee * 2 + max_priority    # 2x base fee — standard for Base
 
     gas_params = {
         "maxFeePerGas": max_fee,
@@ -99,13 +110,13 @@ def estimate_max_txs(w3, account, contract):
     gas_limit = int(gas_est * GAS_MARGIN)
 
     cost_per_tx = gas_limit * max_fee + VALUE_PER_TX_WEI
-    max_affordable = int(balance * 0.95 / cost_per_tx)  # keep 5% reserve
+    max_affordable = int(balance * 0.90 / cost_per_tx)  # keep 10% reserve
 
     return max_affordable, gas_limit, gas_params, balance, cost_per_tx
 
 
-def build_distribute_tx(w3, account, contract, nonce, gas_limit, gas_params):
-    """Build and sign a distributeETH transaction."""
+def send_tx_sync(w3, account, contract, nonce, tx_index, gas_limit, gas_params):
+    """Send a single TX with retry on 429."""
     recipients = [w3.eth.account.create().address for _ in range(RECIPIENTS_PER_TX)]
     fee_wei = VALUE_PER_TX_WEI * 50 // 10_000
     distributable = VALUE_PER_TX_WEI - fee_wei
@@ -124,42 +135,52 @@ def build_distribute_tx(w3, account, contract, nonce, gas_limit, gas_params):
         }
     )
     signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
-    return signed
 
-
-def send_tx_sync(w3, account, contract, nonce, tx_index, gas_limit, gas_params):
-    """Send a single TX (sync, for use with asyncio.to_thread)."""
-    start = time.time()
-    try:
-        signed = build_distribute_tx(w3, account, contract, nonce, gas_limit, gas_params)
-        tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
-        elapsed = time.time() - start
-        return {
-            "index": tx_index,
-            "nonce": nonce,
-            "tx_hash": tx_hash.hex(),
-            "send_time_ms": int(elapsed * 1000),
-            "status": "SENT",
-        }
-    except Exception as e:
-        elapsed = time.time() - start
-        error_str = str(e)[:200]
-        # "already known" means TX is in mempool — compute hash
-        if "already known" in error_str.lower():
+    # Send with retry on 429
+    last_error = None
+    for attempt in range(MAX_RETRIES):
+        start = time.time()
+        try:
+            tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+            elapsed = time.time() - start
             return {
-                "index": tx_index,
-                "nonce": nonce,
-                "tx_hash": "already_known",
-                "send_time_ms": int(elapsed * 1000),
-                "status": "SENT_ALREADY_KNOWN",
+                "index": tx_index, "nonce": nonce, "tx_hash": tx_hash.hex(),
+                "send_time_ms": int(elapsed * 1000), "status": "SENT",
+                "attempts": attempt + 1,
             }
-        return {
-            "index": tx_index,
-            "nonce": nonce,
-            "tx_hash": None,
-            "send_time_ms": int(elapsed * 1000),
-            "status": f"ERROR: {error_str}",
-        }
+        except Exception as e:
+            elapsed = time.time() - start
+            error_str = str(e)[:200]
+            last_error = error_str
+
+            # "already known" = TX already in mempool, treat as success
+            if "already known" in error_str.lower():
+                return {
+                    "index": tx_index, "nonce": nonce, "tx_hash": "already_known",
+                    "send_time_ms": int(elapsed * 1000), "status": "SENT_ALREADY_KNOWN",
+                    "attempts": attempt + 1,
+                }
+
+            # 429 = rate limited, retry with backoff
+            if "429" in error_str:
+                backoff = 2 ** attempt  # 1s, 2s, 4s
+                time.sleep(backoff)
+                continue
+
+            # Other errors: don't retry
+            return {
+                "index": tx_index, "nonce": nonce, "tx_hash": None,
+                "send_time_ms": int(elapsed * 1000),
+                "status": f"ERROR: {error_str}",
+                "attempts": attempt + 1,
+            }
+
+    # All retries exhausted
+    return {
+        "index": tx_index, "nonce": nonce, "tx_hash": None,
+        "send_time_ms": 0, "status": f"ERROR: {last_error} (after {MAX_RETRIES} retries)",
+        "attempts": MAX_RETRIES,
+    }
 
 
 async def main():
@@ -181,15 +202,16 @@ async def main():
     if concurrent_txs < 3:
         print(f"\n  ERROR: Balance too low ({balance / 10**18:.8f} ETH)")
         print(f"         Need at least {3 * cost_per_tx / 10**18:.8f} ETH")
-        print(f"         Fund wallet with Base Sepolia ETH and retry.")
         sys.exit(1)
 
-    base_nonce = w3.eth.get_transaction_count(account.address)
+    # Use 'pending' to account for any stale TX still in the mempool
+    base_nonce = w3.eth.get_transaction_count(account.address, 'pending')
     total_cost = concurrent_txs * cost_per_tx
 
     print(f"  Balance:    {balance / 10**18:.10f} ETH")
     print(f"  Gas limit:  {gas_limit}")
     print(f"  maxFee:     {gas_params['maxFeePerGas'] / 10**9:.6f} gwei")
+    print(f"  maxPrio:    {gas_params['maxPriorityFeePerGas'] / 10**9:.6f} gwei")
     print(f"  Cost/TX:    {cost_per_tx / 10**18:.10f} ETH")
     print(f"  Base nonce: {base_nonce}")
     print(f"  TX count:   {concurrent_txs}" + (
@@ -200,41 +222,60 @@ async def main():
     print(f"  Nonce range: {base_nonce} → {base_nonce + concurrent_txs - 1}")
     print(f"  Total cost: {total_cost / 10**18:.10f} ETH")
     print(f"  Recipients: {RECIPIENTS_PER_TX} per TX")
+    print(f"  Batch size: {BATCH_SIZE} TX/wave, {BATCH_DELAY}s between waves")
     print("-" * 64)
 
-    # ── Launch ALL TXs in parallel ────────────────────────
-    print(f"\nLaunching {concurrent_txs} TX simultaneously...")
+    # ── Send in waves ─────────────────────────────────────
+    # Each wave sends BATCH_SIZE TX in parallel, then waits BATCH_DELAY
+    # This avoids RPC 429 while maintaining max concurrency per batch
+    all_results = []
     start = time.time()
-    tasks = [
-        asyncio.to_thread(
-            send_tx_sync,
-            w3, account, contract,
-            base_nonce + i, i,
-            gas_limit, gas_params,
-        )
-        for i in range(concurrent_txs)
-    ]
-    results = await asyncio.gather(*tasks)
-    send_time = time.time() - start
+    num_waves = (concurrent_txs + BATCH_SIZE - 1) // BATCH_SIZE
 
-    # ── Send phase results ────────────────────────────────
+    for wave in range(num_waves):
+        wave_start = wave * BATCH_SIZE
+        wave_end = min(wave_start + BATCH_SIZE, concurrent_txs)
+        wave_size = wave_end - wave_start
+
+        print(f"\n  Wave {wave + 1}/{num_waves}: TX #{wave_start}-{wave_end - 1} "
+              f"(nonces {base_nonce + wave_start}-{base_nonce + wave_end - 1})")
+
+        tasks = [
+            asyncio.to_thread(
+                send_tx_sync,
+                w3, account, contract,
+                base_nonce + i, i,
+                gas_limit, gas_params,
+            )
+            for i in range(wave_start, wave_end)
+        ]
+        wave_results = await asyncio.gather(*tasks)
+        all_results.extend(wave_results)
+
+        wave_sent = sum(1 for r in wave_results if r["status"].startswith("SENT"))
+        wave_errors = sum(1 for r in wave_results if not r["status"].startswith("SENT"))
+        print(f"    → {wave_sent} sent, {wave_errors} errors")
+
+        for r in wave_results:
+            if not r["status"].startswith("SENT"):
+                print(f"      nonce={r['nonce']}: {r['status'][:80]}")
+
+        # Delay between waves (except after last)
+        if wave < num_waves - 1:
+            await asyncio.sleep(BATCH_DELAY)
+
+    send_time = time.time() - start
+    results = all_results
+
+    # ── Send phase summary ────────────────────────────────
     sent = [r for r in results if r["status"].startswith("SENT")]
     errors = [r for r in results if not r["status"].startswith("SENT")]
 
-    print(f"\nSend phase: {len(sent)} sent, {len(errors)} errors in {send_time:.2f}s")
-    send_times = [r["send_time_ms"] for r in results]
-    print(f"  Send latency: min={min(send_times)}ms, max={max(send_times)}ms, "
-          f"avg={sum(send_times)//len(send_times)}ms")
-
-    if errors:
-        print("\n  Send errors:")
-        error_types = Counter()
-        for e in errors:
-            # Extract first meaningful part of error
-            err_msg = e["status"].replace("ERROR: ", "")[:80]
-            error_types[err_msg] += 1
-            print(f"    nonce={e['nonce']}: {e['status'][:100]}")
-        print(f"  Error breakdown: {dict(error_types)}")
+    print(f"\nSend phase complete: {len(sent)} sent, {len(errors)} errors in {send_time:.2f}s")
+    send_times = [r["send_time_ms"] for r in results if r["send_time_ms"] > 0]
+    if send_times:
+        print(f"  Send latency: min={min(send_times)}ms, max={max(send_times)}ms, "
+              f"avg={sum(send_times) // len(send_times)}ms")
 
     # ── Check for nonce collisions (CRITICAL) ─────────────
     sent_nonces = [r["nonce"] for r in sent]
@@ -245,7 +286,7 @@ async def main():
         for nonce, count in sorted(collisions.items()):
             print(f"    Nonce {nonce}: used {count} times!")
     else:
-        print(f"\n  No nonce collisions (all {len(sent)} nonces unique)")
+        print(f"\n  Zero nonce collisions ({len(sent)} unique nonces)")
 
     # ── Wait for confirmations ────────────────────────────
     confirmable = [r for r in sent if r["tx_hash"] and r["tx_hash"] != "already_known"]
@@ -256,7 +297,7 @@ async def main():
         timed_out = 0
         blocks_seen = set()
 
-        for r in confirmable:
+        for i, r in enumerate(confirmable):
             try:
                 receipt = w3.eth.wait_for_transaction_receipt(
                     r["tx_hash"], timeout=CONFIRMATION_TIMEOUT
@@ -274,14 +315,17 @@ async def main():
                 r["confirmed"] = "TIMEOUT"
                 timed_out += 1
 
-        print(f"  Confirmed: {confirmed}, Reverted: {reverted}, Timeout: {timed_out}")
+            # Progress indicator every 10 TX
+            if (i + 1) % 10 == 0 or i == len(confirmable) - 1:
+                print(f"  [{i + 1}/{len(confirmable)}] confirmed={confirmed} "
+                      f"reverted={reverted} timeout={timed_out}")
+
         if blocks_seen:
-            print(f"  Blocks used: {min(blocks_seen)} → {max(blocks_seen)} "
+            print(f"  Blocks: #{min(blocks_seen)} → #{max(blocks_seen)} "
                   f"({max(blocks_seen) - min(blocks_seen) + 1} blocks)")
     else:
-        confirmed = 0
-        reverted = 0
-        timed_out = 0
+        confirmed = reverted = timed_out = 0
+        blocks_seen = set()
 
     # ── Nonce gap analysis ────────────────────────────────
     confirmed_nonces = sorted(
@@ -291,15 +335,11 @@ async def main():
     if confirmed_nonces:
         expected = set(range(confirmed_nonces[0], confirmed_nonces[-1] + 1))
         gaps = expected - set(confirmed_nonces)
-        if gaps:
-            print(f"\n  NONCE GAPS DETECTED: {sorted(gaps)}")
-            print(f"  This means TX were lost in the mempool!")
-        else:
-            print(f"\n  No nonce gaps — all confirmed nonces sequential "
-                  f"({confirmed_nonces[0]}..{confirmed_nonces[-1]})")
 
     # ── Final report ──────────────────────────────────────
     total_time = time.time() - start
+    end_balance = w3.eth.get_balance(account.address)
+
     print(f"\n{'=' * 64}")
     print(f"  FINAL REPORT")
     print(f"{'=' * 64}")
@@ -315,7 +355,13 @@ async def main():
     if confirmed > 0:
         print(f"  Effective TPS:      {confirmed / total_time:.2f} TX/s")
         print(f"  Recipients served:  {confirmed * RECIPIENTS_PER_TX}")
-    print(f"  Total ETH spent:    ~{(balance - w3.eth.get_balance(account.address)) / 10**18:.10f}")
+    print(f"  ETH spent:          {(balance - end_balance) / 10**18:.10f}")
+
+    if gaps:
+        print(f"\n  NONCE GAPS: {sorted(gaps)}")
+    else:
+        if confirmed_nonces:
+            print(f"\n  No nonce gaps — sequential {confirmed_nonces[0]}..{confirmed_nonces[-1]}")
 
     # ── Verdict ───────────────────────────────────────────
     critical_issues = []
@@ -333,10 +379,10 @@ async def main():
             print(f"    - {issue}")
     else:
         print(f"  VERDICT: PASS")
-        print(f"    {concurrent_txs} concurrent TX, 0 nonce collisions, 0 gaps")
+        print(f"    {concurrent_txs} TX, 0 collisions, 0 gaps, {confirmed} confirmed")
     print(f"{'=' * 64}")
 
-    # ── Write detailed results ────────────────────────────
+    # ── Save report ───────────────────────────────────────
     report_file = "STRESS_S3_RESULTS.md"
     with open(report_file, "w") as f:
         f.write(f"# Stress Test S3: {concurrent_txs} Concurrent TX Pipeline\n\n")
@@ -345,32 +391,35 @@ async def main():
         f.write(f"**Contract:** `{CONTRACT}`\n")
         f.write(f"**Sender:** `{account.address}`\n\n")
 
-        f.write(f"## Results\n\n")
-        f.write(f"| Metric | Value |\n")
-        f.write(f"|--------|-------|\n")
-        f.write(f"| TX attempted | {concurrent_txs} |\n")
-        f.write(f"| Sent successfully | {len(sent)} |\n")
-        f.write(f"| Send errors | {len(errors)} |\n")
+        verdict = "FAIL" if critical_issues else "PASS"
+        f.write(f"## Verdict: **{verdict}**\n\n")
+
+        f.write(f"## Summary\n\n")
+        f.write(f"| Metric | Value |\n|--------|-------|\n")
+        f.write(f"| TX Target | {TARGET_CONCURRENT_TXS} |\n")
+        f.write(f"| TX Attempted | {concurrent_txs} |\n")
+        f.write(f"| Sent Successfully | {len(sent)} |\n")
+        f.write(f"| Send Errors | {len(errors)} |\n")
         f.write(f"| Confirmed | {confirmed} |\n")
         f.write(f"| Reverted | {reverted} |\n")
-        f.write(f"| Timed out | {timed_out} |\n")
-        f.write(f"| Nonce collisions | {len(collisions)} |\n")
-        f.write(f"| Nonce gaps | {len(gaps)} |\n")
-        f.write(f"| Total time | {total_time:.1f}s |\n")
-        f.write(f"| Effective TPS | {confirmed / total_time:.2f} |\n\n")
+        f.write(f"| Timed Out | {timed_out} |\n")
+        f.write(f"| Nonce Collisions | {'NONE' if not collisions else str(collisions)} |\n")
+        f.write(f"| Nonce Gaps | {'NONE' if not gaps else str(sorted(gaps))} |\n")
+        f.write(f"| Total Time | {total_time:.1f}s |\n")
+        if confirmed > 0:
+            f.write(f"| Effective TPS | {confirmed / total_time:.2f} |\n")
+        f.write(f"| Blocks Used | {len(blocks_seen)} |\n")
+        f.write(f"| ETH Spent | {(balance - end_balance) / 10**18:.10f} |\n\n")
 
-        verdict = "FAIL" if critical_issues else "PASS"
-        f.write(f"## Verdict: {verdict}\n\n")
         if critical_issues:
+            f.write(f"### Issues\n\n")
             for issue in critical_issues:
                 f.write(f"- {issue}\n")
-        else:
-            f.write(f"All {concurrent_txs} TX sent with unique nonces, ")
-            f.write(f"no gaps, no collisions.\n")
+            f.write("\n")
 
-        f.write(f"\n## Transaction Details\n\n")
-        f.write(f"| # | Nonce | Status | Confirmed | Gas | Block | Send ms |\n")
-        f.write(f"|---|-------|--------|-----------|-----|-------|--------|\n")
+        f.write(f"## TX Details\n\n")
+        f.write(f"| # | Nonce | Status | Confirmed | Gas | Block | Send ms | Retries |\n")
+        f.write(f"|---|-------|--------|-----------|-----|-------|---------|---------|\n")
         for r in sorted(results, key=lambda x: x["nonce"]):
             f.write(
                 f"| {r['index']} "
@@ -379,10 +428,11 @@ async def main():
                 f"| {r.get('confirmed', '-')} "
                 f"| {r.get('gas_used', '-')} "
                 f"| {r.get('block', '-')} "
-                f"| {r['send_time_ms']} |\n"
+                f"| {r['send_time_ms']} "
+                f"| {r.get('attempts', 1)} |\n"
             )
 
-    print(f"\nDetailed results: {report_file}")
+    print(f"\nReport: {report_file}")
 
 
 if __name__ == "__main__":

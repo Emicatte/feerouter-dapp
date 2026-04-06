@@ -117,27 +117,37 @@ def check_timestamp_freshness(timestamp_str: str) -> bool:
 
 
 # ═══════════════════════════════════════════════════════════════
-#  4. Idempotency (Redis SETNX)
+#  4. Idempotency (Redis SETNX — FAIL-CLOSED)
 # ═══════════════════════════════════════════════════════════════
 
 async def check_idempotency(webhook_id: str) -> bool:
     """Check whether this webhook_id has already been processed.
 
+    FAIL-CLOSED: If Redis is down, returns False and raises 503.
+    Alchemy will retry the webhook when Redis recovers.
+
     Returns:
         True if NEW (not seen before) — proceed with processing.
-        False if DUPLICATE — skip.
-    """
-    try:
-        from app.services.cache_service import get_redis
+        False if DUPLICATE or REDIS DOWN — skip/reject.
 
-        r = await get_redis()
-        key = f"wh:idem:{webhook_id}"
-        is_new = await r.set(key, "1", ex=IDEMPOTENCY_TTL, nx=True)
-        return bool(is_new)
-    except Exception as exc:
-        # Fail open — better to process a duplicate than drop a webhook
-        logger.warning("Idempotency check failed (allowing): %s", exc)
+    Raises:
+        WebhookVerificationError(503) if Redis is unavailable.
+    """
+    from app.services.idempotency_service import check_and_mark
+
+    is_new, reason = await check_and_mark(webhook_id)
+
+    if is_new:
         return True
+
+    if reason == "duplicate":
+        return False
+
+    # Redis unavailable or error → fail-closed with 503
+    raise WebhookVerificationError(
+        f"Idempotency check unavailable: {reason}",
+        status_code=503,
+    )
 
 
 # ═══════════════════════════════════════════════════════════════

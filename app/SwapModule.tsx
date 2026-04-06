@@ -14,6 +14,7 @@ import {
 } from 'viem'
 import { getRegistry, type TokenConfig } from '../lib/contractRegistry'
 import { useSwapQuote } from '../lib/useSwapQuote'
+import { mutationHeaders } from '../lib/rsendFetch'
 
 const BACKEND = process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:8000'
 
@@ -234,7 +235,7 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
       // 1. Oracle signature
       setPhase('signing_oracle')
       const oracleRes = await fetch('/api/oracle/sign', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: mutationHeaders(),
         body: JSON.stringify({
           sender: address,
           recipient: address, // swap to self
@@ -301,7 +302,7 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
     if (!txHash || !tokenIn || !tokenOut || !address) return
     try {
       await fetch(`${BACKEND}/api/v1/tx/callback`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: mutationHeaders(),
         body: JSON.stringify({
           fiscal_ref: `SWAP-${Date.now()}`,
           tx_hash: txHash,
@@ -342,7 +343,7 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
     setPhase('idle'); setAmount(''); setError(''); setTxHash(undefined)
   }
 
-  if (!isConnected || !reg) return null
+  if (!reg) return null
 
   const cardStyle = noCard ? {} : { background: 'rgba(8,12,30,0.72)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 20, overflow: 'hidden', boxShadow: '0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.15)' }
   return (

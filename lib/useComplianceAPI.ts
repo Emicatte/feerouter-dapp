@@ -25,6 +25,7 @@
 
 import { useCallback, useEffect } from 'react'
 import type { ComplianceRecord } from './useComplianceEngine'
+import { idempotencyKey } from './rsendFetch'
 
 // ── Config ─────────────────────────────────────────────────────────────────
 const API_BASE    = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
@@ -136,6 +137,7 @@ async function sendRecord(record: ComplianceRecord): Promise<boolean> {
         'Content-Type': 'application/json',
         'X-Signature':  signature,
         'X-Client':     'feerouter-dapp/1.0',
+        'X-Idempotency-Key': idempotencyKey(),
       },
       body:    payload,
       signal:  AbortSignal.timeout(8000), // 8s timeout

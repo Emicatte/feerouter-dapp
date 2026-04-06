@@ -1,3 +1,5 @@
+import { idempotencyKey, parseRSendError } from './rsendFetch'
+
 const BACKEND_URL = process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:8000'
 const HMAC_SECRET = process.env.NEXT_PUBLIC_HMAC_SECRET || ''
 
@@ -70,13 +72,16 @@ export function useBackendCallback() {
     try {
       const res = await fetch(`${BACKEND_URL}/api/v1/tx/callback`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Idempotency-Key': idempotencyKey(),
+        },
         body: JSON.stringify(payload),
       })
       if (!res.ok) {
-        const err = await res.json()
-        console.error('[RPagos Backend] Callback failed:', err)
-        return { success: false, error: err }
+        const errMsg = await parseRSendError(res)
+        console.error('[RPagos Backend] Callback failed:', errMsg)
+        return { success: false, error: errMsg }
       }
       const result = await res.json()
       console.log('[RPagos Backend] TX logged:', result)

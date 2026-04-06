@@ -52,7 +52,7 @@ export function generatePdfReceipt(p: PdfReceiptParams): void {
   doc.setTextColor(...C.em)
   doc.setFontSize(22)
   doc.setFont('helvetica', 'bold')
-  doc.text('RPagos', margin, 20)
+  doc.text('RSends', margin, 20)
 
   doc.setTextColor(...C.muted)
   doc.setFontSize(9)
@@ -264,8 +264,8 @@ export function generatePdfReceipt(p: PdfReceiptParams): void {
 
   // ── Salva ──────────────────────────────────────────────────────────────
   const filename = isEurc
-    ? `RPagos_EURC_${p.txHash.slice(2, 10)}.pdf`
-    : `RPagos_${p.symbol}_${p.txHash.slice(2, 10)}.pdf`
+    ? `RSends_EURC_${p.txHash.slice(2, 10)}.pdf`
+    : `RSends_${p.symbol}_${p.txHash.slice(2, 10)}.pdf`
 
   doc.save(filename)
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 const BACKEND = process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:8000'
 
@@ -28,6 +28,9 @@ export function useSweepStats(address: string | undefined) {
   const [stats, setStats] = useState<SweepStats | null>(null)
   const [daily, setDaily] = useState<DailyPoint[]>([])
   const [loading, setLoading] = useState(true)
+  const [backendOffline, setBackendOffline] = useState(false)
+  const failCountRef = useRef(0)
+  const errorLoggedRef = useRef(false)
 
   const fetchStats = useCallback(async (silent = false) => {
     if (!address) return
@@ -46,7 +49,17 @@ export function useSweepStats(address: string | undefined) {
         const d = await dailyRes.json()
         setDaily(d.data ?? [])
       }
-    } catch { /* network error — keep stale data */ }
+      failCountRef.current = 0
+      errorLoggedRef.current = false
+      setBackendOffline(false)
+    } catch {
+      failCountRef.current++
+      if (!errorLoggedRef.current) {
+        console.debug('[useSweepStats] Backend unreachable, silencing further errors')
+        errorLoggedRef.current = true
+      }
+      if (failCountRef.current >= 5) setBackendOffline(true)
+    }
     if (!silent) setLoading(false)
   }, [address])
 
@@ -58,5 +71,5 @@ export function useSweepStats(address: string | undefined) {
     return () => clearInterval(iv)
   }, [address, fetchStats])
 
-  return { stats, daily, loading, refresh: () => fetchStats() }
+  return { stats, daily, loading, refresh: () => fetchStats(), backendOffline }
 }

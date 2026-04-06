@@ -10,6 +10,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAccount, useChainId } from 'wagmi'
 import { motion, AnimatePresence } from 'framer-motion'
+import { mutationHeaders } from '../lib/rsendFetch'
 
 const BACKEND = process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:8000'
 
@@ -161,7 +162,7 @@ export default function AutoForward({ onClose }: Props) {
     try {
       await fetch(`${BACKEND}/api/v1/forwarding/rules`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: mutationHeaders(),
         body: JSON.stringify({
           source_wallet: address,
           destination_wallet: dest,
@@ -181,7 +182,7 @@ export default function AutoForward({ onClose }: Props) {
   const toggleRule = async (id: number, active: boolean) => {
     await fetch(`${BACKEND}/api/v1/forwarding/rules/${id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mutationHeaders(),
       body: JSON.stringify({ is_active: !active }),
     })
     loadData()

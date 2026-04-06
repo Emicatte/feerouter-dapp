@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSignMessage } from 'wagmi'
+import { mutationHeaders, parseRSendError } from './rsendFetch'
 
 const BACKEND = process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:8000'
 
@@ -80,6 +81,9 @@ export function useForwardingRules(address: string | undefined) {
   const [rules, setRules] = useState<ForwardingRule[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [backendOffline, setBackendOffline] = useState(false)
+  const failCountRef = useRef(0)
+  const errorLoggedRef = useRef(false)
   const { signMessageAsync } = useSignMessage()
 
   // ── Fetch ──────────────────────────────────────────────
@@ -96,8 +100,17 @@ export function useForwardingRules(address: string | undefined) {
       const data = await res.json()
       setRules(data.rules ?? [])
       setError(null)
+      failCountRef.current = 0
+      errorLoggedRef.current = false
+      setBackendOffline(false)
     } catch (e) {
       if (!silent) setError(e instanceof Error ? e.message : String(e))
+      failCountRef.current++
+      if (!errorLoggedRef.current) {
+        console.debug('[useForwardingRules] Backend unreachable, silencing further errors')
+        errorLoggedRef.current = true
+      }
+      if (failCountRef.current >= 5) setBackendOffline(true)
     }
     if (!silent) setLoading(false)
   }, [address])
@@ -106,7 +119,7 @@ export function useForwardingRules(address: string | undefined) {
 
   useEffect(() => {
     if (!address) return
-    const iv = setInterval(() => fetchRules(true), 15000)
+    const iv = setInterval(() => fetchRules(true), 30000)
     return () => clearInterval(iv)
   }, [address, fetchRules])
 
@@ -125,13 +138,10 @@ export function useForwardingRules(address: string | undefined) {
 
     const res = await fetch(`${BACKEND}/api/v1/forwarding/rules`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mutationHeaders(),
       body: JSON.stringify({ ...payload, signature, sign_timestamp: timestamp }),
     })
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}))
-      throw new Error(err.detail || `HTTP ${res.status}`)
-    }
+    if (!res.ok) throw new Error(await parseRSendError(res))
     await fetchRules()
     return res.json()
   }, [fetchRules, signMessageAsync])
@@ -154,13 +164,10 @@ export function useForwardingRules(address: string | undefined) {
     for (const payload of payloads) {
       const res = await fetch(`${BACKEND}/api/v1/forwarding/rules`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: mutationHeaders(),
         body: JSON.stringify({ ...payload, signature, sign_timestamp: timestamp }),
       })
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.detail || `HTTP ${res.status}`)
-      }
+      if (!res.ok) throw new Error(await parseRSendError(res))
     }
     await fetchRules()
   }, [fetchRules, signMessageAsync])
@@ -170,10 +177,10 @@ export function useForwardingRules(address: string | undefined) {
   const updateRule = useCallback(async (ruleId: number, updates: Record<string, any>) => {
     const res = await fetch(`${BACKEND}/api/v1/forwarding/rules/${ruleId}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mutationHeaders(),
       body: JSON.stringify({ owner_address: address, ...updates }),
     })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    if (!res.ok) throw new Error(await parseRSendError(res))
     await fetchRules()
   }, [address, fetchRules])
 
@@ -190,10 +197,10 @@ export function useForwardingRules(address: string | undefined) {
 
     const res = await fetch(`${BACKEND}/api/v1/forwarding/rules/${ruleId}`, {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mutationHeaders(),
       body: JSON.stringify({ owner_address: address, signature, sign_timestamp: timestamp }),
     })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    if (!res.ok) throw new Error(await parseRSendError(res))
     await fetchRules()
   }, [address, fetchRules, signMessageAsync])
 
@@ -202,20 +209,20 @@ export function useForwardingRules(address: string | undefined) {
   const pauseRule = useCallback(async (ruleId: number) => {
     const res = await fetch(`${BACKEND}/api/v1/forwarding/rules/${ruleId}/pause`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mutationHeaders(),
       body: JSON.stringify({ owner_address: address }),
     })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    if (!res.ok) throw new Error(await parseRSendError(res))
     await fetchRules()
   }, [address, fetchRules])
 
   const resumeRule = useCallback(async (ruleId: number) => {
     const res = await fetch(`${BACKEND}/api/v1/forwarding/rules/${ruleId}/resume`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mutationHeaders(),
       body: JSON.stringify({ owner_address: address }),
     })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    if (!res.ok) throw new Error(await parseRSendError(res))
     await fetchRules()
   }, [address, fetchRules])
 
@@ -224,17 +231,17 @@ export function useForwardingRules(address: string | undefined) {
   const emergencyStop = useCallback(async () => {
     const res = await fetch(`${BACKEND}/api/v1/forwarding/emergency-stop`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: mutationHeaders(),
       body: JSON.stringify({ owner_address: address }),
     })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    if (!res.ok) throw new Error(await parseRSendError(res))
     const data = await res.json()
     await fetchRules()
     return data
   }, [address, fetchRules])
 
   return {
-    rules, loading, error,
+    rules, loading, error, backendOffline,
     refresh: () => fetchRules(),
     createRule, createRuleBatch, updateRule, deleteRule,
     pauseRule, resumeRule, emergencyStop,

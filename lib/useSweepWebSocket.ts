@@ -22,6 +22,8 @@ export function useSweepWebSocket(address: string | undefined) {
   const wsRef = useRef<WebSocket | null>(null)
   const retryRef = useRef(0)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [backendOffline, setBackendOffline] = useState(false)
+  const errorLoggedRef = useRef(false)
 
   const connect = useCallback(() => {
     if (!address) return
@@ -33,7 +35,9 @@ export function useSweepWebSocket(address: string | undefined) {
 
       ws.onopen = () => {
         setConnected(true)
+        setBackendOffline(false)
         retryRef.current = 0
+        errorLoggedRef.current = false
       }
 
       ws.onmessage = (e) => {
@@ -51,15 +55,41 @@ export function useSweepWebSocket(address: string | undefined) {
         setConnected(false)
         wsRef.current = null
         setWsStats(prev => ({ ...prev, reconnects: prev.reconnects + 1 }))
-        const delay = Math.min(1000 * Math.pow(2, retryRef.current), 30000)
+        const attempt = retryRef.current
         retryRef.current++
+
+        if (attempt >= 10) {
+          if (!errorLoggedRef.current) {
+            console.error('[useSweepWebSocket] Backend offline after 10 attempts')
+            errorLoggedRef.current = true
+          } else {
+            console.debug('[useSweepWebSocket] Still offline, heartbeat retry')
+          }
+          setBackendOffline(true)
+          timerRef.current = setTimeout(connect, 30000)
+          return
+        }
+
+        const delay = Math.min(2000 * Math.pow(2, attempt), 30000)
         timerRef.current = setTimeout(connect, delay)
       }
 
       ws.onerror = () => ws.close()
     } catch {
-      const delay = Math.min(1000 * Math.pow(2, retryRef.current), 30000)
+      const attempt = retryRef.current
       retryRef.current++
+
+      if (attempt >= 10) {
+        if (!errorLoggedRef.current) {
+          console.error('[useSweepWebSocket] Backend offline after 10 attempts')
+          errorLoggedRef.current = true
+        }
+        setBackendOffline(true)
+        timerRef.current = setTimeout(connect, 30000)
+        return
+      }
+
+      const delay = Math.min(2000 * Math.pow(2, attempt), 30000)
       timerRef.current = setTimeout(connect, delay)
     }
   }, [address])
@@ -75,8 +105,10 @@ export function useSweepWebSocket(address: string | undefined) {
   const reconnect = useCallback(() => {
     if (wsRef.current) wsRef.current.close()
     retryRef.current = 0
+    setBackendOffline(false)
+    errorLoggedRef.current = false
     connect()
   }, [connect])
 
-  return { events, connected, reconnect, wsStats }
+  return { events, connected, reconnect, wsStats, backendOffline }
 }
