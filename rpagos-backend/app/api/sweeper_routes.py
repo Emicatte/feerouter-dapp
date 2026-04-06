@@ -52,6 +52,7 @@ from app.models.forwarding_models import (
 from app.models.command_models import SweepBatch, SweepBatchItem
 from app.services.sweep_service import process_incoming_tx, queue_sweep
 from app.services import alchemy_webhook_manager
+from app.tokens.registry import get_token as _registry_get_token, get_native as _registry_get_native
 from app.security.auth import require_wallet_auth
 from app.security.webhook_verifier import (
     WebhookVerificationError,
@@ -332,7 +333,7 @@ async def alchemy_webhook(request: Request):
     )
 
     # ── Respond 200 immediately, process in background ────
-    asyncio.create_task(_process_alchemy_activity(activity))
+    asyncio.create_task(_process_alchemy_activity(activity, network=network))
 
     return {"status": "accepted", "activity_count": len(activity)}
 
@@ -390,7 +391,15 @@ async def _dispatch_to_celery(celery_task, payload: dict) -> bool:
         return False
 
 
-async def _process_alchemy_activity(activity: list) -> None:
+_ALCHEMY_NETWORK_TO_CHAIN: dict[str, int] = {
+    "BASE_MAINNET": 8453,
+    "BASE_SEPOLIA": 84532,
+    "ETH_MAINNET": 1,
+    "ARB_MAINNET": 42161,
+}
+
+
+async def _process_alchemy_activity(activity: list, network: str = "") -> None:
     """Process Alchemy Address Activity webhook entries in background.
 
     Fast path: if Redis is healthy, dispatch to Celery via run_in_executor
@@ -398,6 +407,9 @@ async def _process_alchemy_activity(activity: list) -> None:
     immediately to direct async processing. Never blocks the event loop.
     """
     from app.tasks.sweep_tasks import process_incoming_tx as celery_process_tx
+
+    # Resolve chain_id from Alchemy network string
+    chain_id = _ALCHEMY_NETWORK_TO_CHAIN.get(network.upper(), 8453)
 
     redis_up = await _check_redis_health()
 
@@ -421,11 +433,21 @@ async def _process_alchemy_activity(activity: list) -> None:
         if token_address and token_address == "0x":
             token_address = None
 
+        # Resolve token from registry for reliable symbol + decimals
+        token_info = (
+            _registry_get_token(chain_id, token_address)
+            if token_address
+            else _registry_get_native(chain_id)
+        )
+        if token_info:
+            asset = token_info.symbol
+            token_decimals = token_info.decimals
+
         logger.info(
-            "[webhook] TX %s: %s -> %s | %.6f %s | cat=%s | block=%s",
+            "[webhook] TX %s: %s -> %s | %.6f %s | cat=%s | chain=%d | block=%s",
             tx_hash[:16] if tx_hash else "?",
             from_addr[:10], to_addr[:10],
-            value, asset, category, block_num,
+            value, asset, category, chain_id, block_num,
         )
 
         # Build Celery payload matching sweep_tasks.process_incoming_tx schema
@@ -434,7 +456,7 @@ async def _process_alchemy_activity(activity: list) -> None:
             "from_address": from_addr,
             "to_address": to_addr,
             "value_wei": str(int(value * 10**token_decimals)) if value else "0",
-            "chain_id": 8453,  # Default Base; extended by network mapping
+            "chain_id": chain_id,
             "token_address": token_address,
             "token_symbol": asset,
             "block_number": block_num,
@@ -1092,6 +1114,28 @@ async def get_stats(
     total = row.total_sweeps
     success_rate = round(row.completed / total * 100, 1) if total > 0 else 0
 
+    # ── Per-token volume breakdown ────────────────────
+    token_vol_result = await db.execute(
+        select(
+            SweepLog.token_symbol,
+            func.coalesce(func.sum(SweepLog.amount_human), 0).label("amount"),
+            func.coalesce(func.sum(
+                case((SweepLog.amount_usd.isnot(None), SweepLog.amount_usd), else_=0)
+            ), 0).label("eur"),
+        )
+        .where(q_base, time_filter, SweepLog.status == SweepStatus.completed)
+        .group_by(SweepLog.token_symbol)
+    )
+    token_vol_rows = token_vol_result.all()
+    total_volume_by_token = {
+        r.token_symbol: {
+            "amount": str(round(float(r.amount), 6)),
+            "eur": round(float(r.eur), 2),
+        }
+        for r in token_vol_rows
+        if r.token_symbol
+    }
+
     return _response({
         "period": period,
         "total_sweeps": total,
@@ -1102,6 +1146,7 @@ async def get_stats(
         "total_gas_spent_eth": round(float(row.total_gas_spent), 8),
         "avg_sweep_time_sec": round(float(row.avg_sweep_seconds), 1) if row.avg_sweep_seconds else None,
         "success_rate": success_rate,
+        "total_volume_by_token": total_volume_by_token,
     })
 
 

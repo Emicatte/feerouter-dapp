@@ -22,6 +22,7 @@ from app.db.session import init_db, close_db, async_session, _is_sqlite, engine
 from app.api.routes import router
 from app.services.cache_service import close_redis
 from app.services.polling_service import start_polling_if_needed, stop_polling
+from app.services.price_service import fetch_all_prices, price_refresh_loop
 from app.api.websocket_routes import ws_router, feed_manager
 from app.logging_config import setup_logging
 from app.jobs.reconciliation_job import (
@@ -109,6 +110,15 @@ async def lifespan(app: FastAPI):
         logger.info("NonceManager ready: %s", nonce_state)
     except Exception as e:
         logger.warning("NonceManager init skipped (Redis/RPC unavailable): %s", e)
+
+    # ── Price service: initial fetch + background loop ──
+    import asyncio as _aio
+    try:
+        await fetch_all_prices()
+        _aio.create_task(price_refresh_loop())
+        logger.info("Price service started (interval=%ds)", 60)
+    except Exception as e:
+        logger.warning("Price service init failed: %s — prices will be unavailable", e)
 
     webhook_mode = "webhook" if settings.alchemy_webhook_secret else "polling"
     db_display = settings.database_url.split("@")[-1] if "@" in settings.database_url else settings.database_url
@@ -213,6 +223,8 @@ from app.api.audit_routes import audit_router
 app.include_router(audit_router)
 from app.api.ledger_routes import ledger_router
 app.include_router(ledger_router)
+from app.api.price_routes import price_router
+app.include_router(price_router)
 
 
 # ── Health checks ────────────────────────────────────────

@@ -29,6 +29,7 @@ import {
 } from 'recharts'
 import { getRegistry } from '../lib/contractRegistry'
 import dynamic from 'next/dynamic'
+import { useMultiTokenBalances, type TokenBalance } from './hooks/useMultiTokenBalances'
 
 const SwapModule = dynamic(() => import('./SwapModule'), { ssr: false })
 const AutoForward = dynamic(() => import('./AutoForward'), { ssr: false })
@@ -130,6 +131,15 @@ const $ = (n: number): string => {
   if (n >= 1) return `$${n.toFixed(2)}`
   if (n > 0) return `$${n.toFixed(4)}`
   return '$0.00'
+}
+
+const eur = (n: number | null): string => {
+  if (n === null) return '—'
+  if (n >= 1e6) return `€${(n / 1e6).toFixed(2)}M`
+  if (n >= 1e3) return `€${(n / 1e3).toFixed(2)}K`
+  if (n >= 1) return `€${n.toFixed(2)}`
+  if (n > 0) return `€${n.toFixed(4)}`
+  return '€0.00'
 }
 
 const fb = (n: number, s: string): string => {
@@ -562,6 +572,22 @@ export default function PortfolioDashboard({ open, onClose, initialTab }: Props)
   const [refreshing, setRefreshing] = useState(false)
   const reg = getRegistry(chainId)
   const ld = loading && !data
+
+  // ── On-chain multi-token balances + EUR values ──────────────────────
+  const { balances: onChainBalances, totalEur, isLoading: balancesLoading } = useMultiTokenBalances(chainId, address as `0x${string}` | undefined)
+  const [zeroExpanded, setZeroExpanded] = useState(false)
+
+  // Split: tokens with balance > 0 sorted by EUR desc, then zeros
+  const { activeBalances, zeroBalances } = useMemo(() => {
+    const active: TokenBalance[] = []
+    const zero: TokenBalance[] = []
+    for (const b of onChainBalances) {
+      if (b.balance > 0n) active.push(b)
+      else zero.push(b)
+    }
+    active.sort((a, b) => (b.eurValue ?? 0) - (a.eurValue ?? 0))
+    return { activeBalances: active, zeroBalances: zero }
+  }, [onChainBalances])
 
   useEffect(() => { if (initialTab && open) setTab(initialTab) }, [initialTab, open])
 
@@ -1102,9 +1128,9 @@ export default function PortfolioDashboard({ open, onClose, initialTab }: Props)
 
           {/* ═══ TOKENS ════════════════════════════════════ */}
           {!tabLoading && tab === 'tokens' && (
-            ld ? (
+            (ld || balancesLoading) ? (
               <TokensSkeleton />
-            ) : (!data?.assets?.length) ? (
+            ) : (activeBalances.length === 0 && zeroBalances.length === 0) ? (
               <EmptyState
                 icon="◇"
                 title="No tokens found"
@@ -1112,30 +1138,107 @@ export default function PortfolioDashboard({ open, onClose, initialTab }: Props)
               />
             ) : (
               <div>
+                {/* Total EUR */}
+                {totalEur !== null && (
+                  <div style={{
+                    display: 'flex', alignItems: 'baseline', gap: 8,
+                    padding: '0 4px 16px', borderBottom: `1px solid ${C.border}`,
+                  }}>
+                    <span style={{ fontFamily: C.D, fontSize: 28, fontWeight: 600, color: C.text, letterSpacing: '-0.02em' }}>
+                      {eur(totalEur)}
+                    </span>
+                    <span style={{ fontFamily: C.M, fontSize: 11, color: C.dim }}>Total portfolio</span>
+                  </div>
+                )}
+
                 {/* Table header */}
                 <div style={{ display: 'flex', padding: '8px 4px 12px', borderBottom: `1px solid ${C.border}` }}>
                   <span style={{ flex: 1, fontFamily: C.D, fontSize: 12, color: C.dim, fontWeight: 500 }}>Token</span>
-                  <span style={{ width: 100, textAlign: 'right', fontFamily: C.D, fontSize: 12, color: C.dim, fontWeight: 500 }}>Price</span>
                   <span style={{ width: 56, textAlign: 'center', fontFamily: C.D, fontSize: 12, color: C.dim, fontWeight: 500 }}>7d</span>
                   <span style={{ width: 120, textAlign: 'right', fontFamily: C.D, fontSize: 12, color: C.dim, fontWeight: 500 }}>Balance</span>
-                  <span style={{ width: 100, textAlign: 'right', fontFamily: C.D, fontSize: 12, color: C.dim, fontWeight: 500 }}>Value</span>
+                  <span style={{ width: 100, textAlign: 'right', fontFamily: C.D, fontSize: 12, color: C.dim, fontWeight: 500 }}>EUR Value</span>
                 </div>
-                {/* Staggered rows (improvement #6) */}
+
+                {/* Active balances — sorted by EUR desc */}
                 <motion.div
                   variants={staggerContainer}
                   initial="hidden"
                   animate="show"
                 >
-                  {data.assets.map((a: Asset, i: number) => (
-                    <TokenRow
-                      key={a.contractAddress + a.symbol}
-                      a={a}
-                      idx={i}
-                      total={data.totalUsd}
-                      isLast={i === data.assets.length - 1}
-                    />
+                  {activeBalances.map((b, i) => (
+                    <motion.div
+                      key={`${b.token.chainId}-${b.token.symbol}`}
+                      variants={{ hidden: { opacity: 0, y: 6 }, show: { opacity: 1, y: 0 } }}
+                      style={{
+                        display: 'flex', alignItems: 'center', padding: '14px 4px',
+                        borderBottom: (i < activeBalances.length - 1 || zeroBalances.length > 0) ? `1px solid ${C.border}` : 'none',
+                        transition: 'background 0.1s',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <TIcon symbol={b.token.symbol} logo={b.token.logoUrl} size={36} />
+                        <div>
+                          <div style={{ fontFamily: C.D, fontSize: 14, fontWeight: 600, color: C.text }}>{b.token.name}</div>
+                          <div style={{ fontFamily: C.M, fontSize: 11, color: C.dim, marginTop: 1 }}>{b.token.symbol}</div>
+                        </div>
+                      </div>
+                      <div style={{ width: 56, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                        <Sparkline symbol={b.token.symbol} />
+                      </div>
+                      <div style={{ width: 120, textAlign: 'right', fontFamily: C.M, fontSize: 13, fontWeight: 600, color: C.text }}>
+                        {b.formatted}
+                      </div>
+                      <div style={{ width: 100, textAlign: 'right', fontFamily: C.M, fontSize: 13, fontWeight: 600, color: C.text }}>
+                        {eur(b.eurValue)}
+                      </div>
+                    </motion.div>
                   ))}
                 </motion.div>
+
+                {/* Zero balances — collapsible, greyed out */}
+                {zeroBalances.length > 0 && (
+                  <div>
+                    <button
+                      onClick={() => setZeroExpanded(z => !z)}
+                      style={{
+                        width: '100%', display: 'flex', alignItems: 'center', gap: 6,
+                        padding: '12px 4px', background: 'transparent', border: 'none',
+                        cursor: 'pointer', transition: 'background 0.1s',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <span style={{
+                        fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.dim,
+                        textTransform: 'uppercase' as const, letterSpacing: '0.06em',
+                      }}>
+                        {zeroExpanded ? '▾' : '▸'} {zeroBalances.length} token{zeroBalances.length > 1 ? 's' : ''} with zero balance
+                      </span>
+                    </button>
+                    {zeroExpanded && zeroBalances.map((b, i) => (
+                      <div
+                        key={`${b.token.chainId}-${b.token.symbol}-zero`}
+                        style={{
+                          display: 'flex', alignItems: 'center', padding: '10px 4px',
+                          borderBottom: i < zeroBalances.length - 1 ? `1px solid ${C.border}` : 'none',
+                          opacity: 0.4,
+                        }}
+                      >
+                        <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <TIcon symbol={b.token.symbol} logo={b.token.logoUrl} size={32} />
+                          <div>
+                            <div style={{ fontFamily: C.D, fontSize: 13, fontWeight: 500, color: C.dim }}>{b.token.name}</div>
+                            <div style={{ fontFamily: C.M, fontSize: 10, color: C.dim, marginTop: 1 }}>{b.token.symbol}</div>
+                          </div>
+                        </div>
+                        <div style={{ width: 120, textAlign: 'right', fontFamily: C.M, fontSize: 12, color: C.dim }}>0</div>
+                        <div style={{ width: 100, textAlign: 'right', fontFamily: C.M, fontSize: 12, color: C.dim }}>€0.00</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )
           )}

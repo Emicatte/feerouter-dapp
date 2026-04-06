@@ -26,10 +26,15 @@ import {
 import { useSwapQuote, useDirectQuote } from '../lib/useSwapQuote'
 import { useBackendCallback } from '../lib/useBackendCallback'
 import { mutationHeaders } from '../lib/rsendFetch'
-import TxConfirmationSheet from './TxConfirmationSheet'
+import TxConfirmationSheet, { isKnownRecipient, saveKnownRecipient } from './TxConfirmationSheet'
+import { SUPPORTED_CHAINS, type ChainId, type TokenInfo } from './tokens/tokenRegistry'
+import { useTokenPrices } from './hooks/useTokenPrices'
+import { useTokenBalance } from './hooks/useTokenBalance'
 import AddressIntelligence, { recordSuccessfulTx } from './AddressIntelligence'
 import { useTabLock } from '../lib/useTabLock'
 import { useIdempotencyKey } from '../lib/useIdempotencyKey'
+import { useKeyboardShortcuts } from '../lib/useKeyboardShortcuts'
+import { useClipboardDetection } from '../lib/useClipboardDetection'
 
 // ── Theme ──────────────────────────────────────────────────────────────────
 const T = {
@@ -376,7 +381,7 @@ function QuotePanel({ quote, tokenOut, isSwap }: {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-export default function TransferForm({ noCard }: { noCard?: boolean }): React.JSX.Element {
+export default function TransferForm({ noCard, externalToken }: { noCard?: boolean; externalToken?: TokenInfo | null }): React.JSX.Element {
   const { address, isConnected } = useAccount()
   const chainId                  = useChainId()
   const { switchChain }          = useSwitchChain()
@@ -386,6 +391,21 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
   const sendBackend              = useBackendCallback()
   const { isLocked, acquireLock, releaseLock } = useTabLock()
   const { generateKey: generateIdempotencyKey, getKey: getIdempotencyKey } = useIdempotencyKey()
+  const { clipboardAddress, dismiss: dismissClipboard } = useClipboardDetection()
+
+  useKeyboardShortcuts({
+    onEscape: () => { if (showConfirmation) setShowConfirmation(false) },
+    enabled: true,
+  })
+
+  // ── External token: direct ERC-20 transfer (bypasses FeeRouter) ─────
+  const { prices: tokenPrices } = useTokenPrices()
+  const { balance: extTokenBalance } = useTokenBalance(
+    externalToken && !externalToken.isNative ? externalToken : null,
+    address,
+  )
+  const [directERC20Mode, setDirectERC20Mode] = useState(false)
+  const isExtERC20 = !!(externalToken && !externalToken.isNative && externalToken.address)
 
   // ── Registry ──────────────────────────────────────────────────────────
   const [registry,  setRegistry]  = useState<NetworkRegistry | null>(null)
@@ -607,7 +627,7 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
   }, [approveOk, phase, oracleData, isSwapMode, execSwap, execDirect])
 
   useEffect(() => {
-    if (!sendOk || phase !== 'wait_send' || !sendHash || !tokenIn || !address) return
+    if (!sendOk || phase !== 'wait_send' || !sendHash || !tokenIn || !address || directERC20Mode) return
     const r = parseAmtIn(); if (!r) return
     const outToken  = isSwapMode && tokenOut ? tokenOut : tokenIn
     const grossOut  = isSwapMode && swapQuote?.status === 'success' ? swapQuote.amountOut : r
@@ -663,6 +683,29 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
     setPhase('done')
   }, [sendOk, phase])
 
+  // ── Receipt handler: direct ERC-20 transfer ────────────────────────────
+  useEffect(() => {
+    if (!sendOk || phase !== 'wait_send' || !sendHash || !directERC20Mode || !externalToken || !address) return
+    const amountWei = parseUnits(amount, externalToken.decimals)
+    const fee = (amountWei * 50n) / 10_000n
+    const net = amountWei - fee
+    const eurRate = tokenPrices[externalToken.coingeckoId]?.eur ?? 0
+    const eurVal = eurRate > 0
+      ? (parseFloat(formatUnits(net, externalToken.decimals)) * eurRate).toFixed(2) + ' EUR'
+      : undefined
+    setReport({
+      gross: amountWei, net, fee,
+      decimals: externalToken.decimals, symbol: externalToken.symbol,
+      txHash: sendHash, timestamp: new Date().toISOString(),
+      eurValue: eurVal,
+    })
+    txLog('direct_erc20.completed', { hash: sendHash, token: externalToken.symbol })
+    if (recipient && isAddress(recipient)) recordSuccessfulTx(recipient)
+    releaseLock()
+    setDirectERC20Mode(false)
+    setPhase('done')
+  }, [sendOk, phase, directERC20Mode])
+
   function handleErr(e: unknown) {
     releaseLock()
     const m    = e instanceof Error ? e.message : String(e)
@@ -675,10 +718,56 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
     else if (m.includes('MEVGuard'))              { setTxError('MEV Guard: slippage non configurato.'); setPhase('error') }
     else if (m.includes('InsufficientLiquidity')) { setTxError('Liquidità insufficiente nel pool. Riduci l\'importo.'); setPhase('error') }
     else if (m.includes('SlippageExceeded'))      { setTxError('Slippage superato. Riprova.'); setPhase('error') }
+    // ── ERC-20 specific errors ─────────────────────────────────────────
+    else if (m.includes('insufficient') && m.includes('balance'))
+      { setTxError(`Saldo ${externalToken?.symbol ?? 'token'} insufficiente.`); setPhase('error') }
+    else if (m.includes('insufficient') && m.includes('allowance'))
+      { setTxError(`Approva prima la spesa di ${externalToken?.symbol ?? 'token'}.`); setPhase('error') }
+    else if (m.includes('blacklisted') || m.includes('Blacklistable'))
+      { setTxError(`Transfer ${externalToken?.symbol ?? 'token'} fallito. Il destinatario potrebbe essere in blacklist.`); setPhase('error') }
+    else if (m.includes('transfer amount exceeds balance'))
+      { setTxError(`Saldo ${externalToken?.symbol ?? 'token'} insufficiente per questo importo.`); setPhase('error') }
     else                                          { setTxError('Errore: ' + m.slice(0, 200)); setPhase('error') }
   }
 
   const handleTransfer = async () => {
+    // ── Direct ERC-20 transfer (no FeeRouter, no Oracle) ─────────────────
+    if (isExtERC20 && externalToken?.address) {
+      if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) return
+      if (!validateAddr(recipient)) return
+      if (isLocked) { setToast({ msg: "Transazione in corso su un'altra scheda", color: T.amber }); return }
+      acquireLock()
+
+      const amountWei = parseUnits(amount, externalToken.decimals)
+      const fee = (amountWei * 50n) / 10_000n
+      const netAmount = amountWei - fee
+
+      // Balance guard
+      if (extTokenBalance < amountWei) {
+        setToast({ msg: `Saldo ${externalToken.symbol} insufficiente`, color: T.red })
+        releaseLock(); return
+      }
+
+      setDirectERC20Mode(true)
+      setPhase('signing')
+      txLog('direct_erc20.initiated', { token: externalToken.symbol, amount, chain: chainId })
+      try {
+        const hash = await writeContractAsync({
+          address: externalToken.address as `0x${string}`,
+          abi: erc20Abi,
+          functionName: 'transfer',
+          args: [getAddress(recipient) as `0x${string}`, netAmount],
+        })
+        txLog('direct_erc20.broadcast', { hash, token: externalToken.symbol, net: formatUnits(netAmount, externalToken.decimals) })
+        setSendHash(hash)
+        setPhase('wait_send')
+      } catch (e) {
+        setDirectERC20Mode(false)
+        handleErr(e)
+      }
+      return
+    }
+
     const r = parseAmtIn(); if (!r || !tokenIn || !validateAddr(recipient) || !registry) return
 
     // ── GUARD: tab lock — TX in corso su altra scheda ─────────────────────
@@ -763,7 +852,7 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
   const reset = () => {
     setPhase('idle'); setAmount(''); setRecipient(''); setPaymentRef(''); setFiscalRef('')
     setReport(null); setCompRec(null); setApprovHash(undefined); setSendHash(undefined)
-    setTxError(''); setOracleData(null); setOracleDenied(false)
+    setTxError(''); setOracleData(null); setOracleDenied(false); setDirectERC20Mode(false)
   }
 
   const handlePdf = () => {
@@ -807,8 +896,12 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
   const busy     = ['preflight','approving','wait_approve','signing','wait_send'].includes(phase)
   const sym      = tokenIn?.symbol  ?? 'ETH'
   const symOut   = isSwapMode ? (tokenOut?.symbol ?? 'USDC') : sym
+  const displaySym = isExtERC20 ? externalToken!.symbol : sym
   const isWrong  = isConnected && !([8453, 1, 84532, 11155111] as number[]).includes(chainId as number)
   const hasInsuf = isConnected && !!rawIn && !!tokenIn && rawIn > tokenIn.balance
+  // Balance check for external ERC-20 token
+  const extAmtWei = isExtERC20 && amount ? (() => { try { return parseUnits(amount, externalToken!.decimals) } catch { return null } })() : null
+  const hasInsufExt = isConnected && isExtERC20 && !!extAmtWei && extAmtWei > extTokenBalance
   const noLiq    = isSwapMode && swapQuote?.status === 'error_liquidity'
   const isL2     = chainId === 8453 || chainId === 84532
   const regChain = getRegistry(chainId)
@@ -816,13 +909,13 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
 
   const ctaState: CtaState = !isConnected   ? 'disconnected'
     : isWrong                               ? 'wrong_network'
-    : noContract                            ? 'wrong_network'
+    : (isExtERC20 ? false : noContract)     ? 'wrong_network'
     : busy                                  ? 'busy'
-    : hasInsuf                              ? 'insufficient'
-    : oracleDenied                          ? 'oracle_denied'
+    : (hasInsuf || hasInsufExt)             ? 'insufficient'
+    : (isExtERC20 ? false : oracleDenied)   ? 'oracle_denied'
     : noLiq                                 ? 'no_liquidity'
     : !recipient || !!addrError             ? 'no_recipient'
-    : !rawIn                                ? 'no_amount'
+    : (isExtERC20 ? !extAmtWei : !rawIn)    ? 'no_amount'
     :                                         'ready'
 
   const C = {
@@ -1007,6 +1100,36 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
                   To
                 </span>
               </div>
+              {clipboardAddress && clipboardAddress.toLowerCase() !== recipient.toLowerCase() && (
+                <div style={{
+                  padding: '8px 12px', borderRadius: 10, marginBottom: 8,
+                  background: 'rgba(59,130,246,0.08)',
+                  border: '1px solid rgba(59,130,246,0.2)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                }}>
+                  <span style={{ fontFamily: T.M, fontSize: 11, color: '#3B82F6' }}>
+                    📋 {clipboardAddress.slice(0, 8)}...{clipboardAddress.slice(-6)}
+                  </span>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <button
+                      onClick={() => { setRecipient(clipboardAddress); validateAddr(clipboardAddress); setOracleData(null); setOracleDenied(false); dismissClipboard() }}
+                      style={{
+                        padding: '4px 10px', borderRadius: 6, border: 'none',
+                        background: 'rgba(59,130,246,0.15)', color: '#3B82F6',
+                        fontFamily: T.D, fontSize: 10, fontWeight: 700, cursor: 'pointer',
+                      }}
+                    >Usa</button>
+                    <button
+                      onClick={dismissClipboard}
+                      style={{
+                        padding: '4px 8px', borderRadius: 6, border: 'none',
+                        background: 'rgba(255,255,255,0.06)', color: T.muted,
+                        fontFamily: T.M, fontSize: 11, cursor: 'pointer',
+                      }}
+                    >✕</button>
+                  </div>
+                </div>
+              )}
               <AddressIntelligence
                 value={recipient}
                 onChange={(addr: string) => { setRecipient(addr); validateAddr(addr); setOracleData(null); setOracleDenied(false) }}
@@ -1126,12 +1249,12 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
                 ) : ctaState==='oracle_denied'  ? 'Transazione Bloccata'
                   : ctaState==='no_liquidity'   ? 'Liquidità insufficiente'
                   : ctaState==='wrong_network'  ? (noContract ? `${regChain?.chainName ?? 'Rete'} non disponibile` : 'Cambia rete')
-                  : ctaState==='insufficient'   ? 'Saldo insufficiente'
+                  : ctaState==='insufficient'   ? `Saldo ${displaySym} insufficiente`
                   : ctaState==='no_recipient'   ? 'Inserisci destinatario'
                   : ctaState==='no_amount'      ? 'Inserisci un importo'
-                  : needsApproval && !tokenIn?.isNative ? `Approva ${sym}`
+                  : needsApproval && !tokenIn?.isNative ? `Approva ${displaySym}`
                   : isSwapMode                  ? `Swap & Invia ${sym} → ${symOut}`
-                  :                               `Invia ${sym}`}
+                  :                               `Invia ${displaySym}`}
               </button>
             )}
           </div>
@@ -1162,20 +1285,70 @@ export default function TransferForm({ noCard }: { noCard?: boolean }): React.JS
 
       {/* TX Confirmation Sheet */}
       {(() => {
-        const fiatNum = amount && tokenIn ? parseFloat(amount) * (EUR_RATES[tokenIn.symbol] ?? 1) : 0
+        // Fee breakdown computation
+        const activeSym = displaySym
+        const cgId = isExtERC20 ? externalToken!.coingeckoId : (tokenIn?.symbol === 'ETH' ? 'ethereum' : undefined)
+        const eurRate = cgId && tokenPrices[cgId]
+          ? (tokenPrices[cgId].eur ?? 0)
+          : (tokenIn ? (EUR_RATES[tokenIn.symbol] ?? 1) : 0)
+        const amtNum = parseFloat(amount || '0')
+        const fiatNum = amtNum * eurRate
+        const feeAmt = amtNum * 0.005
+        const netAmt = amtNum - feeAmt
+        const ethPrice = tokenPrices['ethereum']?.eur ?? 0
+        const isStable = ['USDC', 'USDT', 'DAI', 'EURC'].includes(activeSym)
+        const fmtDec = isStable ? 2 : activeSym === 'cbBTC' ? 6 : 4
+
+        // Build TokenInfo for confirmation sheet
+        const confirmTokenInfo: TokenInfo = isExtERC20
+          ? externalToken!
+          : {
+              symbol: tokenIn?.symbol ?? 'ETH',
+              name: tokenIn?.name ?? 'Ether',
+              decimals: tokenIn?.decimals ?? 18,
+              address: tokenIn?.isNative ? null : (tokenIn?.address as string ?? null),
+              chainId,
+              isNative: tokenIn?.isNative ?? true,
+              logoUrl: tokenIn?.logoURI ?? '/tokens/eth.svg',
+              coingeckoId: cgId ?? 'ethereum',
+              minAmount: '0.0001',
+            }
+
+        // Chain info from registry
+        const chainInfo = SUPPORTED_CHAINS[chainId as ChainId]
+
+        // Gas estimates
+        const gasEth = isL2 ? '0.00001' : '0.001'
+        const gasEur = ethPrice > 0 ? (isL2 ? 0.00001 * ethPrice : 0.001 * ethPrice) : null
+
         return (
           <TxConfirmationSheet
             isOpen={showConfirmation}
-            onConfirm={() => { setShowConfirmation(false); handleTransfer() }}
+            onConfirm={() => {
+              setShowConfirmation(false)
+              saveKnownRecipient(recipient)
+              handleTransfer()
+            }}
             onCancel={() => setShowConfirmation(false)}
-            amount={amount}
-            token={sym}
             recipient={recipient}
-            fiatValue={fiatNum > 0 ? `€${fiatNum.toFixed(2)}` : undefined}
-            network={regChain?.chainName ?? 'Base'}
-            gasFee={isL2 ? '~$0.003' : '~$0.50'}
+            tokenInfo={confirmTokenInfo}
+            amount={amount}
+            eurValue={fiatNum > 0 ? fiatNum : null}
+            feeAmount={feeAmt > 0 ? feeAmt.toFixed(fmtDec) : '0'}
+            netAmount={netAmt > 0 ? netAmt.toFixed(fmtDec) : '0'}
+            gasEstimate={{
+              eth: gasEth,
+              eur: gasEur,
+              level: isL2 ? 'low' : 'medium',
+            }}
+            chain={chainInfo
+              ? { name: chainInfo.name, iconUrl: chainInfo.iconUrl }
+              : { name: regChain?.chainName ?? 'Base', iconUrl: '/chains/base.svg' }
+            }
             estimatedTime={isL2 ? '~4 secondi' : '~15 secondi'}
             isHighValue={fiatNum >= 1000}
+            isNewRecipient={recipient ? !isKnownRecipient(recipient) : false}
+            antiPhishingCode={(() => { try { return localStorage.getItem('rsend_antiphishing_code') || undefined } catch { return undefined } })()}
           />
         )
       })()}

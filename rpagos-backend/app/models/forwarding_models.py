@@ -77,6 +77,12 @@ class ForwardingRule(Base):
     max_daily_vol = Column(Numeric(28, 18), nullable=True)
 
     # ── Token filter ────────────────────────────────────────
+    # token_address: specific ERC-20 contract address (exact match only)
+    # token_filter (JSON list):
+    #   []                              → match ALL tokens (ETH + any ERC-20)
+    #   ["0x833589fCD6eDb6..."]         → only USDC (by address)
+    #   ["native", "0x833589fCD6..."]   → ETH + USDC
+    #   ["ETH", "USDC"]                → legacy symbol-based matching
     token_address = Column(String(42), nullable=True)
     token_symbol = Column(String(16), default="ETH")
     token_filter = Column(JSON, default=list)

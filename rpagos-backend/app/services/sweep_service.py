@@ -28,6 +28,14 @@ from sqlalchemy import select, update, func, cast, Date
 
 from app.config import get_settings
 from app.db.session import async_session
+from app.tokens.registry import (
+    get_token as _registry_get_token,
+    get_native as _registry_get_native,
+    get_decimals as _registry_get_decimals,
+    TOKEN_REGISTRY as _UNIFIED_REGISTRY,
+    TokenInfo,
+)
+from app.services.price_service import get_usd_value, get_eur_value
 from app.models.forwarding_models import (
     ForwardingRule, SweepLog, SweepStatus, GasStrategy,
 )
@@ -100,16 +108,12 @@ GAS_MULT: dict[GasStrategy, float] = {
     GasStrategy.slow:   0.9,
 }
 
-# Known ERC-20 tokens on Base mainnet (chain_id, address_lower) → info
+# Token registry — delegated to app.tokens.registry (single source of truth)
+# Legacy dict format for backward compatibility within this file
 TOKEN_REGISTRY: dict[tuple[int, str], dict] = {
-    # ── Base Mainnet (8453) ──
-    (8453, "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"): {"symbol": "USDC",  "decimals": 6,  "name": "USD Coin"},
-    (8453, "0xfde4c96c8593536e31f229ea8f37b2ada2699bb2"): {"symbol": "USDT",  "decimals": 6,  "name": "Tether USD"},
-    (8453, "0x50c5725949a6f0c72e6c4a641f24049a917db0cb"): {"symbol": "DAI",   "decimals": 18, "name": "Dai Stablecoin"},
-    (8453, "0x4200000000000000000000000000000000000006"): {"symbol": "WETH",  "decimals": 18, "name": "Wrapped Ether"},
-    (8453, "0xcbb7c0000ab88b473b1f5afd9ef808440eed33bf"): {"symbol": "cbBTC", "decimals": 8,  "name": "Coinbase BTC"},
-    # ── Base Sepolia (84532) — test tokens ──
-    (84532, "0x036cbd53842c5426634e7929541ec2318f3dcf7e"): {"symbol": "USDC", "decimals": 6, "name": "USDC (Sepolia)"},
+    k: {"symbol": t.symbol, "decimals": t.decimals, "name": t.name}
+    for k, t in _UNIFIED_REGISTRY.items()
+    if k[1] != "native"  # exclude native tokens (ETH) — sweep deals with ERC-20
 }
 
 # ERC-20 transfer(address,uint256) function selector
@@ -226,17 +230,39 @@ async def _check_daily_volume(rule: ForwardingRule) -> tuple[bool, Optional[str]
     return True, None
 
 
-def _check_token_filter(rule: ForwardingRule, incoming_symbol: str) -> tuple[bool, Optional[str]]:
-    """Check if the incoming token is allowed by the rule's token filter."""
+def _check_token_filter(
+    rule: ForwardingRule,
+    incoming_symbol: str,
+    token_address: Optional[str] = None,
+) -> tuple[bool, Optional[str]]:
+    """Check if the incoming token is allowed by the rule's token filter.
+
+    token_filter semantics:
+      - [] (empty) → match ALL tokens (ETH + any ERC-20)
+      - ["native", "0x833589..."] → match ETH + USDC
+      - ["0x833589..."] → match only USDC
+      - ["ETH", "USDC"] → legacy symbol-based matching (still supported)
+    """
     filt = rule.token_filter
     if not filt:
         return True, None
 
-    allowed = [s.upper() for s in filt]
-    if incoming_symbol.upper() in allowed:
-        return True, None
+    incoming_addr = (token_address or "").lower()
 
-    return False, f"Token {incoming_symbol} not in allowed list: {allowed}"
+    for entry in filt:
+        entry_lower = entry.lower()
+        # "native" keyword → matches native ETH (no token_address)
+        if entry_lower == "native" and not token_address:
+            return True, None
+        # Hex address → matches by contract address
+        if entry_lower.startswith("0x") and incoming_addr == entry_lower:
+            return True, None
+        # Symbol fallback → matches by symbol (backward compat)
+        if not entry_lower.startswith("0x") and entry_lower != "native":
+            if incoming_symbol.upper() == entry.upper():
+                return True, None
+
+    return False, f"Token {incoming_symbol} ({token_address or 'native'}) not in filter: {filt}"
 
 
 async def _check_gas_limit(chain_id: int, gas_limit_gwei: int) -> tuple[bool, float, Optional[str]]:
@@ -257,7 +283,9 @@ async def _check_gas_limit(chain_id: int, gas_limit_gwei: int) -> tuple[bool, fl
 
 
 async def validate_all_conditions(
-    rule: ForwardingRule, incoming_symbol: str = "ETH",
+    rule: ForwardingRule,
+    incoming_symbol: str = "ETH",
+    token_address: Optional[str] = None,
 ) -> tuple[bool, Optional[str]]:
     """Run all validation checks. Short-circuits on first failure."""
     ok, reason = _check_schedule(rule)
@@ -272,7 +300,7 @@ async def validate_all_conditions(
     if not ok:
         return False, reason
 
-    ok, reason = _check_token_filter(rule, incoming_symbol)
+    ok, reason = _check_token_filter(rule, incoming_symbol, token_address)
     if not ok:
         return False, reason
 
@@ -502,10 +530,8 @@ def _build_erc20_transfer_data(to_address: str, amount_raw: int) -> str:
 
 
 def _get_token_decimals(chain_id: int, token_address: str) -> int:
-    """Look up token decimals from TOKEN_REGISTRY. Defaults to 18."""
-    key = (chain_id, token_address.lower())
-    info = TOKEN_REGISTRY.get(key)
-    return info["decimals"] if info else 18
+    """Look up token decimals from unified registry. Defaults to 18."""
+    return _registry_get_decimals(chain_id, token_address)
 
 
 def _human_to_token_units(amount_human: float, decimals: int) -> int:
@@ -1036,7 +1062,7 @@ async def queue_sweep(
             return
 
     # ── 2. Validate all conditions ─────────────────────
-    ok, reason = await validate_all_conditions(rule, rule.token_symbol or "ETH")
+    ok, reason = await validate_all_conditions(rule, rule.token_symbol or "ETH", rule.token_address)
     if not ok:
         logger.info("[queue] Rule #%d skipped: %s", rule.id, reason)
         async with async_session() as db:
@@ -1063,13 +1089,13 @@ async def queue_sweep(
             rule.id,
         )
 
-    # ── 4. Resolve token params ────────────────────────
+    # ── 4. Resolve token params (from registry) ────────
     token_address = rule.token_address
-    token_symbol = rule.token_symbol or "ETH"
-    if token_address:
-        token_decimals = _get_token_decimals(rule.chain_id, token_address)
-    else:
-        token_decimals = 18  # ETH
+    _token_info = _registry_get_token(rule.chain_id, token_address) if token_address else _registry_get_native(rule.chain_id)
+    token_symbol = _token_info.symbol if _token_info else (rule.token_symbol or "ETH")
+    token_decimals = _token_info.decimals if _token_info else (
+        _get_token_decimals(rule.chain_id, token_address) if token_address else 18
+    )
 
     # ── 5. Convert amount to raw units ─────────────────
     amount_raw = _human_to_token_units(amount, token_decimals)
@@ -1097,11 +1123,20 @@ async def queue_sweep(
             amt1 = (net_raw * pct1) // 100
             amt2 = net_raw - amt1
 
+            # Price lookup for USD valuation
+            _token_info = _registry_get_token(rule.chain_id, token_address)
+            _cg_id = _token_info.coingecko_id if _token_info else ("ethereum" if not token_address else None)
+            _human1 = amt1 / (10 ** token_decimals)
+            _human2 = amt2 / (10 ** token_decimals)
+            _usd1 = await get_usd_value(_cg_id, _human1) if _cg_id else None
+            _usd2 = await get_usd_value(_cg_id, _human2) if _cg_id else None
+
             log1 = SweepLog(
                 rule_id=rule.id, source_wallet=rule.source_wallet,
                 destination_wallet=rule.destination_wallet, is_split=True,
                 split_index=0, split_percent=pct1,
-                amount_wei=str(amt1), amount_human=amt1 / (10 ** token_decimals),
+                amount_wei=str(amt1), amount_human=_human1,
+                amount_usd=_usd1,
                 token_symbol=token_symbol, status=SweepStatus.pending,
                 trigger_tx_hash=trigger_tx_hash,
             )
@@ -1109,7 +1144,8 @@ async def queue_sweep(
                 rule_id=rule.id, source_wallet=rule.source_wallet,
                 destination_wallet=rule.split_destination, is_split=True,
                 split_index=1, split_percent=pct2,
-                amount_wei=str(amt2), amount_human=amt2 / (10 ** token_decimals),
+                amount_wei=str(amt2), amount_human=_human2,
+                amount_usd=_usd2,
                 token_symbol=token_symbol, status=SweepStatus.pending,
                 trigger_tx_hash=trigger_tx_hash,
             )
@@ -1204,22 +1240,44 @@ async def process_incoming_tx(
         )
         rules = result.scalars().all()
 
+        # Resolve token from registry for complete metadata
+        token_info: Optional[TokenInfo] = (
+            _registry_get_token(rules[0].chain_id if rules else 8453, token_address)
+            if token_address
+            else _registry_get_native(rules[0].chain_id if rules else 8453)
+        )
+
         for rule in rules:
-            # Token filter: if rule targets a specific token, only match that
+            # ── Token filter: address-based + symbol-based matching ──
+            # 1. Specific token_address on rule → must match exactly
             if rule.token_address:
                 if not token_address or token_address.lower() != rule.token_address.lower():
                     continue
+            # 2. token_filter list on rule → address/symbol/native matching
+            elif rule.token_filter:
+                ok, _reason = _check_token_filter(rule, asset, token_address)
+                if not ok:
+                    logger.debug(
+                        "[incoming] Rule #%d skipped: %s", rule.id, _reason,
+                    )
+                    continue
+            # 3. No filter at all → match everything (ETH + any ERC-20)
 
             # Threshold check
             if value < rule.min_threshold:
                 continue
 
             # Calculate amount_wei with correct decimals
-            if token_address:
-                decimals = token_decimals
-            else:
-                decimals = 18
+            decimals = token_info.decimals if token_info else (token_decimals if token_address else 18)
             amount_wei = int(Decimal(str(value)) * Decimal(10 ** decimals))
+
+            # Resolve symbol from registry (more reliable than webhook asset)
+            resolved_symbol = token_info.symbol if token_info else asset
+
+            # Price lookup: USD + EUR valuation
+            _cg = token_info.coingecko_id if token_info else ("ethereum" if not token_address else None)
+            _usd = await get_usd_value(_cg, value) if _cg else None
+            _eur = await get_eur_value(_cg, value) if _cg else None
 
             sweep = SweepLog(
                 rule_id=rule.id,
@@ -1227,7 +1285,9 @@ async def process_incoming_tx(
                 destination_wallet=rule.destination_wallet,
                 amount_wei=str(amount_wei),
                 amount_human=value,
-                token_symbol=rule.token_symbol or asset,
+                amount_display=value,
+                amount_usd=_eur if _eur is not None else _usd,  # amount_usd stores EUR when available
+                token_symbol=resolved_symbol,
                 status=SweepStatus.pending,
                 trigger_tx_hash=tx_hash,
             )
@@ -1245,7 +1305,10 @@ async def process_incoming_tx(
                 "source_wallet": rule.source_wallet,
                 "from_address": from_addr.lower(),
                 "amount": value,
-                "token": rule.token_symbol or asset,
+                "token": resolved_symbol,
+                "token_address": token_address,
+                "coingecko_id": _cg,
+                "amount_eur": _eur,
                 "trigger_tx": tx_hash,
                 "block": block_num,
             })

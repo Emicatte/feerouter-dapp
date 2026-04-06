@@ -1,7 +1,9 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { createPortal } from 'react-dom'
+import { motion, AnimatePresence, type PanInfo } from 'framer-motion'
+import type { TokenInfo } from './tokens/tokenRegistry'
 
 // ── Theme (matches TransferForm T) ──────────────────────────────────────────
 const T = {
@@ -14,7 +16,9 @@ const T = {
   amber:   '#ffb800',
   pink:    '#ff007a',
   purple:  '#a78bfa',
+  green:   '#00D68F',
   muted:   'rgba(255,255,255,0.50)',
+  dim:     'rgba(255,255,255,0.30)',
   text:    '#ffffff',
   D:       'var(--font-display)',
   M:       'var(--font-mono)',
@@ -22,38 +26,140 @@ const T = {
 
 const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1]
 const GAS_EXPIRY_SEC = 60
-const HIGH_VALUE_LOCK_SEC = 3
+const HOLD_DURATION = 3000
 
-// ── Simple deterministic identicon from address ─────────────────────────────
-function Identicon({ address, size = 32 }: { address: string; size?: number }) {
-  const hash = address.toLowerCase().replace('0x', '')
+// ── Deterministic identicon from address (4x4 grid) ─────────────────────────
+function generateIdenticon(address: string): string[] {
+  const hash = address.toLowerCase().slice(2)
   const colors: string[] = []
-  for (let i = 0; i < 6; i++) {
-    const h = parseInt(hash.slice(i * 4, i * 4 + 4), 16) % 360
-    colors.push(`hsl(${h}, 65%, 55%)`)
+  for (let i = 0; i < 16; i++) {
+    const byte = parseInt(hash.slice(i * 2, i * 2 + 2) || '00', 16)
+    const hue = (byte * 360) / 255
+    colors.push(`hsl(${hue}, 65%, 55%)`)
   }
-  const cellSize = size / 4
+  return colors
+}
+
+function Identicon({ address, size = 32 }: { address: string; size?: number }) {
+  const colors = generateIdenticon(address)
+  const cell = size / 4
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ borderRadius: size / 4 }}>
-      <rect width={size} height={size} fill="#111120" rx={size / 4} />
-      {colors.map((c, i) => {
-        const row = Math.floor(i / 2)
-        const col = i % 2
-        return (
-          <g key={i}>
-            <rect x={col * cellSize + cellSize * 0.5} y={row * cellSize + cellSize * 0.5} width={cellSize} height={cellSize} fill={c} rx={2} opacity={0.85} />
-            <rect x={(3 - col) * cellSize + cellSize * 0.5 - cellSize} y={row * cellSize + cellSize * 0.5} width={cellSize} height={cellSize} fill={c} rx={2} opacity={0.85} />
-          </g>
-        )
-      })}
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ borderRadius: size / 5, flexShrink: 0 }}>
+      <rect width={size} height={size} fill="#111120" rx={size / 5} />
+      {colors.map((c, i) => (
+        <rect
+          key={i}
+          x={(i % 4) * cell}
+          y={Math.floor(i / 4) * cell}
+          width={cell}
+          height={cell}
+          fill={c}
+          opacity={0.85}
+        />
+      ))}
     </svg>
   )
 }
 
-// ── Truncate address ────────────────────────────────────────────────────────
-function truncAddr(addr: string) {
-  if (addr.length <= 14) return addr
-  return `${addr.slice(0, 6)}…${addr.slice(-4)}`
+// ── Gas level visual indicator ──────────────────────────────────────────────
+function GasLevelBar({ level }: { level: 'low' | 'medium' | 'normal' | 'high' | 'extreme' }) {
+  const lvl = level === 'medium' ? 'normal' : level
+  const segments = lvl === 'low' ? 1 : lvl === 'normal' ? 2 : lvl === 'high' ? 3 : 4
+  const color = lvl === 'extreme' ? T.red : lvl === 'high' ? T.amber : T.green
+  return (
+    <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+      {[0, 1, 2, 3].map(i => (
+        <div
+          key={i}
+          style={{
+            width: 8, height: 10, borderRadius: 2,
+            background: i < segments ? color : 'rgba(255,255,255,0.08)',
+            transition: 'background 0.2s',
+          }}
+        />
+      ))}
+      <span style={{ fontFamily: T.M, fontSize: 10, color, marginLeft: 4, textTransform: 'capitalize' }}>
+        {lvl === 'low' ? 'Low' : lvl === 'normal' ? 'Normal' : lvl === 'high' ? 'High' : 'Extreme'}
+      </span>
+    </div>
+  )
+}
+
+// ── Token icon with fallback ────────────────────────────────────────────────
+const TOKEN_COLORS: Record<string, string> = {
+  ETH: '#627EEA', USDC: '#2775CA', USDT: '#26A17B', DAI: '#F5AC37',
+  WETH: '#627EEA', cbBTC: '#F7931A', ARB: '#28A0F0',
+}
+
+function ConfTokenIcon({ token, size = 28 }: { token: TokenInfo; size?: number }) {
+  const [imgErr, setImgErr] = useState(false)
+  const color = TOKEN_COLORS[token.symbol] ?? '#4a4a6a'
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: '50%',
+      overflow: 'hidden', flexShrink: 0,
+      background: imgErr ? color : 'transparent',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      border: '1.5px solid rgba(255,255,255,0.08)',
+    }}>
+      {!imgErr ? (
+        <img
+          src={token.logoUrl} alt={token.symbol}
+          width={size} height={size}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          onError={() => setImgErr(true)}
+        />
+      ) : (
+        <span style={{ fontSize: size * 0.36, fontWeight: 800, color: '#fff', fontFamily: T.D }}>
+          {token.symbol.slice(0, 2)}
+        </span>
+      )}
+    </div>
+  )
+}
+
+// ── Chain icon with fallback ────────────────────────────────────────────────
+function ConfChainIcon({ chain, size = 16 }: { chain: { name: string; iconUrl: string }; size?: number }) {
+  const [imgErr, setImgErr] = useState(false)
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: 4,
+      overflow: 'hidden', flexShrink: 0,
+      background: imgErr ? '#333' : 'transparent',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      {!imgErr ? (
+        <img
+          src={chain.iconUrl} alt={chain.name}
+          width={size} height={size}
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          onError={() => setImgErr(true)}
+        />
+      ) : (
+        <span style={{ fontSize: size * 0.55, fontWeight: 700, color: '#fff' }}>
+          {chain.name.charAt(0)}
+        </span>
+      )}
+    </div>
+  )
+}
+
+// ── Known recipient helpers ─────────────────────────────────────────────────
+export function isKnownRecipient(address: string): boolean {
+  try {
+    const known = JSON.parse(localStorage.getItem('rsend_known_recipients') || '[]')
+    return known.includes(address.toLowerCase())
+  } catch { return false }
+}
+
+export function saveKnownRecipient(address: string) {
+  try {
+    const known = JSON.parse(localStorage.getItem('rsend_known_recipients') || '[]')
+    if (!known.includes(address.toLowerCase())) {
+      known.push(address.toLowerCase())
+      localStorage.setItem('rsend_known_recipients', JSON.stringify(known))
+    }
+  } catch {}
 }
 
 // ── Props ───────────────────────────────────────────────────────────────────
@@ -61,59 +167,96 @@ export interface TxConfirmationProps {
   isOpen: boolean
   onConfirm: () => void
   onCancel: () => void
-  amount: string
-  token: string
   recipient: string
-  recipientLabel?: string
-  fiatValue?: string
-  network: string
-  gasFee?: string
+
+  // Token & amount
+  tokenInfo: TokenInfo            // token selezionato (full registry entry)
+  amount: string                  // importo human-readable (e.g. "100.50")
+  eurValue: number | null         // controvalore EUR (da price service)
+  feeAmount: string               // fee in token units (e.g. "0.50")
+  netAmount: string               // netto al destinatario (e.g. "99.50")
+
+  // Gas
+  gasEstimate: {
+    eth: string                   // gas in ETH (e.g. "0.001")
+    eur: number | null            // gas in EUR
+    level: 'low' | 'medium' | 'high'
+  }
+
+  // Chain
+  chain: {
+    name: string
+    iconUrl: string
+  }
+
+  // Features (unchanged)
   estimatedTime?: string
   isHighValue?: boolean
+  isNewRecipient?: boolean
+  antiPhishingCode?: string
+  isMobile?: boolean
 }
 
 export default function TxConfirmationSheet({
   isOpen, onConfirm, onCancel,
-  amount, token, recipient, recipientLabel,
-  fiatValue, network, gasFee, estimatedTime,
-  isHighValue,
+  recipient,
+  tokenInfo, amount, eurValue,
+  feeAmount, netAmount,
+  gasEstimate, chain,
+  estimatedTime,
+  isHighValue, isNewRecipient,
+  antiPhishingCode,
+  isMobile: isMobileProp,
 }: TxConfirmationProps) {
   const [isMobile, setIsMobile] = useState(false)
   const [elapsed, setElapsed] = useState(0)
+  const [expired, setExpired] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [highValueLock, setHighValueLock] = useState(0)
+  const [holdProgress, setHoldProgress] = useState(0)
+  const holdRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [mounted, setMounted] = useState(false)
+
+  // Portal mount guard
+  useEffect(() => { setMounted(true) }, [])
 
   // Detect mobile
   useEffect(() => {
+    if (isMobileProp !== undefined) { setIsMobile(isMobileProp); return }
     const check = () => setIsMobile(window.innerWidth < 768)
     check()
     window.addEventListener('resize', check)
     return () => window.removeEventListener('resize', check)
-  }, [])
+  }, [isMobileProp])
 
-  // Reset timers when sheet opens
+  // Reset state when sheet opens/closes
   useEffect(() => {
-    if (!isOpen) { setElapsed(0); setHighValueLock(0); return }
+    if (!isOpen) { setElapsed(0); setExpired(false); setHoldProgress(0); return }
     setElapsed(0)
-    setHighValueLock(isHighValue ? HIGH_VALUE_LOCK_SEC : 0)
-  }, [isOpen, isHighValue])
-
-  // Elapsed timer — gas expiry
-  useEffect(() => {
-    if (!isOpen) return
-    const iv = setInterval(() => setElapsed(e => e + 1), 1000)
-    return () => clearInterval(iv)
+    setExpired(false)
+    setHoldProgress(0)
   }, [isOpen])
 
-  // High-value countdown
+  // Gas expiry timer
   useEffect(() => {
-    if (!isOpen || highValueLock <= 0) return
-    const iv = setInterval(() => setHighValueLock(t => Math.max(0, t - 1)), 1000)
-    return () => clearInterval(iv)
-  }, [isOpen, highValueLock])
+    if (!isOpen) return
+    const interval = setInterval(() => {
+      setElapsed(prev => {
+        if (prev >= GAS_EXPIRY_SEC) { setExpired(true); clearInterval(interval); return GAS_EXPIRY_SEC }
+        return prev + 1
+      })
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [isOpen])
 
-  const gasExpired = elapsed >= GAS_EXPIRY_SEC
-  const confirmDisabled = highValueLock > 0
+  // ESC to close
+  useEffect(() => {
+    if (!isOpen) return
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); onCancel() }
+    }
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [isOpen, onCancel])
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(recipient)
@@ -121,22 +264,63 @@ export default function TxConfirmationSheet({
     setTimeout(() => setCopied(false), 1500)
   }, [recipient])
 
+  // ── Hold to confirm (high value) ──────────────────────────────────────────
+  const handlePointerDown = useCallback(() => {
+    if (expired || !isHighValue) return
+    holdRef.current = setInterval(() => {
+      setHoldProgress(prev => {
+        if (prev >= 100) {
+          if (holdRef.current) clearInterval(holdRef.current)
+          onConfirm()
+          return 100
+        }
+        return prev + (100 / (HOLD_DURATION / 50))
+      })
+    }, 50)
+  }, [expired, isHighValue, onConfirm])
+
+  const handlePointerUp = useCallback(() => {
+    if (holdRef.current) clearInterval(holdRef.current)
+    holdRef.current = null
+    setHoldProgress(0)
+  }, [])
+
+  // Cleanup hold interval on unmount
+  useEffect(() => {
+    return () => { if (holdRef.current) clearInterval(holdRef.current) }
+  }, [])
+
   const handleConfirmClick = () => {
-    if (gasExpired) {
-      onCancel() // triggers re-quote
-    } else {
-      onConfirm()
+    if (expired) { onCancel(); return }
+    if (!isHighValue) { onConfirm(); return }
+    // High value uses hold — click alone does nothing
+  }
+
+  // ── Swipe to dismiss (mobile) ─────────────────────────────────────────────
+  const handleDragEnd = (_: unknown, info: PanInfo) => {
+    if (info.velocity.y > 300 || info.offset.y > 150) {
+      onCancel()
     }
   }
 
-  // ── Shared content ────────────────────────────────────────────────────────
+  // Format address for display
+  const displayAddress = isMobile
+    ? `${recipient.slice(0, 10)}...${recipient.slice(-8)}`
+    : recipient
+
+  const progressPct = Math.min((elapsed / GAS_EXPIRY_SEC) * 100, 100)
+
+  // ── Content ───────────────────────────────────────────────────────────────
   const content = (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontFamily: T.D, fontSize: 18, fontWeight: 700, color: T.text, letterSpacing: '-0.02em' }}>
-          Conferma Transazione
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          
+          <span style={{ fontFamily: T.D, fontSize: 17, fontWeight: 700, color: T.text, letterSpacing: '-0.02em' }}>
+            Conferma Transazione
+          </span>
+        </div>
         <button
           onClick={onCancel}
           style={{
@@ -151,19 +335,26 @@ export default function TxConfirmationSheet({
 
       {/* Amount card */}
       <div style={{
-        padding: '18px 16px', borderRadius: 16,
+        padding: '20px 16px', borderRadius: 16,
         background: 'rgba(255,255,255,0.04)',
-        border: `1px solid rgba(255,255,255,0.10)`,
+        border: '1px solid rgba(255,255,255,0.10)',
+        textAlign: 'center',
       }}>
-        <div style={{ fontFamily: T.M, fontSize: 11, color: T.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-          Stai inviando
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+          <ConfTokenIcon token={tokenInfo} size={isMobile ? 32 : 38} />
+          <span style={{
+            fontFamily: T.D,
+            fontSize: isMobile ? 28 : 36,
+            fontWeight: 700,
+            color: T.text,
+            letterSpacing: '-0.03em',
+          }}>
+            {amount} {tokenInfo.symbol}
+          </span>
         </div>
-        <div style={{ fontFamily: T.D, fontSize: 28, fontWeight: 600, color: T.text, letterSpacing: '-0.02em' }}>
-          {amount} {token}
-        </div>
-        {fiatValue && (
-          <div style={{ fontFamily: T.M, fontSize: 13, color: T.muted, marginTop: 4 }}>
-            ~{fiatValue}
+        {eurValue != null && eurValue > 0 && (
+          <div style={{ fontFamily: T.M, fontSize: 14, color: T.muted, marginTop: 6 }}>
+            ≈ €{eurValue.toFixed(2)}
           </div>
         )}
       </div>
@@ -172,27 +363,28 @@ export default function TxConfirmationSheet({
       <div style={{
         padding: '14px 16px', borderRadius: 16,
         background: 'rgba(255,255,255,0.04)',
-        border: `1px solid rgba(255,255,255,0.10)`,
+        border: '1px solid rgba(255,255,255,0.10)',
       }}>
-        <div style={{ fontFamily: T.M, fontSize: 11, color: T.muted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+        <div style={{
+          fontFamily: T.M, fontSize: 10, color: T.muted, marginBottom: 10,
+          textTransform: 'uppercase', letterSpacing: '0.08em',
+        }}>
           Destinatario
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Identicon address={recipient} size={32} />
-          <div style={{ flex: 1 }}>
-            {recipientLabel && (
-              <div style={{ fontFamily: T.D, fontSize: 13, fontWeight: 600, color: T.text, marginBottom: 2 }}>
-                {recipientLabel}
-              </div>
-            )}
-            <div style={{ fontFamily: T.M, fontSize: 12, color: T.muted }}>
-              {truncAddr(recipient)}
+          <Identicon address={recipient} size={36} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontFamily: T.M, fontSize: 12, color: T.text,
+              wordBreak: 'break-all', lineHeight: 1.5,
+            }}>
+              {displayAddress}
             </div>
           </div>
           <button
             onClick={handleCopy}
             style={{
-              width: 32, height: 32, borderRadius: 8,
+              width: 32, height: 32, borderRadius: 8, flexShrink: 0,
               background: 'rgba(255,255,255,0.06)',
               border: `1px solid ${T.border}`,
               cursor: 'pointer', fontSize: 12,
@@ -209,95 +401,211 @@ export default function TxConfirmationSheet({
             )}
           </button>
         </div>
+
+        {/* New recipient warning */}
+        {isNewRecipient && (
+          <div style={{
+            marginTop: 10, padding: '7px 10px', borderRadius: 8,
+            background: `${T.amber}0d`, border: `1px solid ${T.amber}25`,
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            <span style={{ fontSize: 12 }}>⚠️</span>
+            <span style={{ fontFamily: T.D, fontSize: 11, fontWeight: 600, color: T.amber }}>
+              Primo invio a questo indirizzo
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* Details row */}
+      {/* Dettagli (unified) */}
       <div style={{
         padding: '12px 16px', borderRadius: 14,
         background: 'rgba(255,255,255,0.025)',
-        border: `1px solid rgba(255,255,255,0.06)`,
-        display: 'flex', flexDirection: 'column', gap: 8,
+        border: '1px solid rgba(255,255,255,0.06)',
+        display: 'flex', flexDirection: 'column', gap: 10,
       }}>
-        <DetailRow label="Rete" value={network} />
-        {gasFee && <DetailRow label="Gas stimato" value={gasFee} />}
-        {estimatedTime && <DetailRow label="Tempo stimato" value={estimatedTime} />}
+        {/* Token */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontFamily: T.M, fontSize: 11, color: T.muted }}>Token</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <ConfTokenIcon token={tokenInfo} size={16} />
+            <span style={{ fontFamily: T.D, fontSize: 13, fontWeight: 600, color: T.text }}>
+              {tokenInfo.symbol}
+            </span>
+            <span style={{ fontFamily: T.M, fontSize: 11, color: T.dim }}>
+              ({tokenInfo.name})
+            </span>
+          </div>
+        </div>
+
+        {/* Rete */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontFamily: T.M, fontSize: 11, color: T.muted }}>Rete</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <ConfChainIcon chain={chain} size={16} />
+            <span style={{ fontFamily: T.D, fontSize: 13, fontWeight: 600, color: T.text }}>{chain.name}</span>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: T.green }} />
+          </div>
+        </div>
+
+        {/* Fee RSend */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontFamily: T.M, fontSize: 11, color: T.muted }}>Fee RSend</span>
+          <span style={{ fontFamily: T.D, fontSize: 13, fontWeight: 600, color: T.amber }}>
+            {feeAmount} {tokenInfo.symbol} (0.5%)
+          </span>
+        </div>
+
+        {/* Netto dest. */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontFamily: T.M, fontSize: 11, color: T.muted }}>Netto dest.</span>
+          <span style={{ fontFamily: T.D, fontSize: 13, fontWeight: 700, color: T.emerald }}>
+            {netAmount} {tokenInfo.symbol}
+          </span>
+        </div>
+
+        {/* Gas Fee */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontFamily: T.M, fontSize: 11, color: T.muted }}>Gas Fee</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontFamily: T.D, fontSize: 13, fontWeight: 600, color: T.text }}>
+              ~{gasEstimate.eth} ETH
+              {gasEstimate.eur != null && gasEstimate.eur > 0 && (
+                <span style={{ fontFamily: T.M, fontSize: 11, color: T.dim, marginLeft: 4 }}>
+                  (~€{gasEstimate.eur.toFixed(2)})
+                </span>
+              )}
+            </span>
+            <GasLevelBar level={gasEstimate.level} />
+          </div>
+        </div>
+
+        {/* Tempo */}
+        {estimatedTime && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontFamily: T.M, fontSize: 11, color: T.muted }}>Tempo</span>
+            <span style={{ fontFamily: T.D, fontSize: 13, fontWeight: 600, color: T.text }}>{estimatedTime}</span>
+          </div>
+        )}
       </div>
 
-      {/* High-value warning */}
+      {/* High value warning */}
       {isHighValue && (
         <div style={{
           padding: '10px 14px', borderRadius: 12,
-          background: `${T.amber}0d`,
-          border: `1px solid ${T.amber}30`,
+          background: `${T.amber}0d`, border: `1px solid ${T.amber}30`,
           display: 'flex', alignItems: 'center', gap: 8,
         }}>
           <span style={{ fontSize: 16 }}>⚠️</span>
           <span style={{ fontFamily: T.D, fontSize: 12, fontWeight: 600, color: T.amber }}>
-            Importo elevato. Verifica attentamente.
+            Importo elevato. Verifica attentamente i dati.
           </span>
         </div>
       )}
 
-      {/* Gas expiry notice */}
-      {gasExpired && (
+      {/* Anti-phishing code */}
+      {antiPhishingCode && (
         <div style={{
           padding: '10px 14px', borderRadius: 12,
-          background: `${T.purple}0d`,
-          border: `1px solid ${T.purple}30`,
+          background: 'rgba(139,92,246,0.06)', border: '1px solid rgba(139,92,246,0.15)',
           display: 'flex', alignItems: 'center', gap: 8,
         }}>
-          <span style={{ fontSize: 14 }}>⏱</span>
-          <span style={{ fontFamily: T.D, fontSize: 12, fontWeight: 500, color: T.purple }}>
-            Quotazione scaduta. Aggiorna per ricalcolare gas e fee.
+          <span style={{ fontSize: 14 }}>🔑</span>
+          <span style={{ fontFamily: T.M, fontSize: 12, color: T.purple }}>
+            Codice anti-phishing: <strong>{antiPhishingCode}</strong>
           </span>
         </div>
       )}
 
       {/* Confirm button */}
-      <button
-        onClick={handleConfirmClick}
-        disabled={confirmDisabled}
-        style={{
-          width: '100%', padding: '18px', borderRadius: 14, border: 'none',
-          fontFamily: T.D, fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em',
-          background: gasExpired
-            ? `linear-gradient(135deg, ${T.purple}, #c084fc)`
-            : `linear-gradient(135deg, ${T.emerald}, #00cc80)`,
-          color: gasExpired ? '#fff' : '#000',
-          cursor: confirmDisabled ? 'not-allowed' : 'pointer',
-          opacity: confirmDisabled ? 0.5 : 1,
-          boxShadow: gasExpired
-            ? `0 4px 20px ${T.purple}25`
-            : `0 4px 20px ${T.emerald}25`,
-          transition: 'all 0.2s ease',
-        }}
-      >
-        {confirmDisabled
-          ? `Conferma tra ${highValueLock}s…`
-          : gasExpired
-            ? 'Aggiorna Quotazione'
-            : '✓ Conferma Invio'}
-      </button>
+      {isHighValue && !expired ? (
+        <button
+          onPointerDown={handlePointerDown}
+          onPointerUp={handlePointerUp}
+          onPointerLeave={handlePointerUp}
+          style={{
+            position: 'relative', width: '100%', padding: 18, borderRadius: 14, border: 'none',
+            fontFamily: T.D, fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em',
+            background: 'rgba(255,255,255,0.06)',
+            color: T.text, cursor: 'pointer',
+            overflow: 'hidden', userSelect: 'none',
+            WebkitUserSelect: 'none',
+          }}
+        >
+          {/* Hold fill progress */}
+          <div style={{
+            position: 'absolute', top: 0, left: 0, bottom: 0,
+            width: `${holdProgress}%`,
+            background: `linear-gradient(135deg, ${T.emerald}, #00cc80)`,
+            transition: holdProgress === 0 ? 'width 0.15s ease' : 'none',
+            borderRadius: 14,
+          }} />
+          <span style={{ position: 'relative', zIndex: 1, color: holdProgress > 50 ? '#000' : T.text }}>
+            {holdProgress > 0
+              ? `${Math.round(holdProgress)}%`
+              : 'Tieni premuto per confermare (3s)'
+            }
+          </span>
+        </button>
+      ) : (
+        <button
+          onClick={handleConfirmClick}
+          style={{
+            width: '100%', padding: 18, borderRadius: 14, border: 'none',
+            fontFamily: T.D, fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em',
+            background: expired
+              ? `linear-gradient(135deg, ${T.purple}, #c084fc)`
+              : `linear-gradient(135deg, ${T.emerald}, #00cc80)`,
+            color: expired ? '#fff' : '#000',
+            cursor: 'pointer',
+            boxShadow: expired
+              ? `0 4px 20px ${T.purple}25`
+              : `0 4px 20px ${T.emerald}25`,
+            transition: 'all 0.2s ease',
+          }}
+        >
+          {expired ? '↻ Aggiorna Quotazione' : '✓ Conferma Invio'}
+        </button>
+      )}
 
-      {/* Cancel button */}
+      {/* Cancel */}
       <button
         onClick={onCancel}
         style={{
-          width: '100%', padding: '14px', borderRadius: 14, border: 'none',
-          fontFamily: T.D, fontSize: 14, fontWeight: 600,
+          width: '100%', padding: 12, borderRadius: 14, border: 'none',
+          fontFamily: T.D, fontSize: 13, fontWeight: 600,
           background: 'rgba(255,255,255,0.04)',
-          color: T.muted,
-          cursor: 'pointer',
-          transition: 'background 0.15s',
+          color: T.muted, cursor: 'pointer',
         }}
       >
         Annulla
       </button>
+
+      {/* Gas expiry progress bar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ fontFamily: T.M, fontSize: 10, color: T.dim, flexShrink: 0 }}>
+          {expired ? '⏱ Scaduto' : `${GAS_EXPIRY_SEC - elapsed}s`}
+        </span>
+        <div style={{
+          flex: 1, height: 3, borderRadius: 2,
+          background: 'rgba(255,255,255,0.06)',
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            width: `${progressPct}%`,
+            height: '100%', borderRadius: 2,
+            background: expired ? T.red : T.purple,
+            transition: 'width 1s linear',
+          }} />
+        </div>
+      </div>
     </div>
   )
 
-  // ── Mobile: bottom sheet | Desktop: centered modal ────────────────────────
-  return (
+  if (!mounted) return null
+
+  // ── Render via portal ─────────────────────────────────────────────────────
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <>
@@ -318,13 +626,47 @@ export default function TxConfirmationSheet({
           />
 
           {/* Sheet / Modal */}
+          {!isMobile && (
+            <div style={{
+              position: 'fixed', inset: 0, zIndex: 2001,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              pointerEvents: 'none',
+            }}>
+              <motion.div
+                key="tx-confirm-sheet-desktop"
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                transition={{ duration: 0.3, ease: EASE }}
+                style={{
+                  width: '90%',
+                  maxWidth: 480,
+                  maxHeight: '85vh',
+                  overflowY: 'auto',
+                  background: '#111120',
+                  borderRadius: 20,
+                  border: '1px solid rgba(255,255,255,0.10)',
+                  boxShadow: '0 40px 100px rgba(0,0,0,0.7)',
+                  padding: 24,
+                  pointerEvents: 'auto',
+                }}
+              >
+                {content}
+              </motion.div>
+            </div>
+          )}
+          {isMobile && (
           <motion.div
             key="tx-confirm-sheet"
-            initial={isMobile ? { y: '100%' } : { opacity: 0, scale: 0.96, y: 20 }}
-            animate={isMobile ? { y: 0 } : { opacity: 1, scale: 1, y: 0 }}
-            exit={isMobile ? { y: '100%' } : { opacity: 0, scale: 0.96, y: 20 }}
-            transition={{ duration: 0.32, ease: EASE }}
-            style={isMobile ? {
+            initial={{ y: '100%' }}
+            animate={{ y: 0 }}
+            exit={{ y: '100%' }}
+            transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+            drag="y"
+            dragConstraints={{ top: 0 }}
+            dragElastic={0.15}
+            onDragEnd={handleDragEnd}
+            style={{
               position: 'fixed',
               bottom: 0, left: 0, right: 0,
               zIndex: 2001,
@@ -334,45 +676,22 @@ export default function TxConfirmationSheet({
               border: '1px solid rgba(255,255,255,0.10)',
               borderBottom: 'none',
               boxShadow: '0 -16px 64px rgba(0,0,0,0.7)',
-              padding: '20px 20px calc(20px + var(--sab, 0px))',
-              maxHeight: '90vh',
+              padding: '16px 20px calc(20px + var(--sab, 0px))',
+              maxHeight: '85vh',
               overflowY: 'auto',
-            } : {
-              position: 'fixed',
-              top: '50%', left: '50%',
-              transform: 'translate(-50%, -50%)',
-              zIndex: 2001,
-              width: '90%',
-              maxWidth: 420,
-              background: '#111120',
-              borderRadius: 20,
-              border: '1px solid rgba(255,255,255,0.10)',
-              boxShadow: '0 40px 100px rgba(0,0,0,0.7)',
-              padding: '24px',
-              maxHeight: '90vh',
-              overflowY: 'auto',
+              WebkitOverflowScrolling: 'touch' as never,
             }}
           >
             {/* Drag handle — mobile only */}
-            {isMobile && (
-              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
-                <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.15)' }} />
-              </div>
-            )}
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
+              <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.15)' }} />
+            </div>
             {content}
           </motion.div>
+          )}
         </>
       )}
-    </AnimatePresence>
-  )
-}
-
-// ── Detail row helper ─────────────────────────────────────────────────────────
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-      <span style={{ fontFamily: T.M, fontSize: 11, color: T.muted }}>{label}</span>
-      <span style={{ fontFamily: T.D, fontSize: 13, fontWeight: 600, color: T.text }}>{value}</span>
-    </div>
+    </AnimatePresence>,
+    document.body,
   )
 }

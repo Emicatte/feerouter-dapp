@@ -18,6 +18,11 @@ import DevelopersOverlay from './DevelopersOverlay'
 import PricingOverlay from './PricingOverlay'
 import { useSweepWebSocket } from '../lib/useSweepWebSocket'
 import { useSweepStats } from '../lib/useSweepStats'
+import AntiPhishingSetup from './AntiPhishingSetup'
+import { TokenRow } from './TokenSelector'
+import { getNativeToken, getTokensForChain, type TokenInfo } from './tokens/tokenRegistry'
+import { useTokenBalance } from './hooks/useTokenBalance'
+import { useTokenPrices } from './hooks/useTokenPrices'
 
 // Dynamic import — CommandCenter uses Recharts + heavy WebSocket logic
 const CommandCenter = dynamic(() => import('./CommandCenter'), {
@@ -207,16 +212,35 @@ const CHAINS = [
   { id: 42161, name: 'Arbitrum',     short: 'Arbitrum', color: '#28A0F0', rpc: 'https://arb1.arbitrum.io/rpc' },
 ]
 
-function NetworkGasWidget() {
+function NetworkTokenWidget({
+  onChainSelect,
+  selectedToken,
+  onTokenSelect,
+  selectedChainId,
+  walletAddress,
+  tokenBalanceFmt,
+  tokenBalanceEur,
+  tokenBalanceLoading,
+}: {
+  onChainSelect?: (chainId: number) => void
+  selectedToken: TokenInfo | null
+  onTokenSelect: (token: TokenInfo) => void
+  selectedChainId: number
+  walletAddress?: `0x${string}`
+  tokenBalanceFmt: string
+  tokenBalanceEur: number | null
+  tokenBalanceLoading: boolean
+}) {
   const chainId = useChainId()
   const { switchChain } = useSwitchChain()
   const { isConnected } = useAccount()
   const [gas, setGas] = useState<number | null>(null)
-  const [open, setOpen] = useState(false)
+  const [openPanel, setOpenPanel] = useState<'chain' | 'token' | null>(null)
   const ref = useRef<HTMLDivElement>(null)
 
   const chain = CHAINS.find(c => c.id === chainId) ?? CHAINS[0]
   const isTestnet = !!(chain as typeof CHAINS[number] & { testnet?: boolean }).testnet
+  const chainTokens = getTokensForChain(selectedChainId)
 
   // Gas polling
   useEffect(() => {
@@ -232,48 +256,96 @@ function NetworkGasWidget() {
 
   // Close on outside click
   useEffect(() => {
-    if (!open) return
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    if (!openPanel) return
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpenPanel(null) }
     const t = setTimeout(() => document.addEventListener('mousedown', h), 30)
     return () => { clearTimeout(t); document.removeEventListener('mousedown', h) }
-  }, [open])
+  }, [openPanel])
+
+  // Close on ESC
+  useEffect(() => {
+    if (!openPanel) return
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpenPanel(null) }
+    document.addEventListener('keydown', h)
+    return () => document.removeEventListener('keydown', h)
+  }, [openPanel])
 
   const gasLevel = gas === null ? 'unknown' : gas < 0.02 ? 'low' : gas < 0.1 ? 'med' : 'high'
   const gasColor = gasLevel === 'low' ? C.green : gasLevel === 'med' ? '#ffb800' : gasLevel === 'high' ? '#FF4C6A' : C.dim
+
+  // Format balance for display
+  const fmtBal = (() => {
+    const v = parseFloat(tokenBalanceFmt || '0')
+    if (selectedToken && ['USDC', 'USDT', 'DAI', 'EURC'].includes(selectedToken.symbol))
+      return v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    if (selectedToken && ['cbBTC', 'WBTC'].includes(selectedToken.symbol))
+      return v.toFixed(6)
+    return v.toFixed(4)
+  })()
 
   if (!isConnected) return null
 
   return (
     <div ref={ref} style={{
       position: 'fixed', top: 68, right: 24, zIndex: 999,
+      display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6,
     }}>
-      {/* Trigger pill */}
-      <button
-        onClick={() => setOpen(o => !o)}
+      {/* ── Unified pill: Chain | Token | Gas ────────────── */}
+      <div
         className="bf-blur-16"
         style={{
-          display: 'flex', alignItems: 'center', gap: 0,
-          padding: 0, cursor: 'pointer',
+          display: 'flex', alignItems: 'center',
           background: 'rgba(12,12,30,0.85)',
-          borderRadius: 12,
-          border: `1px solid ${open ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)'}`,
+          borderRadius: 14,
+          border: `1px solid ${openPanel ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)'}`,
           transition: 'border-color 0.2s ease',
           overflow: 'hidden',
         }}
       >
         {/* Network section */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          padding: '7px 10px 7px 10px',
-          borderRight: '1px solid rgba(255,255,255,0.06)',
-        }}>
+        <button
+          onClick={() => setOpenPanel(openPanel === 'chain' ? null : 'chain')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '7px 10px',
+            background: openPanel === 'chain' ? 'rgba(255,255,255,0.04)' : 'transparent',
+            border: 'none', cursor: 'pointer', transition: 'background 0.15s',
+            borderRight: '1px solid rgba(255,255,255,0.06)',
+          }}
+        >
           <div style={{ width: 7, height: 7, borderRadius: '50%', background: chain.color, boxShadow: `0 0 6px ${chain.color}60` }} />
           <span style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.text }}>{chain.short}</span>
           {isTestnet && (
             <span style={{ fontFamily: C.M, fontSize: 8, fontWeight: 700, color: '#ffb800', background: 'rgba(255,184,0,0.1)', padding: '1px 4px', borderRadius: 3, lineHeight: '1.2' }}>TEST</span>
           )}
-          <span style={{ color: C.dim, fontSize: 8, marginLeft: -2 }}>▾</span>
-        </div>
+          <span style={{ color: C.dim, fontSize: 7 }}>▾</span>
+        </button>
+
+        {/* Token section */}
+        <button
+          onClick={() => setOpenPanel(openPanel === 'token' ? null : 'token')}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '4px 10px 4px 8px',
+            background: openPanel === 'token' ? 'rgba(255,255,255,0.04)' : 'transparent',
+            border: 'none', cursor: 'pointer', transition: 'background 0.15s',
+            borderRight: '1px solid rgba(255,255,255,0.06)',
+          }}
+        >
+          {selectedToken && (
+            <img
+              src={selectedToken.logoUrl}
+              alt={selectedToken.symbol}
+              width={18} height={18}
+              style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover', border: '1px solid rgba(255,255,255,0.08)' }}
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+            />
+          )}
+          <span style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.text }}>
+            {selectedToken?.symbol ?? 'Token'}
+          </span>
+          <span style={{ color: C.dim, fontSize: 7 }}>▾</span>
+        </button>
 
         {/* Gas section */}
         <div style={{
@@ -286,77 +358,128 @@ function NetworkGasWidget() {
           </span>
           <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>Gwei</span>
         </div>
-      </button>
+      </div>
 
-      {/* Dropdown */}
-      {open && (
-        <motion.div
-          initial={{ opacity: 0, y: -6, scale: 0.97 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
-          style={{
-            position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 100,
-            minWidth: 220, background: '#111120',
-            border: '1px solid rgba(255,255,255,0.10)',
-            borderRadius: 14, overflow: 'hidden',
-            boxShadow: '0 16px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.03)',
-          }}
-        >
-          {/* Header */}
-          <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-            <span style={{ fontFamily: C.D, fontSize: 10, fontWeight: 700, color: C.dim, textTransform: 'uppercase' as const, letterSpacing: '0.08em' }}>Network</span>
-          </div>
-
-          {/* Chain list */}
-          {CHAINS.map(c => {
-            const active = chainId === c.id
-            const test = !!(c as typeof c & { testnet?: boolean }).testnet
-            return (
-              <button
-                key={c.id}
-                onClick={() => { switchChain({ chainId: c.id }); setOpen(false) }}
-                style={{
-                  width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                  padding: '10px 14px', background: active ? 'rgba(255,255,255,0.04)' : 'transparent',
-                  border: 'none', cursor: 'pointer', transition: 'background 0.12s',
-                  borderBottom: '1px solid rgba(255,255,255,0.04)',
-                }}
-                onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
-                onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
-              >
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: c.color, boxShadow: `0 0 6px ${c.color}40` }} />
-                <div style={{ flex: 1, textAlign: 'left' as const }}>
-                  <span style={{ fontFamily: C.D, fontSize: 12, fontWeight: 600, color: active ? C.text : C.sub }}>{c.name}</span>
-                  {test && (
-                    <span style={{ fontFamily: C.M, fontSize: 8, color: '#ffb800', marginLeft: 6 }}>testnet</span>
-                  )}
-                </div>
-                {active && (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontFamily: C.M, fontSize: 10, color: gasColor }}>{gas !== null ? `${gas.toFixed(4)}` : '—'}</span>
-                    <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>gwei</span>
-                    <div style={{ width: 5, height: 5, borderRadius: '50%', background: C.green }} />
-                  </div>
-                )}
-              </button>
-            )
-          })}
-
-          {/* Gas legend */}
-          <div style={{ padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
-            {[
-              { l: 'Low', c: C.green },
-              { l: 'Med', c: '#ffb800' },
-              { l: 'High', c: '#FF4C6A' },
-            ].map(g => (
-              <div key={g.l} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <div style={{ width: 4, height: 4, borderRadius: '50%', background: g.c }} />
-                <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>{g.l}</span>
-              </div>
-            ))}
-          </div>
-        </motion.div>
+      {/* ── Balance sub-line ──────────────────────────────── */}
+      {selectedToken && !tokenBalanceLoading && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 5,
+          paddingRight: 4,
+        }}>
+          <span style={{ fontFamily: C.M, fontSize: 10, color: C.sub }}>
+            {fmtBal} {selectedToken.symbol}
+          </span>
+          {tokenBalanceEur !== null && (
+            <span style={{ fontFamily: C.M, fontSize: 10, color: C.dim }}>
+              ≈ €{tokenBalanceEur >= 1 ? tokenBalanceEur.toFixed(2) : tokenBalanceEur.toFixed(4)}
+            </span>
+          )}
+        </div>
       )}
+
+      {/* ── Chain dropdown ────────────────────────────────── */}
+      <AnimatePresence>
+        {openPanel === 'chain' && (
+          <motion.div
+            initial={{ opacity: 0, y: -6, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.97 }}
+            transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
+            style={{
+              position: 'absolute', top: 'calc(100%)', right: 0, zIndex: 100,
+              minWidth: 220, background: '#111120',
+              border: '1px solid rgba(255,255,255,0.10)',
+              borderRadius: 14, overflow: 'hidden',
+              boxShadow: '0 16px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.03)',
+            }}
+          >
+            <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+              <span style={{ fontFamily: C.D, fontSize: 10, fontWeight: 700, color: C.dim, textTransform: 'uppercase' as const, letterSpacing: '0.08em' }}>Network</span>
+            </div>
+            {CHAINS.map(c => {
+              const active = chainId === c.id
+              const test = !!(c as typeof c & { testnet?: boolean }).testnet
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => { switchChain({ chainId: c.id }); onChainSelect?.(c.id); setOpenPanel(null) }}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '10px 14px', background: active ? 'rgba(255,255,255,0.04)' : 'transparent',
+                    border: 'none', cursor: 'pointer', transition: 'background 0.12s',
+                    borderBottom: '1px solid rgba(255,255,255,0.04)',
+                    textAlign: 'left' as const,
+                  }}
+                  onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
+                  onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
+                >
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: c.color, boxShadow: `0 0 6px ${c.color}40` }} />
+                  <div style={{ flex: 1 }}>
+                    <span style={{ fontFamily: C.D, fontSize: 12, fontWeight: 600, color: active ? C.text : C.sub }}>{c.name}</span>
+                    {test && <span style={{ fontFamily: C.M, fontSize: 8, color: '#ffb800', marginLeft: 6 }}>testnet</span>}
+                  </div>
+                  {active && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontFamily: C.M, fontSize: 10, color: gasColor }}>{gas !== null ? gas.toFixed(4) : '—'}</span>
+                      <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>gwei</span>
+                      <div style={{ width: 5, height: 5, borderRadius: '50%', background: C.green }} />
+                    </div>
+                  )}
+                </button>
+              )
+            })}
+            <div style={{ padding: '8px 14px', display: 'flex', alignItems: 'center', gap: 10 }}>
+              {[
+                { l: 'Low', c: C.green },
+                { l: 'Med', c: '#ffb800' },
+                { l: 'High', c: '#FF4C6A' },
+              ].map(g => (
+                <div key={g.l} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <div style={{ width: 4, height: 4, borderRadius: '50%', background: g.c }} />
+                  <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>{g.l}</span>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Token dropdown ────────────────────────────────── */}
+      <AnimatePresence>
+        {openPanel === 'token' && (
+          <motion.div
+            initial={{ opacity: 0, y: -6, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -6, scale: 0.97 }}
+            transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
+            style={{
+              position: 'absolute', top: 'calc(100%)', right: 0, zIndex: 100,
+              minWidth: 240, background: '#111120',
+              border: '1px solid rgba(255,255,255,0.10)',
+              borderRadius: 14, overflow: 'hidden',
+              boxShadow: '0 16px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.03)',
+            }}
+          >
+            <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+              <span style={{ fontFamily: C.D, fontSize: 10, fontWeight: 700, color: C.dim, textTransform: 'uppercase' as const, letterSpacing: '0.08em' }}>Select Token</span>
+            </div>
+            <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+              {chainTokens.map(token => {
+                const active = selectedToken?.symbol === token.symbol && selectedToken?.chainId === token.chainId
+                return (
+                  <TokenRow
+                    key={`${token.chainId}-${token.symbol}`}
+                    token={token}
+                    isSelected={active}
+                    walletAddress={walletAddress}
+                    onSelect={(t) => { onTokenSelect(t); setOpenPanel(null) }}
+                  />
+                )
+              })}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
@@ -1202,6 +1325,7 @@ export default function Home() {
   const [activeOverlay, setActiveOverlay] = useState<Overlay>(null)
   const [showIntro, setShowIntro] = useState(false)
   const [ready, setReady] = useState(false)
+  const [showAntiPhishing, setShowAntiPhishing] = useState(false)
   const [isMobileHome, setIsMobileHome] = useState(false)
   useEffect(() => {
     const check = () => setIsMobileHome(window.innerWidth < 768)
@@ -1209,6 +1333,24 @@ export default function Home() {
     window.addEventListener('resize', check)
     return () => window.removeEventListener('resize', check)
   }, [])
+
+  // ── Multi-token/chain selector state ──────────────────────────────────
+  const [selectedChainId, setSelectedChainId] = useState<number>(chainId)
+  const [selectedToken, setSelectedToken] = useState<TokenInfo | null>(
+    () => getNativeToken(chainId) ?? null,
+  )
+  // Sync when wallet chain changes
+  useEffect(() => {
+    setSelectedChainId(chainId)
+    setSelectedToken(getNativeToken(chainId) ?? null)
+  }, [chainId])
+
+  // ── Selected token balance + EUR for inline display ────────────────
+  const { balance: selTokenBal, formatted: selTokenFmt, isLoading: selTokenLoading } = useTokenBalance(selectedToken, address)
+  const { prices: tokenPricesPage } = useTokenPrices()
+  const selTokenEur = selectedToken && tokenPricesPage[selectedToken.coingeckoId]?.eur
+    ? parseFloat(selTokenFmt) * tokenPricesPage[selectedToken.coingeckoId].eur
+    : null
 
   // Sweep stats for top bar
   const { daily } = useSweepStats(address)
@@ -1271,8 +1413,22 @@ export default function Home() {
       {/* Navbar */}
       <Navbar view={view} setView={setView} activeOverlay={activeOverlay} setActiveOverlay={setActiveOverlay} sweeps24h={sweeps24h} vol24h={vol24h} unseenCount={unseenCount} />
 
-      {/* Network + Gas — fixed top-right below navbar */}
-      {ready && !isMobileHome && <NetworkGasWidget />}
+      {/* Network + Token + Gas — fixed top-right below navbar */}
+      {ready && !isMobileHome && (
+        <NetworkTokenWidget
+          onChainSelect={(cid) => {
+            setSelectedChainId(cid)
+            setSelectedToken(getNativeToken(cid) ?? null)
+          }}
+          selectedToken={selectedToken}
+          onTokenSelect={setSelectedToken}
+          selectedChainId={selectedChainId}
+          walletAddress={address}
+          tokenBalanceFmt={selTokenFmt}
+          tokenBalanceEur={selTokenEur}
+          tokenBalanceLoading={selTokenLoading}
+        />
+      )}
 
       {/* Overlays */}
       <OverlayShell isMobile={isMobileHome} active={activeOverlay === 'about'} onClose={() => setActiveOverlay(null)}>
@@ -1412,7 +1568,7 @@ export default function Home() {
         }}>
           {/* Send — always mounted */}
           <div style={view === 'send' ? panelActive : panelHidden}>
-            <TransferForm noCard />
+            <TransferForm noCard externalToken={selectedToken} />
           </div>
 
           {/* Swap — always mounted */}
@@ -1458,6 +1614,7 @@ export default function Home() {
               { label: 'Architecture', action: () => setActiveOverlay('security') },
               { label: 'Compliance', action: () => setActiveOverlay('compliance') },
               { label: 'Audit Trail', action: undefined },
+              { label: '🔑 Anti-Phishing', action: () => setShowAntiPhishing(true) },
             ].map(item => (
               <div
                 key={item.label}
@@ -1548,6 +1705,16 @@ export default function Home() {
           </a>
         </div>
       </footer>
+
+      {/* Anti-Phishing Setup Modal */}
+      <AntiPhishingSetup
+        isOpen={showAntiPhishing}
+        onClose={() => setShowAntiPhishing(false)}
+        onSave={(code) => {
+          localStorage.setItem('rsend_antiphishing_code', code)
+          setShowAntiPhishing(false)
+        }}
+      />
 
       <style>{`
         @keyframes rsPulse{0%{transform:scale(1);opacity:.8}50%{transform:scale(1.8);opacity:0}100%{transform:scale(1);opacity:0}}
