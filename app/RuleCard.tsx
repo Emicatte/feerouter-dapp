@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { motion } from 'framer-motion'
 import type { ForwardingRule } from '../lib/useForwardingRules'
 
@@ -31,13 +31,38 @@ interface Props {
   onToggle: (id: number, active: boolean) => void
   onPause: (id: number) => void
   onResume: (id: number) => void
-  onDelete: (id: number) => void
+  onDelete: (id: number) => Promise<void>
 }
 
 export default function RuleCard({ rule, onToggle, onPause, onResume, onDelete }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const busyRef = useRef(false)
   const isPaused = rule.is_paused
   const isActive = rule.is_active && !isPaused
+
+  const guard = async (fn: () => Promise<void>) => {
+    if (busyRef.current) return
+    busyRef.current = true
+    setBusy(true)
+    setActionError(null)
+    try {
+      await fn()
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      console.error('[RuleCard] action failed:', msg)
+      setActionError(msg)
+    } finally {
+      setBusy(false)
+      busyRef.current = false
+    }
+  }
+
+  const safeDelete = () => guard(async () => {
+    await onDelete(rule.id)
+    setConfirmDelete(false)
+  })
 
   return (
     <motion.div
@@ -75,7 +100,7 @@ export default function RuleCard({ rule, onToggle, onPause, onResume, onDelete }
 
         {/* Toggle switch */}
         <button
-          onClick={() => onToggle(rule.id, rule.is_active)}
+          onClick={() => guard(() => Promise.resolve(onToggle(rule.id, rule.is_active)))}
           style={{
             width: 34, height: 18, borderRadius: 9, border: 'none', cursor: 'pointer',
             background: isActive ? C.green : 'rgba(255,255,255,0.08)',
@@ -121,6 +146,18 @@ export default function RuleCard({ rule, onToggle, onPause, onResume, onDelete }
         {rule.notify_enabled && <Tag label={rule.notify_channel} color={C.blue} />}
       </div>
 
+      {/* Error message */}
+      {actionError && (
+        <div style={{
+          fontFamily: C.M, fontSize: 9, color: C.red,
+          background: `${C.red}08`, border: `1px solid ${C.red}15`,
+          borderRadius: 6, padding: '4px 8px', marginBottom: 8,
+          wordBreak: 'break-word',
+        }}>
+          {actionError}
+        </div>
+      )}
+
       {/* Stats + actions */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', gap: 12 }}>
@@ -136,16 +173,17 @@ export default function RuleCard({ rule, onToggle, onPause, onResume, onDelete }
             <ActionBtn
               label={isPaused ? 'Resume' : 'Pause'}
               color={isPaused ? C.green : C.amber}
-              onClick={() => isPaused ? onResume(rule.id) : onPause(rule.id)}
+              disabled={busy}
+              onClick={() => guard(async () => { isPaused ? await onResume(rule.id) : await onPause(rule.id) })}
             />
           )}
           {confirmDelete ? (
             <>
-              <ActionBtn label="Confirm" color={C.red} onClick={() => { onDelete(rule.id); setConfirmDelete(false) }} />
-              <ActionBtn label="Cancel" color={C.dim} onClick={() => setConfirmDelete(false)} />
+              <ActionBtn label={busy ? 'Check MetaMask...' : 'Confirm'} color={C.red} disabled={busy} onClick={safeDelete} />
+              {!busy && <ActionBtn label="Cancel" color={C.dim} onClick={() => setConfirmDelete(false)} />}
             </>
           ) : (
-            <ActionBtn label="Delete" color={C.red} onClick={() => setConfirmDelete(true)} />
+            <ActionBtn label="Delete" color={C.red} disabled={busy} onClick={() => setConfirmDelete(true)} />
           )}
         </div>
       </div>
@@ -165,15 +203,17 @@ function Tag({ label, color }: { label: string; color?: string }) {
   )
 }
 
-function ActionBtn({ label, color, onClick }: { label: string; color: string; onClick: () => void }) {
+function ActionBtn({ label, color, onClick, disabled }: { label: string; color: string; onClick: () => void; disabled?: boolean }) {
   return (
     <button
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
       style={{
         padding: '3px 8px', borderRadius: 6, border: `1px solid ${color}25`,
-        background: `${color}08`, color, cursor: 'pointer',
+        background: `${color}08`, color, cursor: disabled ? 'wait' : 'pointer',
         fontFamily: 'var(--font-mono)', fontSize: 9, fontWeight: 600,
         transition: 'all 0.15s',
+        opacity: disabled ? 0.5 : 1,
       }}
     >
       {label}

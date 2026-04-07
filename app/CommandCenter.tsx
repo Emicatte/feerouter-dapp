@@ -745,6 +745,7 @@ function RouteWizard({
   const [confirmed, setConfirmed] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const savingRef = useRef(false)
 
   // Active destinations (resolved from quick or bulk)
   const activeDests: Destination[] = useMemo(() => {
@@ -802,8 +803,10 @@ function RouteWizard({
     chain_id: chainId,
   })
 
-  // Create handler
+  // Create handler (ref guard prevents double-click)
   const handleCreate = async () => {
+    if (savingRef.current) return
+    savingRef.current = true
     setSaving(true)
     setError(null)
     try {
@@ -843,8 +846,10 @@ function RouteWizard({
       onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to create route')
+    } finally {
+      savingRef.current = false
+      setSaving(false)
     }
-    setSaving(false)
   }
 
   // Load distribution group
@@ -944,6 +949,7 @@ function RouteWizard({
                   address={address}
                   destinations={activeDests}
                   ethPrice={ethPrice}
+                  balance={balance}
                   advanced={advanced}
                   confirmed={confirmed}
                   setConfirmed={setConfirmed}
@@ -1017,7 +1023,7 @@ function RouteWizard({
                   transition: 'all 0.2s',
                 }}
               >
-                {saving ? 'Signing...' : 'Sign & Create Route'}
+                {saving ? 'Check MetaMask to sign...' : 'Sign & Create Route'}
               </motion.button>
             )}
           </div>
@@ -1709,16 +1715,18 @@ function AdvancedAccordion({
 // ═══════════════════════════════════════════════════════════
 
 function Step3Review({
-  address, destinations, ethPrice, advanced, confirmed, setConfirmed,
+  address, destinations, ethPrice, balance, advanced, confirmed, setConfirmed,
 }: {
   address: string
   destinations: Destination[]
   ethPrice: number
+  balance: any
   advanced: AdvancedSettings
   confirmed: boolean
   setConfirmed: (v: boolean) => void
 }) {
-  const exampleEth = 1
+  const userBal = balance ? parseFloat(balance.formatted) : 0
+  const exampleEth = userBal > 0 ? userBal : 1
   const fee = exampleEth * RSEND_FEE_PCT / 100
   const afterFee = exampleEth - fee
   const total = destinations.reduce((s, d) => s + d.percent, 0)
@@ -1741,7 +1749,10 @@ function Step3Review({
         borderRadius: 14, padding: '14px 16px', marginBottom: 16,
       }}>
         <div style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 10 }}>
-          Example: Receiving {exampleEth} ETH ({fiat(exampleEth, ethPrice)})
+          {userBal > 0
+            ? `Your balance: ${exampleEth.toFixed(4)} ETH (${fiat(exampleEth, ethPrice)})`
+            : `Hypothetical example — if you receive ${exampleEth} ETH (${fiat(exampleEth, ethPrice)})`
+          }
         </div>
 
         {/* Fee row */}
@@ -2768,7 +2779,10 @@ function GroupsTab({
   const [name, setName] = useState('')
   const [entries, setEntries] = useState<DistributionEntry[]>([{ address: '', label: '', percent: 100 }])
   const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const deletingRef = useRef(false)
 
   const total = entries.reduce((s, e) => s + e.percent, 0)
   const canSave = name.trim() && entries.length > 0 &&
@@ -2787,18 +2801,28 @@ function GroupsTab({
   }
 
   const handleSave = async () => {
+    if (savingRef.current) return
+    savingRef.current = true
     setSaving(true)
     try {
       await createList(name, entries)
       setName('')
       setEntries([{ address: '', label: '', percent: 100 }])
       setShowForm(false)
-    } catch {}
-    setSaving(false)
+    } catch {} finally {
+      savingRef.current = false
+      setSaving(false)
+    }
   }
 
   const handleDelete = async (id: number) => {
-    try { await deleteList(id) } catch {}
+    if (deletingRef.current) return
+    deletingRef.current = true
+    setDeleting(true)
+    try { await deleteList(id) } catch {} finally {
+      deletingRef.current = false
+      setDeleting(false)
+    }
     setConfirmDelete(null)
   }
 
@@ -2956,20 +2980,23 @@ function GroupsTab({
                   <div style={{ display: 'flex', gap: 4 }}>
                     <button
                       onClick={() => handleDelete(l.id)}
+                      disabled={deleting}
                       style={{
                         padding: '3px 8px', borderRadius: 6, border: `1px solid ${C.red}25`,
-                        background: `${C.red}08`, color: C.red, cursor: 'pointer',
+                        background: `${C.red}08`, color: C.red,
+                        cursor: deleting ? 'wait' : 'pointer',
+                        opacity: deleting ? 0.5 : 1,
                         fontFamily: C.M, fontSize: 9, fontWeight: 600,
                       }}
-                    >Confirm</button>
-                    <button
+                    >{deleting ? 'Deleting...' : 'Confirm'}</button>
+                    {!deleting && <button
                       onClick={() => setConfirmDelete(null)}
                       style={{
                         padding: '3px 8px', borderRadius: 6, border: `1px solid ${C.border}`,
                         background: 'transparent', color: C.dim, cursor: 'pointer',
                         fontFamily: C.M, fontSize: 9, fontWeight: 600,
                       }}
-                    >Cancel</button>
+                    >Cancel</button>}
                   </div>
                 ) : (
                   <button
@@ -3037,7 +3064,10 @@ function SettingsTab({
   const [newListName, setNewListName] = useState('')
   const [newEntries, setNewEntries] = useState<DistributionEntry[]>([{ address: '', label: '', percent: 100 }])
   const [distSaving, setDistSaving] = useState(false)
+  const distSavingRef = useRef(false)
   const [distConfirmDel, setDistConfirmDel] = useState<number | null>(null)
+  const [distDeleting, setDistDeleting] = useState(false)
+  const distDeletingRef = useRef(false)
 
   // ── Export ──
   const [exportFormat, setExportFormat] = useState<'csv' | 'json'>('csv')
@@ -3045,11 +3075,13 @@ function SettingsTab({
   const [exportDateTo, setExportDateTo] = useState('')
   const [dac8Year, setDac8Year] = useState(new Date().getFullYear())
   const [dac8Loading, setDac8Loading] = useState(false)
+  const dac8Ref = useRef(false)
   const [dac8Result, setDac8Result] = useState<string | null>(null)
 
   // ── Danger ──
   const [confirmEmergency, setConfirmEmergency] = useState(false)
   const [emergencyLoading, setEmergencyLoading] = useState(false)
+  const emergencyRef = useRef(false)
   const [emergencyResult, setEmergencyResult] = useState<string | null>(null)
 
   // Fetch spending limits
@@ -3096,13 +3128,17 @@ function SettingsTab({
     (newEntries.length === 1 || Math.abs(distTotal - 100) < 1)
 
   const handleCreateDist = async () => {
+    if (distSavingRef.current) return
+    distSavingRef.current = true
     setDistSaving(true)
     try {
       await createDistList(newListName, newEntries)
       setNewListName('')
       setNewEntries([{ address: '', label: '', percent: 100 }])
-    } catch {}
-    setDistSaving(false)
+    } catch {} finally {
+      distSavingRef.current = false
+      setDistSaving(false)
+    }
   }
 
   // Export handler
@@ -3116,8 +3152,10 @@ function SettingsTab({
     window.open(`${BACKEND}/api/v1/forwarding/logs/export?${params}`, '_blank')
   }
 
-  // DAC8 handler
+  // DAC8 handler (ref guard prevents double-click)
   const handleDac8 = async () => {
+    if (dac8Ref.current) return
+    dac8Ref.current = true
     setDac8Loading(true)
     setDac8Result(null)
     try {
@@ -3140,12 +3178,16 @@ function SettingsTab({
       }
     } catch (e) {
       setDac8Result(e instanceof Error ? e.message : 'Network error')
+    } finally {
+      dac8Ref.current = false
+      setDac8Loading(false)
     }
-    setDac8Loading(false)
   }
 
-  // Emergency stop handler
+  // Emergency stop handler (ref guard prevents double-click)
   const handleEmergencyStop = async () => {
+    if (emergencyRef.current) return
+    emergencyRef.current = true
     setEmergencyLoading(true)
     try {
       const data = await emergencyStop()
@@ -3153,8 +3195,10 @@ function SettingsTab({
       setConfirmEmergency(false)
     } catch (e) {
       setEmergencyResult(e instanceof Error ? e.message : 'Failed')
+    } finally {
+      emergencyRef.current = false
+      setEmergencyLoading(false)
     }
-    setEmergencyLoading(false)
     setTimeout(() => setEmergencyResult(null), 4000)
   }
 
@@ -3414,14 +3458,24 @@ function SettingsTab({
                         </span>
                         {distConfirmDel === l.id ? (
                           <div style={{ display: 'flex', gap: 4 }}>
-                            <button onClick={async () => { await deleteDistList(l.id); setDistConfirmDel(null) }}
-                              style={{ padding: '2px 8px', borderRadius: 5, border: 'none', background: C.red, color: '#fff', fontFamily: C.M, fontSize: 9, cursor: 'pointer' }}>
-                              Yes
+                            <button
+                              disabled={distDeleting}
+                              onClick={async () => {
+                                if (distDeletingRef.current) return
+                                distDeletingRef.current = true
+                                setDistDeleting(true)
+                                try { await deleteDistList(l.id); setDistConfirmDel(null) } catch {} finally {
+                                  distDeletingRef.current = false
+                                  setDistDeleting(false)
+                                }
+                              }}
+                              style={{ padding: '2px 8px', borderRadius: 5, border: 'none', background: C.red, color: '#fff', fontFamily: C.M, fontSize: 9, cursor: distDeleting ? 'wait' : 'pointer', opacity: distDeleting ? 0.5 : 1 }}>
+                              {distDeleting ? '...' : 'Yes'}
                             </button>
-                            <button onClick={() => setDistConfirmDel(null)}
+                            {!distDeleting && <button onClick={() => setDistConfirmDel(null)}
                               style={{ padding: '2px 8px', borderRadius: 5, border: `1px solid ${C.border}`, background: 'transparent', color: C.dim, fontFamily: C.M, fontSize: 9, cursor: 'pointer' }}>
                               No
-                            </button>
+                            </button>}
                           </div>
                         ) : (
                           <button onClick={() => setDistConfirmDel(l.id)}

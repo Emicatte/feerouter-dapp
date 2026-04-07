@@ -84,7 +84,25 @@ export function useForwardingRules(address: string | undefined) {
   const [backendOffline, setBackendOffline] = useState(false)
   const failCountRef = useRef(0)
   const errorLoggedRef = useRef(false)
+  const signingRef = useRef(false)
   const { signMessageAsync } = useSignMessage()
+
+  // Guard: prevent concurrent signature requests
+  // Timeout prevents infinite hang if MetaMask popup doesn't open
+  const signOnce = useCallback(async (message: string): Promise<string> => {
+    if (signingRef.current) throw new Error('Signature already in progress')
+    signingRef.current = true
+    try {
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(
+          'Signature timed out — open MetaMask and approve the pending request'
+        )), 60_000)
+      )
+      return await Promise.race([signMessageAsync({ message }), timeout])
+    } finally {
+      signingRef.current = false
+    }
+  }, [signMessageAsync])
 
   // ── Fetch ──────────────────────────────────────────────
 
@@ -126,119 +144,151 @@ export function useForwardingRules(address: string | undefined) {
   // ── Create (single rule, wallet signature) ─────────────
 
   const createRule = useCallback(async (payload: CreateRulePayload) => {
-    const timestamp = Math.floor(Date.now() / 1000)
-    const message = [
-      'RSends: Create forwarding rule',
-      `From: ${payload.source_wallet}`,
-      `To: ${payload.destination_wallet}`,
-      `Chain: ${payload.chain_id ?? 8453}`,
-      `Timestamp: ${timestamp}`,
-    ].join('\n')
-    const signature = await signMessageAsync({ message })
+    const isoTimestamp = new Date().toISOString()
+    const walletAddr = payload.source_wallet
+    const message = `RSends:${walletAddr}:${isoTimestamp}`
+    const signature = await signOnce(message)
 
     const res = await fetch(`${BACKEND}/api/v1/forwarding/rules`, {
       method: 'POST',
-      headers: mutationHeaders(),
-      body: JSON.stringify({ ...payload, signature, sign_timestamp: timestamp }),
+      headers: mutationHeaders({
+        'X-Wallet-Address': walletAddr,
+        'X-Wallet-Signature': signature,
+        'X-Timestamp': isoTimestamp,
+      }),
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(10000),
     })
     if (!res.ok) throw new Error(await parseRSendError(res))
     await fetchRules()
     return res.json()
-  }, [fetchRules, signMessageAsync])
+  }, [fetchRules, signOnce])
 
   // ── Create batch (multiple rules, single wallet signature) ──
 
   const createRuleBatch = useCallback(async (payloads: CreateRulePayload[]) => {
     if (payloads.length === 0) return
-    const timestamp = Math.floor(Date.now() / 1000)
-    const dests = payloads.map(p => p.destination_wallet.slice(0, 10)).join(', ')
-    const message = [
-      `RSends: Create ${payloads.length} forwarding rule(s)`,
-      `From: ${payloads[0].source_wallet}`,
-      `To: ${dests}`,
-      `Chain: ${payloads[0].chain_id ?? 8453}`,
-      `Timestamp: ${timestamp}`,
-    ].join('\n')
-    const signature = await signMessageAsync({ message })
+    const isoTimestamp = new Date().toISOString()
+    const walletAddr = payloads[0].source_wallet
+    const message = `RSends:${walletAddr}:${isoTimestamp}`
+    const signature = await signOnce(message)
 
+    const authHeaders = {
+      'X-Wallet-Address': walletAddr,
+      'X-Wallet-Signature': signature,
+      'X-Timestamp': isoTimestamp,
+    }
     for (const payload of payloads) {
       const res = await fetch(`${BACKEND}/api/v1/forwarding/rules`, {
         method: 'POST',
-        headers: mutationHeaders(),
-        body: JSON.stringify({ ...payload, signature, sign_timestamp: timestamp }),
+        headers: mutationHeaders(authHeaders),
+        body: JSON.stringify(payload),
       })
       if (!res.ok) throw new Error(await parseRSendError(res))
     }
     await fetchRules()
-  }, [fetchRules, signMessageAsync])
+  }, [fetchRules, signOnce])
 
   // ── Update ─────────────────────────────────────────────
 
   const updateRule = useCallback(async (ruleId: number, updates: Record<string, any>) => {
+    const isoTimestamp = new Date().toISOString()
+    const message = `RSends:${address}:${isoTimestamp}`
+    const signature = await signOnce(message)
+
     const res = await fetch(`${BACKEND}/api/v1/forwarding/rules/${ruleId}`, {
       method: 'PUT',
-      headers: mutationHeaders(),
-      body: JSON.stringify({ owner_address: address, ...updates }),
+      headers: mutationHeaders({
+        'X-Wallet-Address': address!,
+        'X-Wallet-Signature': signature,
+        'X-Timestamp': isoTimestamp,
+      }),
+      body: JSON.stringify(updates),
+      signal: AbortSignal.timeout(10000),
     })
     if (!res.ok) throw new Error(await parseRSendError(res))
     await fetchRules()
-  }, [address, fetchRules])
+  }, [address, fetchRules, signOnce])
 
   // ── Delete (wallet signature) ──────────────────────────
 
   const deleteRule = useCallback(async (ruleId: number) => {
-    const timestamp = Math.floor(Date.now() / 1000)
-    const message = [
-      `RSends: Delete forwarding rule #${ruleId}`,
-      `Owner: ${address}`,
-      `Timestamp: ${timestamp}`,
-    ].join('\n')
-    const signature = await signMessageAsync({ message })
+    const isoTimestamp = new Date().toISOString()
+    const message = `RSends:${address}:${isoTimestamp}`
+    const signature = await signOnce(message)
 
     const res = await fetch(`${BACKEND}/api/v1/forwarding/rules/${ruleId}`, {
       method: 'DELETE',
-      headers: mutationHeaders(),
-      body: JSON.stringify({ owner_address: address, signature, sign_timestamp: timestamp }),
+      headers: mutationHeaders({
+        'X-Wallet-Address': address!,
+        'X-Wallet-Signature': signature,
+        'X-Timestamp': isoTimestamp,
+      }),
+      signal: AbortSignal.timeout(10000),
     })
     if (!res.ok) throw new Error(await parseRSendError(res))
     await fetchRules()
-  }, [address, fetchRules, signMessageAsync])
+  }, [address, fetchRules, signOnce])
 
   // ── Pause / Resume ─────────────────────────────────────
 
   const pauseRule = useCallback(async (ruleId: number) => {
+    const isoTimestamp = new Date().toISOString()
+    const message = `RSends:${address}:${isoTimestamp}`
+    const signature = await signOnce(message)
+
     const res = await fetch(`${BACKEND}/api/v1/forwarding/rules/${ruleId}/pause`, {
       method: 'POST',
-      headers: mutationHeaders(),
-      body: JSON.stringify({ owner_address: address }),
+      headers: mutationHeaders({
+        'X-Wallet-Address': address!,
+        'X-Wallet-Signature': signature,
+        'X-Timestamp': isoTimestamp,
+      }),
+      signal: AbortSignal.timeout(10000),
     })
     if (!res.ok) throw new Error(await parseRSendError(res))
     await fetchRules()
-  }, [address, fetchRules])
+  }, [address, fetchRules, signOnce])
 
   const resumeRule = useCallback(async (ruleId: number) => {
+    const isoTimestamp = new Date().toISOString()
+    const message = `RSends:${address}:${isoTimestamp}`
+    const signature = await signOnce(message)
+
     const res = await fetch(`${BACKEND}/api/v1/forwarding/rules/${ruleId}/resume`, {
       method: 'POST',
-      headers: mutationHeaders(),
-      body: JSON.stringify({ owner_address: address }),
+      headers: mutationHeaders({
+        'X-Wallet-Address': address!,
+        'X-Wallet-Signature': signature,
+        'X-Timestamp': isoTimestamp,
+      }),
+      signal: AbortSignal.timeout(10000),
     })
     if (!res.ok) throw new Error(await parseRSendError(res))
     await fetchRules()
-  }, [address, fetchRules])
+  }, [address, fetchRules, signOnce])
 
   // ── Emergency Stop ─────────────────────────────────────
 
   const emergencyStop = useCallback(async () => {
+    const isoTimestamp = new Date().toISOString()
+    const message = `RSends:${address}:${isoTimestamp}`
+    const signature = await signOnce(message)
+
     const res = await fetch(`${BACKEND}/api/v1/forwarding/emergency-stop`, {
       method: 'POST',
-      headers: mutationHeaders(),
-      body: JSON.stringify({ owner_address: address }),
+      headers: mutationHeaders({
+        'X-Wallet-Address': address!,
+        'X-Wallet-Signature': signature,
+        'X-Timestamp': isoTimestamp,
+      }),
+      signal: AbortSignal.timeout(10000),
     })
     if (!res.ok) throw new Error(await parseRSendError(res))
     const data = await res.json()
     await fetchRules()
     return data
-  }, [address, fetchRules])
+  }, [address, fetchRules, signOnce])
 
   return {
     rules, loading, error, backendOffline,

@@ -1,17 +1,55 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { getAllCoingeckoIds } from '../tokens/tokenRegistry'
 
 const BACKEND = process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:8000'
-const REFRESH_INTERVAL = 60_000 // 60 secondi
+const COINGECKO_API = 'https://api.coingecko.com/api/v3'
+const REFRESH_INTERVAL = 30_000 // 30 secondi — prezzi più reattivi
 
 export interface TokenPrices {
   [coingeckoId: string]: { eur: number; usd: number }
 }
 
 /**
- * Hook che fetcha i prezzi da /api/v1/prices ogni 60 secondi.
- * Ritorna un map: coingeckoId -> { eur: number, usd: number }
+ * Fetch diretto da CoinGecko (fallback se il backend non risponde).
+ */
+async function fetchFromCoinGecko(): Promise<TokenPrices> {
+  const ids = getAllCoingeckoIds().join(',')
+  const res = await fetch(
+    `${COINGECKO_API}/simple/price?ids=${ids}&vs_currencies=eur,usd`,
+  )
+  if (!res.ok) throw new Error(`CoinGecko ${res.status}`)
+  const data: Record<string, { eur?: number; usd?: number }> = await res.json()
+
+  const merged: TokenPrices = {}
+  for (const [id, vals] of Object.entries(data)) {
+    merged[id] = { eur: vals.eur ?? 0, usd: vals.usd ?? 0 }
+  }
+  return merged
+}
+
+/**
+ * Fetch dal backend RPagos (che proxya CoinGecko con Redis cache).
+ */
+async function fetchFromBackend(): Promise<TokenPrices> {
+  const res = await fetch(`${BACKEND}/api/v1/prices`)
+  if (!res.ok) throw new Error(`Backend ${res.status}`)
+  const data = await res.json()
+  const eur: Record<string, number> = data.eur ?? {}
+  const usd: Record<string, number> = data.usd ?? {}
+
+  const merged: TokenPrices = {}
+  const allIds = new Set([...Object.keys(eur), ...Object.keys(usd)])
+  for (const id of allIds) {
+    merged[id] = { eur: eur[id] ?? 0, usd: usd[id] ?? 0 }
+  }
+  return merged
+}
+
+/**
+ * Hook che fetcha i prezzi real-time ogni 30 secondi.
+ * Prova il backend prima, poi fallback diretto su CoinGecko.
  */
 export function useTokenPrices() {
   const [prices, setPrices] = useState<TokenPrices>({})
@@ -20,21 +58,17 @@ export function useTokenPrices() {
 
   const fetchPrices = useCallback(async () => {
     try {
-      const res = await fetch(`${BACKEND}/api/v1/prices`)
-      if (!res.ok) return
-      const data = await res.json()
-      // data = { eur: { ethereum: 1785, ... }, usd: { ethereum: 2057, ... }, cached: true }
-      const eur: Record<string, number> = data.eur ?? {}
-      const usd: Record<string, number> = data.usd ?? {}
-
-      const merged: TokenPrices = {}
-      const allIds = new Set([...Object.keys(eur), ...Object.keys(usd)])
-      for (const id of allIds) {
-        merged[id] = { eur: eur[id] ?? 0, usd: usd[id] ?? 0 }
-      }
-      setPrices(merged)
+      // Try backend first (has Redis cache, lower latency)
+      const data = await fetchFromBackend()
+      setPrices(data)
     } catch {
-      // Silently fail — keep stale prices
+      // Backend down — fetch directly from CoinGecko
+      try {
+        const data = await fetchFromCoinGecko()
+        setPrices(data)
+      } catch {
+        // Both failed — keep stale prices
+      }
     } finally {
       setIsLoading(false)
     }
