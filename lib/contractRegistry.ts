@@ -251,6 +251,29 @@ const REGISTRY: { [chainId: number]: NetworkRegistry } = {
   },
 }
 
+// ── FeeRouter deployment map ──────────────────────────────────────────────
+/**
+ * Chain su cui FeeRouterV4 è deployato e verificato.
+ * Quando deployerai su altre chain, aggiungi qui l'indirizzo.
+ */
+const FEE_ROUTER_DEPLOYMENTS: Partial<Record<number, `0x${string}`>> = {
+  8453:  baseFeeRouter(),   // Base Mainnet
+  84532: sepoliaFeeRouter(), // Base Sepolia
+  // Quando deployi su altre chain, aggiungi qui:
+  // 1:     '0x...', // Ethereum Mainnet
+  // 42161: '0x...', // Arbitrum
+}
+
+export function getFeeRouterAddress(chainId: number): `0x${string}` | null {
+  const addr = FEE_ROUTER_DEPLOYMENTS[chainId]
+  if (!addr || addr === '0x0000000000000000000000000000000000000000') return null
+  return addr
+}
+
+export function isFeeRouterAvailable(chainId: number): boolean {
+  return getFeeRouterAddress(chainId) !== null
+}
+
 // ── API pubblica ───────────────────────────────────────────────────────────
 
 export function getRegistry(chainId: number): NetworkRegistry | null {

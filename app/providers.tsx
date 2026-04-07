@@ -2,7 +2,11 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { WagmiProvider, createConfig, http } from 'wagmi'
-import { mainnet, base, baseSepolia, sepolia } from 'wagmi/chains'
+import {
+  mainnet, optimism, bsc, polygon, zksync,
+  base, arbitrum, celo, avalanche, blast,
+  baseSepolia, sepolia,
+} from 'wagmi/chains'
 import {
   RainbowKitProvider, darkTheme,
   connectorsForWallets,
@@ -12,8 +16,22 @@ import {
   walletConnectWallet, injectedWallet, trustWallet, ledgerWallet,
 } from '@rainbow-me/rainbowkit/wallets'
 import '@rainbow-me/rainbowkit/styles.css'
+import '@solana/wallet-adapter-react-ui/styles.css'
+import dynamic from 'next/dynamic'
 import { useState, useEffect, createContext, useContext } from 'react'
 import { useChainId, useSwitchChain } from 'wagmi'
+import { registerAdapter } from '../lib/chain-adapters/registry'
+import { createEVMAdapter } from '../lib/chain-adapters/evm-adapter'
+import { createSolanaAdapter } from '../lib/chain-adapters/solana-adapter'
+import { createTronAdapter } from '../lib/chain-adapters/tron-adapter'
+
+const SolanaProviders = dynamic(() => import('./providers-solana'), { ssr: false })
+
+// ── Register all chain adapters at module load ────────────────────────────
+const EVM_CHAIN_IDS = [1, 10, 56, 137, 324, 8453, 42161, 42220, 43114, 81457, 84532]
+EVM_CHAIN_IDS.forEach(id => registerAdapter(createEVMAdapter(id)))
+registerAdapter(createSolanaAdapter())
+registerAdapter(createTronAdapter())
 
 // ── Valori letterali — necessari per Wagmi v2 type safety ──────────────────
 // NON usare base.id / mainnet.id nelle chiamate switchChain o confronti:
@@ -47,13 +65,34 @@ const connectors = connectorsForWallets(
 // Usiamo le chain objects per createConfig (necessario per metadata)
 // ma i chainId numerici per tutto il resto
 const config = createConfig({
-  chains:     [base, mainnet, baseSepolia, sepolia] as const,
+  chains: [
+    base,          // Default — FeeRouterV4
+    mainnet,
+    arbitrum,
+    optimism,
+    polygon,
+    bsc,
+    avalanche,
+    zksync,
+    celo,
+    blast,
+    baseSepolia,   // Testnet ultimo
+    sepolia,
+  ] as const,
   connectors,
   transports: {
-    [CHAIN.BASE]:         http(),
-    [CHAIN.MAINNET]:      http(),
-    [CHAIN.BASE_SEPOLIA]: http(),
-    [CHAIN.SEPOLIA]:      http(),
+    [base.id]:        http('https://mainnet.base.org'),
+    [mainnet.id]:     http('https://eth.llamarpc.com'),
+    [arbitrum.id]:    http('https://arb1.arbitrum.io/rpc'),
+    [optimism.id]:    http('https://mainnet.optimism.io'),
+    [polygon.id]:     http('https://polygon-rpc.com'),
+    [bsc.id]:         http('https://bsc-dataseed.binance.org'),
+    [avalanche.id]:   http('https://api.avax.network/ext/bc/C/rpc'),
+    [zksync.id]:      http('https://mainnet.era.zksync.io'),
+    [celo.id]:        http('https://forno.celo.org'),
+    [blast.id]:       http('https://rpc.blast.io'),
+    [baseSepolia.id]: http('https://sepolia.base.org'),
+    [sepolia.id]:     http(),
   },
   ssr: false,
 })
@@ -87,7 +126,11 @@ function ChainGuardProvider({ children }: { children: React.ReactNode }) {
   const chainId         = useChainId()
   const { switchChain } = useSwitchChain()
 
-  const supported: readonly number[] = [CHAIN.BASE, CHAIN.MAINNET, CHAIN.BASE_SEPOLIA, CHAIN.SEPOLIA]
+  const supported: readonly number[] = [
+    base.id, mainnet.id, arbitrum.id, optimism.id, polygon.id,
+    bsc.id, avalanche.id, zksync.id, celo.id, blast.id,
+    baseSepolia.id, sepolia.id,
+  ]
   const isCorrectChain = supported.includes(chainId)
   const isL2           = chainId === CHAIN.BASE || chainId === CHAIN.BASE_SEPOLIA
   const gasWarning     = !isL2 && isCorrectChain
@@ -160,7 +203,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
           {mounted && (
             <ChainGuardProvider>
               <GasWarningBanner />
-              {children}
+              <SolanaProviders>
+                {children}
+              </SolanaProviders>
             </ChainGuardProvider>
           )}
         </RainbowKitProvider>

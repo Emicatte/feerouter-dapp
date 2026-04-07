@@ -6,6 +6,7 @@ import {
   useAccount, useBalance, useReadContracts,
   useWriteContract, useWaitForTransactionReceipt,
   usePublicClient, useChainId, useSwitchChain,
+  useSendTransaction,
 } from 'wagmi'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
 import {
@@ -20,7 +21,7 @@ import { useComplianceEngine, type ComplianceRecord } from '../lib/useCompliance
 import { useComplianceAPI }   from '../lib/useComplianceAPI'
 import { generatePdfReceipt } from '../lib/usePdfReceipt'
 import {
-  getRegistry, findChainForToken, EUR_RATES,
+  getRegistry, findChainForToken, EUR_RATES, isFeeRouterAvailable,
   type TokenConfig, type NetworkRegistry,
 } from '../lib/contractRegistry'
 import { useSwapQuote, useDirectQuote } from '../lib/useSwapQuote'
@@ -452,6 +453,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
 
   const inputRef = useRef<HTMLInputElement>(null)
   const { writeContractAsync } = useWriteContract()
+  const { sendTransactionAsync } = useSendTransaction()
 
   // ── Quote engine — alimentato da isSwapMode ───────────────────────────
   const swapQuote = useSwapQuote({
@@ -583,41 +585,60 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
     const r = parseAmtIn(); if (!r || !tokenIn || !registry) return
     setPhase('signing')
     try {
-      console.log('[rp_tx] execDirect oracle:', { nonce: oracle.oracleNonce, deadline: oracle.oracleDeadline, sig: oracle.oracleSignature?.slice(0,20)+'...' })
-      console.log('[rp_tx] execDirect token:', tokenIn.symbol, 'isNative:', tokenIn.isNative, 'registry.feeRouter:', registry.feeRouter)
       let hash: `0x${string}`
-      // DEBUG
-      console.log('[rp_tx] execDirect →', { contract: registry.feeRouter, fn: tokenIn.isNative ? 'transferETHWithOracle' : 'transferWithOracle', token: tokenIn.address, amount: r?.toString(), recipient, nonce: oracle.oracleNonce, deadline: oracle.oracleDeadline, sig: oracle.oracleSignature?.slice(0,10) })
-      if (tokenIn.isNative) {
-        // Debug: logga tutto prima di inviare per confrontare con il contratto
-        console.log('[rp_tx] transferETHWithOracle args:', {
-          feeRouter:      registry.feeRouter,
-          recipient:      getAddress(recipient),
-          nonce:          oracle.oracleNonce,
-          nonceLen:       oracle.oracleNonce?.length,
-          deadline:       oracle.oracleDeadline,
-          sigSlice:       oracle.oracleSignature?.slice(0, 20),
-          value:          r?.toString(),
-          chainId,
-          contractSigner: (oracle as OracleResponse & { _debug?: { signer?: string } })._debug?.signer,
-        })
-        hash = await writeContractAsync({
-          address: registry.feeRouter, abi: FEE_ROUTER_ABI,
-          functionName: 'transferETHWithOracle',
-          args: [getAddress(recipient) as `0x${string}`, oracle.oracleNonce as `0x${string}`, BigInt(oracle.oracleDeadline), oracle.oracleSignature as `0x${string}`],
-          value: r,
-        })
+
+      if (isFeeRouterAvailable(chainId)) {
+        // ── FeeRouter path (Base, Base Sepolia) ─────────────────────
+        console.log('[rp_tx] execDirect oracle:', { nonce: oracle.oracleNonce, deadline: oracle.oracleDeadline, sig: oracle.oracleSignature?.slice(0,20)+'...' })
+        console.log('[rp_tx] execDirect token:', tokenIn.symbol, 'isNative:', tokenIn.isNative, 'registry.feeRouter:', registry.feeRouter)
+        console.log('[rp_tx] execDirect →', { contract: registry.feeRouter, fn: tokenIn.isNative ? 'transferETHWithOracle' : 'transferWithOracle', token: tokenIn.address, amount: r?.toString(), recipient, nonce: oracle.oracleNonce, deadline: oracle.oracleDeadline, sig: oracle.oracleSignature?.slice(0,10) })
+        if (tokenIn.isNative) {
+          console.log('[rp_tx] transferETHWithOracle args:', {
+            feeRouter:      registry.feeRouter,
+            recipient:      getAddress(recipient),
+            nonce:          oracle.oracleNonce,
+            nonceLen:       oracle.oracleNonce?.length,
+            deadline:       oracle.oracleDeadline,
+            sigSlice:       oracle.oracleSignature?.slice(0, 20),
+            value:          r?.toString(),
+            chainId,
+            contractSigner: (oracle as OracleResponse & { _debug?: { signer?: string } })._debug?.signer,
+          })
+          hash = await writeContractAsync({
+            address: registry.feeRouter, abi: FEE_ROUTER_ABI,
+            functionName: 'transferETHWithOracle',
+            args: [getAddress(recipient) as `0x${string}`, oracle.oracleNonce as `0x${string}`, BigInt(oracle.oracleDeadline), oracle.oracleSignature as `0x${string}`],
+            value: r,
+          })
+        } else {
+          hash = await writeContractAsync({
+            address: registry.feeRouter, abi: FEE_ROUTER_ABI,
+            functionName: 'transferWithOracle',
+            args: [tokenIn.address!, r, getAddress(recipient) as `0x${string}`, oracle.oracleNonce as `0x${string}`, BigInt(oracle.oracleDeadline), oracle.oracleSignature as `0x${string}`],
+          })
+        }
       } else {
-        hash = await writeContractAsync({
-          address: registry.feeRouter, abi: FEE_ROUTER_ABI,
-          functionName: 'transferWithOracle',
-          args: [tokenIn.address!, r, getAddress(recipient) as `0x${string}`, oracle.oracleNonce as `0x${string}`, BigInt(oracle.oracleDeadline), oracle.oracleSignature as `0x${string}`],
-        })
+        // ── Direct transfer fallback (no FeeRouter on this chain) ───
+        console.log('[rp_tx] execDirect fallback (no FeeRouter):', { token: tokenIn.symbol, isNative: tokenIn.isNative, amount: r?.toString(), recipient, chainId })
+        if (tokenIn.isNative) {
+          hash = await sendTransactionAsync({
+            to: getAddress(recipient) as `0x${string}`,
+            value: r,
+          })
+        } else {
+          hash = await writeContractAsync({
+            address: tokenIn.address! as `0x${string}`,
+            abi: erc20Abi,
+            functionName: 'transfer',
+            args: [getAddress(recipient) as `0x${string}`, r],
+          })
+        }
       }
+
       txLog('direct.broadcast', { hash, token: tokenIn.symbol })
       setSendHash(hash); setPhase('wait_send')
     } catch (e) { handleErr(e) }
-  }, [parseAmtIn, tokenIn, registry, recipient])
+  }, [parseAmtIn, tokenIn, registry, recipient, chainId, sendTransactionAsync])
 
   useEffect(() => {
     if (approveOk && phase === 'wait_approve' && oracleData) {
@@ -780,14 +801,18 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
 
     // ── GUARD: contratto non deployato su questa chain ─────────────────────
     const ZERO_ADDR = '0x0000000000000000000000000000000000000000'
-    if (!registry.feeRouter || registry.feeRouter === ZERO_ADDR) {
+    const hasFeeRouter = isFeeRouterAvailable(chainId)
+
+    // Swap mode requires FeeRouter — block if not available
+    if (isSwapMode && !hasFeeRouter) {
       setToast({
-        msg: `⚠ Contratto non configurato su ${registry.chainName}. Passa a Base Sepolia o aggiungi NEXT_PUBLIC_FEE_ROUTER_V4_BASE_SEPOLIA su Vercel.`,
+        msg: `⚠ Swap non disponibile su ${registry.chainName}. Usa direct transfer o passa a Base.`,
         color: T.red,
       })
       releaseLock()
       return
     }
+
     if (!tokenIn.isNative) {
       const tokenChains = findChainForToken(tokenIn.symbol)
       if (!tokenChains.includes(chainId)) {
@@ -799,6 +824,41 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
           return
         }
       }
+    }
+
+    // ── Direct transfer fallback (no oracle, no FeeRouter) ─────────────────
+    if (!hasFeeRouter && !isSwapMode) {
+      txLog('tx.initiated', { isSwap: false, token: tokenIn.symbol, chain: chainId, fallback: true })
+      setPhase('signing')
+      try {
+        let hash: `0x${string}`
+        if (tokenIn.isNative) {
+          hash = await sendTransactionAsync({
+            to: getAddress(recipient) as `0x${string}`,
+            value: r,
+          })
+        } else {
+          hash = await writeContractAsync({
+            address: tokenIn.address! as `0x${string}`,
+            abi: erc20Abi,
+            functionName: 'transfer',
+            args: [getAddress(recipient) as `0x${string}`, r],
+          })
+        }
+        txLog('direct.broadcast', { hash, token: tokenIn.symbol, fallback: true })
+        setSendHash(hash); setPhase('wait_send')
+      } catch (e) { handleErr(e) }
+      return
+    }
+
+    // ── FeeRouter path (oracle + on-chain) ─────────────────────────────────
+    if (!registry.feeRouter || registry.feeRouter === ZERO_ADDR) {
+      setToast({
+        msg: `⚠ Contratto non configurato su ${registry.chainName}. Passa a Base Sepolia o aggiungi NEXT_PUBLIC_FEE_ROUTER_V4_BASE_SEPOLIA su Vercel.`,
+        color: T.red,
+      })
+      releaseLock()
+      return
     }
     let oracle = oracleData
     if (!oracle || !oracle.approved) {
@@ -905,6 +965,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
   const noLiq    = isSwapMode && swapQuote?.status === 'error_liquidity'
   const isL2     = chainId === 8453 || chainId === 84532
   const regChain = getRegistry(chainId)
+  const feeRouterAvailable = isFeeRouterAvailable(chainId)
   const noContract = isConnected && !isWrong && regChain?.feeRouter === '0x0000000000000000000000000000000000000000'
 
   const ctaState: CtaState = !isConnected   ? 'disconnected'
@@ -1190,6 +1251,17 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
               {phase === 'error' && (
                 <TransactionStatusUI phase="error" error={txError} isTestnet={chainId === baseSepolia.id} onReset={reset} />
               )}
+            </div>
+          )}
+
+          {/* ── Fee Router warning ──────────────────────────────── */}
+          {!feeRouterAvailable && isConnected && !isWrong && (
+            <div style={{
+              padding: '8px 12px', borderRadius: 8, marginBottom: 8,
+              background: 'rgba(255,183,71,0.08)', border: '1px solid rgba(255,183,71,0.15)',
+              fontFamily: T.M, fontSize: 10, color: '#FFB547',
+            }}>
+              Fee routing not available on {regChain?.chainName ?? 'this network'}. Direct transfer will be used.
             </div>
           )}
 

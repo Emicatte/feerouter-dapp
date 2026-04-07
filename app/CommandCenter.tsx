@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { useAccount, useChainId, useBalance } from 'wagmi'
+import { useAccount, useChainId, useBalance, useWriteContract } from 'wagmi'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip,
@@ -29,6 +29,9 @@ import { useSweepWebSocket } from '../lib/useSweepWebSocket'
 import { useSweepStats } from '../lib/useSweepStats'
 import { useDistributionList, type DistributionEntry } from '../lib/useDistributionList'
 import { mutationHeaders, parseRSendError } from '../lib/rsendFetch'
+import { parseEther, parseUnits, formatUnits, getAddress } from 'viem'
+import { getRegistry } from '../lib/contractRegistry'
+import { FEE_ROUTER_ABI } from '../lib/feeRouterAbi'
 
 
 // ═══════════════════════════════════════════════════════════
@@ -637,7 +640,7 @@ function EmptyState({ onStart }: { onStart: () => void }) {
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.6, ease: EASE }}
-        style={{ marginBottom: 20 }}
+        style={{ marginBottom: 5 }}
       >
         <svg width="180" height="100" viewBox="0 0 180 100" style={{ display: 'block', margin: '0 auto' }}>
           <circle cx="30" cy="50" r="14" fill={`${C.purple}12`} stroke={C.purple} strokeWidth="0.8" />
@@ -664,12 +667,10 @@ function EmptyState({ onStart }: { onStart: () => void }) {
       </motion.div>
 
       {/* CTA */}
-      <div style={{ fontFamily: C.D, fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 4 }}>
+      <div style={{ fontFamily: C.D, fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 10 }}>
         No routes yet
       </div>
-      <div style={{ fontFamily: C.M, fontSize: 11, color: C.dim, marginBottom: 16 }}>
-        Set up automatic forwarding for incoming funds
-      </div>
+      
       <motion.button
         whileTap={{ scale: 0.97 }}
         onClick={onStart}
@@ -747,6 +748,9 @@ function RouteWizard({
   const [error, setError] = useState<string | null>(null)
   const savingRef = useRef(false)
 
+  // On-chain signing via writeContractAsync (always opens MetaMask)
+  const { writeContractAsync } = useWriteContract()
+
   // Active destinations (resolved from quick or bulk)
   const activeDests: Destination[] = useMemo(() => {
     if (destMode === 'quick') return destinations
@@ -804,6 +808,7 @@ function RouteWizard({
   })
 
   // Create handler (ref guard prevents double-click)
+  // Flow: oracle sign → writeContractAsync (MetaMask opens) → backend rule creation
   const handleCreate = async () => {
     if (savingRef.current) return
     savingRef.current = true
@@ -812,9 +817,74 @@ function RouteWizard({
     try {
       const base = buildPayloadBase()
       const dests = activeDests
+      const primaryDest = dests[0]
 
+      // ── Step 1: Oracle signature ──────────────────────────
+      const registry = getRegistry(chainId)
+      if (!registry) throw new Error(`Chain ${chainId} not supported`)
+
+      const tokenAddr = base.token_address || '0x0000000000000000000000000000000000000000'
+      const isNative = tokenAddr === '0x0000000000000000000000000000000000000000'
+      const threshold = base.min_threshold ?? 0.001
+      const amountWei = isNative
+        ? parseEther(String(threshold))
+        : parseUnits(String(threshold), 18) // ERC-20 decimals resolved below
+
+      const oracleRes = await fetch('/api/oracle/sign', {
+        method: 'POST',
+        headers: mutationHeaders(),
+        body: JSON.stringify({
+          sender: address,
+          recipient: primaryDest.address,
+          tokenIn: tokenAddr,
+          tokenOut: tokenAddr,
+          amountIn: String(threshold),
+          amountInWei: amountWei.toString(),
+          symbol: base.token_symbol || 'ETH',
+          chainId,
+        }),
+        signal: AbortSignal.timeout(8000),
+      })
+      if (!oracleRes.ok) throw new Error('Oracle signature request failed')
+      const oracle = await oracleRes.json()
+      if (!oracle.approved) throw new Error(oracle.rejectionReason || 'Oracle denied transaction')
+
+      // ── Step 2: On-chain tx via MetaMask ──────────────────
+      const recipientAddr = getAddress(primaryDest.address) as `0x${string}`
+      let txHash: `0x${string}`
+
+      if (isNative) {
+        txHash = await writeContractAsync({
+          address: registry.feeRouter,
+          abi: FEE_ROUTER_ABI,
+          functionName: 'transferETHWithOracle',
+          args: [
+            recipientAddr,
+            oracle.oracleNonce as `0x${string}`,
+            BigInt(oracle.oracleDeadline),
+            oracle.oracleSignature as `0x${string}`,
+          ],
+          value: amountWei,
+        })
+      } else {
+        txHash = await writeContractAsync({
+          address: registry.feeRouter,
+          abi: FEE_ROUTER_ABI,
+          functionName: 'transferWithOracle',
+          args: [
+            tokenAddr as `0x${string}`,
+            amountWei,
+            recipientAddr,
+            oracle.oracleNonce as `0x${string}`,
+            BigInt(oracle.oracleDeadline),
+            oracle.oracleSignature as `0x${string}`,
+          ],
+        })
+      }
+      console.log('[RSend] Route confirmed on-chain:', txHash)
+
+      // ── Step 3: Create rule in backend ────────────────────
       if (dests.length === 1) {
-        // Single destination
         await onCreate({
           ...base,
           destination_wallet: dests[0].address,
@@ -823,7 +893,6 @@ function RouteWizard({
           split_percent: 100,
         } as CreateRulePayload)
       } else if (dests.length === 2 && destMode === 'quick') {
-        // Two destinations → split rule
         await onCreate({
           ...base,
           destination_wallet: dests[0].address,
@@ -833,7 +902,6 @@ function RouteWizard({
           split_destination: dests[1].address,
         } as CreateRulePayload)
       } else {
-        // 3+ or bulk → batch create
         const payloads: CreateRulePayload[] = dests.map(d => ({
           ...base,
           destination_wallet: d.address,
@@ -844,8 +912,15 @@ function RouteWizard({
         await onCreateBatch(payloads)
       }
       onClose()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create route')
+    } catch (e: any) {
+      // User rejection in MetaMask is NOT an error — silently cancel
+      const isUserRejection =
+        e?.code === 4001 ||
+        e?.code === 'ACTION_REJECTED' ||
+        /user (rejected|denied|cancelled)/i.test(e?.message ?? '')
+      if (!isUserRejection) {
+        setError(e instanceof Error ? e.message : 'Failed to create route')
+      }
     } finally {
       savingRef.current = false
       setSaving(false)
@@ -908,9 +983,7 @@ function RouteWizard({
           <div style={{ fontFamily: C.D, fontSize: 20, fontWeight: 700, color: C.text, marginBottom: 4 }}>
             Create Route
           </div>
-          <div style={{ fontFamily: C.M, fontSize: 11, color: C.dim, marginBottom: 24 }}>
-            Set up automatic forwarding for incoming funds
-          </div>
+          
 
           {/* Step bar */}
           <WizardStepBar step={step} />

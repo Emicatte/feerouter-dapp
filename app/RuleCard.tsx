@@ -1,8 +1,13 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { useWriteContract, useChainId } from 'wagmi'
+import { parseEther, getAddress } from 'viem'
 import { motion } from 'framer-motion'
 import type { ForwardingRule } from '../lib/useForwardingRules'
+import { getRegistry } from '../lib/contractRegistry'
+import { FEE_ROUTER_ABI } from '../lib/feeRouterAbi'
+import { mutationHeaders } from '../lib/rsendFetch'
 
 const C = {
   bg: '#0a0a0f', surface: '#111118', card: '#16161f',
@@ -41,6 +46,92 @@ export default function RuleCard({ rule, onToggle, onPause, onResume, onDelete }
   const busyRef = useRef(false)
   const isPaused = rule.is_paused
   const isActive = rule.is_active && !isPaused
+
+  // ── On-chain execution (writeContractAsync → always opens MetaMask) ──
+  const { writeContractAsync } = useWriteContract()
+  const chainId = useChainId()
+  const [signingState, setSigningState] = useState<'idle' | 'signing'>('idle')
+  const isSigningRef = useRef(false)
+
+  const handleConfirm = async () => {
+    if (isSigningRef.current) return
+    isSigningRef.current = true
+    setSigningState('signing')
+    setActionError(null)
+    try {
+      // Step 1: Oracle signature
+      const registry = getRegistry(rule.chain_id || chainId)
+      if (!registry) throw new Error(`Chain ${rule.chain_id || chainId} not supported`)
+
+      const tokenAddr = rule.token_address || '0x0000000000000000000000000000000000000000'
+      const isNative = tokenAddr === '0x0000000000000000000000000000000000000000'
+      const amountWei = parseEther(String(rule.min_threshold || '0.001'))
+
+      const oracleRes = await fetch('/api/oracle/sign', {
+        method: 'POST',
+        headers: mutationHeaders(),
+        body: JSON.stringify({
+          sender: rule.source_wallet,
+          recipient: rule.destination_wallet,
+          tokenIn: tokenAddr,
+          tokenOut: tokenAddr,
+          amountIn: String(rule.min_threshold || '0.001'),
+          amountInWei: amountWei.toString(),
+          symbol: rule.token_symbol || 'ETH',
+          chainId: rule.chain_id || chainId,
+        }),
+        signal: AbortSignal.timeout(8000),
+      })
+      if (!oracleRes.ok) throw new Error('Oracle signature request failed')
+      const oracle = await oracleRes.json()
+      if (!oracle.approved) throw new Error(oracle.rejectionReason || 'Oracle denied')
+
+      // Step 2: On-chain tx via MetaMask
+      const recipientAddr = getAddress(rule.destination_wallet) as `0x${string}`
+
+      if (isNative) {
+        await writeContractAsync({
+          address: registry.feeRouter,
+          abi: FEE_ROUTER_ABI,
+          functionName: 'transferETHWithOracle',
+          args: [
+            recipientAddr,
+            oracle.oracleNonce as `0x${string}`,
+            BigInt(oracle.oracleDeadline),
+            oracle.oracleSignature as `0x${string}`,
+          ],
+          value: amountWei,
+        })
+      } else {
+        await writeContractAsync({
+          address: registry.feeRouter,
+          abi: FEE_ROUTER_ABI,
+          functionName: 'transferWithOracle',
+          args: [
+            tokenAddr as `0x${string}`,
+            amountWei,
+            recipientAddr,
+            oracle.oracleNonce as `0x${string}`,
+            BigInt(oracle.oracleDeadline),
+            oracle.oracleSignature as `0x${string}`,
+          ],
+        })
+      }
+    } catch (err: any) {
+      const isRejected =
+        err?.code === 4001 ||
+        err?.code === 'ACTION_REJECTED' ||
+        /user (rejected|denied|cancelled)/i.test(err?.message ?? '')
+      if (!isRejected) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error('[RuleCard] confirm failed:', msg)
+        setActionError(msg)
+      }
+    } finally {
+      isSigningRef.current = false
+      setSigningState('idle')
+    }
+  }
 
   const guard = async (fn: () => Promise<void>) => {
     if (busyRef.current) return
@@ -169,6 +260,14 @@ export default function RuleCard({ rule, onToggle, onPause, onResume, onDelete }
           </span>
         </div>
         <div style={{ display: 'flex', gap: 4 }}>
+          {rule.is_active && (
+            <ActionBtn
+              label={signingState === 'signing' ? 'Signing...' : 'Confirm'}
+              color={C.purple}
+              disabled={signingState === 'signing' || busy}
+              onClick={handleConfirm}
+            />
+          )}
           {rule.is_active && (
             <ActionBtn
               label={isPaused ? 'Resume' : 'Pause'}

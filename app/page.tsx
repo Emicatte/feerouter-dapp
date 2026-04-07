@@ -206,10 +206,19 @@ function ParticleIntro({ onDone }: { onDone: () => void }) {
 //  NETWORK + GAS WIDGET — fixed top-right, below navbar
 // ═══════════════════════════════════════════════════════════
 const CHAINS = [
-  { id: 8453,  name: 'Base',         short: 'Base',     color: '#0052FF', rpc: 'https://mainnet.base.org' },
-  { id: 84532, name: 'Base Sepolia', short: 'Sepolia',  color: '#ffb800', rpc: 'https://sepolia.base.org', testnet: true },
-  { id: 1,     name: 'Ethereum',     short: 'Ethereum', color: '#627EEA', rpc: 'https://eth.llamarpc.com' },
-  { id: 42161, name: 'Arbitrum',     short: 'Arbitrum', color: '#28A0F0', rpc: 'https://arb1.arbitrum.io/rpc' },
+  // ── Mainnet ──
+  { id: 1,     name: 'Ethereum',      short: 'ETH',       color: '#627EEA', rpc: 'https://eth.llamarpc.com' },
+  { id: 8453,  name: 'Base',          short: 'Base',      color: '#0052FF', rpc: 'https://mainnet.base.org' },
+  { id: 42161, name: 'Arbitrum',      short: 'ARB',       color: '#28A0F0', rpc: 'https://arb1.arbitrum.io/rpc' },
+  { id: 10,    name: 'Optimism',      short: 'OP',        color: '#FF0420', rpc: 'https://mainnet.optimism.io' },
+  { id: 137,   name: 'Polygon',       short: 'POL',       color: '#8247E5', rpc: 'https://polygon-rpc.com' },
+  { id: 56,    name: 'BNB Chain',     short: 'BNB',       color: '#F0B90B', rpc: 'https://bsc-dataseed.binance.org' },
+  { id: 43114, name: 'Avalanche',     short: 'AVAX',      color: '#E84142', rpc: 'https://api.avax.network/ext/bc/C/rpc' },
+  { id: 324,   name: 'ZKsync Era',    short: 'ZK',        color: '#8C8DFC', rpc: 'https://mainnet.era.zksync.io' },
+  { id: 42220, name: 'Celo',          short: 'CELO',      color: '#35D07F', rpc: 'https://forno.celo.org' },
+  { id: 81457, name: 'Blast',         short: 'BLAST',     color: '#FCFC03', rpc: 'https://rpc.blast.io' },
+  // ── Testnet ──
+  { id: 84532, name: 'Base Sepolia',  short: 'Sepolia',   color: '#ffb800', rpc: 'https://sepolia.base.org', testnet: true },
 ]
 
 function NetworkTokenWidget({
@@ -387,9 +396,9 @@ function NetworkTokenWidget({
             transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
             style={{
               position: 'absolute', top: 'calc(100%)', right: 0, zIndex: 100,
-              minWidth: 220, background: '#111120',
+              minWidth: 220, maxHeight: 300, overflowY: 'auto' as const, background: '#111120',
               border: '1px solid rgba(255,255,255,0.10)',
-              borderRadius: 14, overflow: 'hidden',
+              borderRadius: 14,
               boxShadow: '0 16px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.03)',
             }}
           >
