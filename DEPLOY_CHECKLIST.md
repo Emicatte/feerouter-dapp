@@ -1,10 +1,10 @@
 # RPagos Command Center — Deploy Checklist
 
-## Secrets & Environment Variables (Railway)
+## Secrets & Environment Variables (Render)
 
-- [ ] `ALCHEMY_WEBHOOK_SECRET` — set on Railway
+- [ ] `ALCHEMY_WEBHOOK_SECRET` — set on Render
 - [ ] `SWEEP_PRIVATE_KEY` — migrate to AWS KMS (NOT in .env)
-- [ ] `TELEGRAM_BOT_TOKEN` — set on Railway
+- [ ] `TELEGRAM_BOT_TOKEN` — set on Render
 - [ ] `SENTRY_DSN` — set for error tracking
 - [ ] `DATABASE_URL` — PostgreSQL connection string
 - [ ] `REDIS_URL` — Redis connection string

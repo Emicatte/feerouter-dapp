@@ -290,7 +290,7 @@ export default function NetworkSelector({ onNetworkChange, compact = false }: Ne
                     )}
                     {isSwitching && (
                       <span style={{ fontFamily: 'var(--font-display)', fontSize: 10, color: '#00ffa3', display: 'block', marginTop: 1 }}>
-                        Conferma su MetaMask…
+                        Conferma nel wallet…
                       </span>
                     )}
                   </div>

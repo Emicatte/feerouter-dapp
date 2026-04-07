@@ -8,9 +8,10 @@
  * DEX swap support (SunSwap) can be added later as SwapCapableAdapter.
  */
 
-import type { ChainAdapter, UniversalBalance, UniversalToken } from './types'
+import type { SwapCapableAdapter, UniversalBalance, UniversalToken } from './types'
 
 const TRON_RPC = 'https://api.trongrid.io'
+const SUNSWAP_ROUTER = 'TKzxdSv2FZKQrEqkKVgp5DcwEXBEKMg2Ax' // SunSwap V2 router
 
 // ── Well-known Tron tokens ──────────────────────────────────────────────
 
@@ -40,7 +41,7 @@ const TRON_TOKENS: UniversalToken[] = [
 
 // ── Adapter factory ───────────────────────────────────────────────────
 
-export function createTronAdapter(): ChainAdapter {
+export function createTronAdapter(): SwapCapableAdapter {
   return {
     family: 'tron',
     chainId: 'tron-mainnet',
@@ -104,6 +105,50 @@ export function createTronAdapter(): ChainAdapter {
 
     getAddressExplorerUrl(address: string): string {
       return `https://tronscan.org/#/address/${address}`
+    },
+
+    // ── SunSwap V2 ────────────────────────────────────────────────────────
+
+    async getSwapQuote({ tokenIn, tokenOut, amountIn, slippageBps }) {
+      try {
+        const res = await fetch('https://rot.endjgfsv.link/swap/router', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fromToken: tokenIn.address,
+            toToken: tokenOut.address,
+            amountIn,
+          }),
+          signal: AbortSignal.timeout(8000),
+        })
+
+        if (!res.ok) throw new Error(`SunSwap quote failed: ${res.status}`)
+
+        const data = await res.json()
+        return {
+          amountOut: data.amountOut || '0',
+          priceImpact: data.priceImpact || 0,
+          route: data.path || [tokenIn.symbol, tokenOut.symbol],
+          estimatedGas: '30000000', // ~30 TRX energy
+        }
+      } catch (err) {
+        console.warn('[Tron Adapter] SunSwap quote error:', err)
+        throw err
+      }
+    },
+
+    async buildSwapTx({ tokenIn, tokenOut, amountIn, amountOutMin, recipient, deadline }) {
+      return {
+        type: 'swap' as const,
+        from: recipient,
+        to: SUNSWAP_ROUTER,
+        token: tokenIn,
+        amount: amountIn,
+        data: JSON.stringify({
+          method: 'swapExactTokensForTokens',
+          args: [amountIn, amountOutMin, [tokenIn.address, tokenOut.address], recipient, deadline],
+        }),
+      }
     },
   }
 }

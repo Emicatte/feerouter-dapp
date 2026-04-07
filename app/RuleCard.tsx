@@ -278,7 +278,7 @@ export default function RuleCard({ rule, onToggle, onPause, onResume, onDelete }
           )}
           {confirmDelete ? (
             <>
-              <ActionBtn label={busy ? 'Check MetaMask...' : 'Confirm'} color={C.red} disabled={busy} onClick={safeDelete} />
+              <ActionBtn label={busy ? 'Check wallet...' : 'Confirm'} color={C.red} disabled={busy} onClick={safeDelete} />
               {!busy && <ActionBtn label="Cancel" color={C.dim} onClick={() => setConfirmDelete(false)} />}
             </>
           ) : (

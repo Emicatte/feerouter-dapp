@@ -22,6 +22,7 @@ from app.models.db_models import Base  # noqa: F401 — definisce Base
 from app.models import forwarding_models as _fwd   # noqa: F401 — forwarding tables
 from app.models import ledger_models as _led       # noqa: F401 — ledger tables
 from app.models import command_models as _cmd      # noqa: F401 — command center tables
+from app.models import strategy_models as _strat   # noqa: F401 — strategy tables
 
 from app.config import get_settings
 

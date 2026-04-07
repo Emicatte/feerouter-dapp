@@ -23,6 +23,8 @@ import { TokenRow } from './TokenSelector'
 import { getNativeToken, getTokensForChain, type TokenInfo } from './tokens/tokenRegistry'
 import { useTokenBalance } from './hooks/useTokenBalance'
 import { useTokenPrices } from './hooks/useTokenPrices'
+import { ChainFamilySwitch } from '../components/shared/ChainFamilySwitch'
+import { useUniversalWallet } from '../hooks/useUniversalWallet'
 
 // Dynamic import — CommandCenter uses Recharts + heavy WebSocket logic
 const CommandCenter = dynamic(() => import('./CommandCenter'), {
@@ -246,6 +248,8 @@ function NetworkTokenWidget({
   const [gas, setGas] = useState<number | null>(null)
   const [openPanel, setOpenPanel] = useState<'chain' | 'token' | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+  const wallet = useUniversalWallet()
+  const isEvmActive = wallet.activeFamily === 'evm'
 
   const chain = CHAINS.find(c => c.id === chainId) ?? CHAINS[0]
   const isTestnet = !!(chain as typeof CHAINS[number] & { testnet?: boolean }).testnet
@@ -299,8 +303,47 @@ function NetworkTokenWidget({
       position: 'fixed', top: 68, right: 24, zIndex: 999,
       display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6,
     }}>
-      {/* ── Unified pill: Chain | Token | Gas ────────────── */}
-      <div
+      {/* ── Chain family switch: EVM / Solana / Tron ──────── */}
+      <ChainFamilySwitch
+        active={wallet.activeFamily}
+        onSelect={wallet.setActiveFamily}
+        connections={wallet.connections}
+      />
+
+      {/* ── Non-EVM wallet address display ───────────────── */}
+      {!isEvmActive && (
+        <div
+          className="bf-blur-16"
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: 'rgba(12,12,30,0.85)',
+            borderRadius: 14, padding: '8px 14px',
+            border: '1px solid rgba(255,255,255,0.06)',
+          }}
+        >
+          {wallet.activeAddress ? (
+            <>
+              <div style={{
+                width: 7, height: 7, borderRadius: '50%',
+                background: '#00D68F', boxShadow: '0 0 6px #00D68F60',
+              }} />
+              <span style={{ fontFamily: C.M, fontSize: 11, color: C.text }}>
+                {wallet.activeAddress.display}
+              </span>
+              <span style={{ fontFamily: C.D, fontSize: 10, color: C.dim, textTransform: 'uppercase' }}>
+                {wallet.activeFamily}
+              </span>
+            </>
+          ) : (
+            <span style={{ fontFamily: C.D, fontSize: 11, color: C.dim }}>
+              Connect {wallet.activeFamily === 'solana' ? 'Phantom' : 'TronLink'} to continue
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* ── Unified pill: Chain | Token | Gas (EVM only) ──── */}
+      {isEvmActive && <div
         className="bf-blur-16"
         style={{
           display: 'flex', alignItems: 'center',
@@ -367,10 +410,10 @@ function NetworkTokenWidget({
           </span>
           <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>Gwei</span>
         </div>
-      </div>
+      </div>}
 
-      {/* ── Balance sub-line ──────────────────────────────── */}
-      {selectedToken && !tokenBalanceLoading && (
+      {/* ── Balance sub-line (EVM only) ───────────────────── */}
+      {isEvmActive && selectedToken && !tokenBalanceLoading && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 5,
           paddingRight: 4,
@@ -386,7 +429,7 @@ function NetworkTokenWidget({
         </div>
       )}
 
-      {/* ── Chain dropdown ────────────────────────────────── */}
+      {/* ── Chain dropdown (EVM only) ─────────────────────── */}
       <AnimatePresence>
         {openPanel === 'chain' && (
           <motion.div
@@ -929,7 +972,7 @@ function HowOverlay() {
 
   const steps = [
     {
-      n: '01', title: 'Connect', desc: 'Plug in your wallet. MetaMask, WalletConnect, Coinbase — whatever you use. No sign-up, no API keys.',
+      n: '01', title: 'Connect', desc: 'Plug in your wallet. MetaMask, Coinbase, Ledger — whatever you use. No sign-up, no API keys.',
       detail: 'RSends uses wagmi v2 with RainbowKit. Once connected, the app detects your chain (Base, Ethereum, Arbitrum) and configures the contract interface automatically. Zero registration friction.',
     },
     {

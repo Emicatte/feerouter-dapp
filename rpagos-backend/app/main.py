@@ -225,6 +225,10 @@ from app.api.ledger_routes import ledger_router
 app.include_router(ledger_router)
 from app.api.price_routes import price_router
 app.include_router(price_router)
+from app.api.execution_routes import router as execution_router
+app.include_router(execution_router)
+from app.api.strategy_routes import router as strategy_router
+app.include_router(strategy_router)
 
 
 # ── Health checks ────────────────────────────────────────

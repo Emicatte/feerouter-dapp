@@ -1,4 +1,4 @@
-IN QUESTO MOMENTO è SOLO DISPONIBILE LA SEZIONE "SEND" LE ALTRE SONO ANCORA IN SVILUPPO
+
 1. Stack Tecnologico
 Backend: Framework FastAPI (Python 3.11+) con esecuzione asincrona.
 

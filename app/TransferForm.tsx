@@ -25,6 +25,7 @@ import {
   type TokenConfig, type NetworkRegistry,
 } from '../lib/contractRegistry'
 import { useSwapQuote, useDirectQuote } from '../lib/useSwapQuote'
+import { UNISWAP_V3_ROUTER_ABI } from '../src/constants/abis/uniswapV3Router'
 import { useBackendCallback } from '../lib/useBackendCallback'
 import { mutationHeaders } from '../lib/rsendFetch'
 import TxConfirmationSheet, { isKnownRecipient, saveKnownRecipient } from './TxConfirmationSheet'
@@ -512,6 +513,8 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
   useEffect(() => {
     const run = async () => {
       if (!address || !recipient || !amount || addrError || !isAddress(recipient) || !tokenIn) return
+      // Skip Oracle preflight on chains without FeeRouter — no on-chain verification needed
+      if (!isFeeRouterAvailable(chainId)) return
       const r = parseAmtIn(); if (!r) return
       setOracleChecking(true); setOracleData(null); setOracleDenied(false)
       try {
@@ -581,6 +584,45 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
     } catch (e) { handleErr(e) }
   }, [parseAmtIn, tokenIn, tokenOut, registry, swapQuote, recipient])
 
+  // ── Direct swap via Uniswap V3 Router (no FeeRouter, no Oracle) ────────
+  const execSwapDirect = useCallback(async () => {
+    const r = parseAmtIn(); if (!r || !tokenIn || !tokenOut || !registry) return
+    if (!swapQuote || swapQuote.status !== 'success') {
+      setTxError('Quotazione non disponibile.'); setPhase('error'); return
+    }
+    const minOut = swapQuote.minAmountOut
+    if (minOut === 0n) { setTxError('MEV Guard: slippage non configurato.'); setPhase('error'); return }
+    setPhase('signing')
+    try {
+      const weth = registry.weth
+      const addrIn = tokenIn.isNative ? weth : tokenIn.address!
+      const addrOut = tokenOut.isNative ? weth : tokenOut.address!
+      const deadline = BigInt(Math.floor(Date.now() / 1000) + 1800) // 30 min
+
+      console.log('[rp_tx] execSwapDirect (no FeeRouter):', { tokenIn: tokenIn.symbol, tokenOut: tokenOut.symbol, amount: r?.toString(), poolFee: swapQuote.poolFee, chainId })
+
+      const hash = await writeContractAsync({
+        address: registry.swapRouter as `0x${string}`,
+        abi: UNISWAP_V3_ROUTER_ABI,
+        functionName: 'exactInputSingle',
+        args: [{
+          tokenIn: addrIn,
+          tokenOut: addrOut,
+          fee: swapQuote.poolFee,
+          recipient: getAddress(recipient) as `0x${string}`,
+          deadline,
+          amountIn: r,
+          amountOutMinimum: minOut,
+          sqrtPriceLimitX96: 0n,
+        }],
+        ...(tokenIn.isNative ? { value: r } : {}),
+      })
+
+      txLog('swap.broadcast', { hash, tokenIn: tokenIn.symbol, tokenOut: tokenOut.symbol, fallback: true })
+      setSendHash(hash); setPhase('wait_send')
+    } catch (e) { handleErr(e) }
+  }, [parseAmtIn, tokenIn, tokenOut, registry, swapQuote, recipient, chainId])
+
   const execDirect = useCallback(async (oracle: OracleResponse) => {
     const r = parseAmtIn(); if (!r || !tokenIn || !registry) return
     setPhase('signing')
@@ -641,11 +683,16 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
   }, [parseAmtIn, tokenIn, registry, recipient, chainId, sendTransactionAsync])
 
   useEffect(() => {
-    if (approveOk && phase === 'wait_approve' && oracleData) {
+    if (!approveOk || phase !== 'wait_approve') return
+    // FeeRouter path: Oracle available → use execSwap/execDirect with Oracle
+    if (oracleData) {
       if (isSwapMode) execSwap(oracleData)
       else execDirect(oracleData)
+    } else if (isSwapMode) {
+      // Direct swap fallback (no FeeRouter, no Oracle) → use Uniswap directly
+      execSwapDirect()
     }
-  }, [approveOk, phase, oracleData, isSwapMode, execSwap, execDirect])
+  }, [approveOk, phase, oracleData, isSwapMode, execSwap, execDirect, execSwapDirect])
 
   useEffect(() => {
     if (!sendOk || phase !== 'wait_send' || !sendHash || !tokenIn || !address || directERC20Mode) return
@@ -803,16 +850,6 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
     const ZERO_ADDR = '0x0000000000000000000000000000000000000000'
     const hasFeeRouter = isFeeRouterAvailable(chainId)
 
-    // Swap mode requires FeeRouter — block if not available
-    if (isSwapMode && !hasFeeRouter) {
-      setToast({
-        msg: `⚠ Swap non disponibile su ${registry.chainName}. Usa direct transfer o passa a Base.`,
-        color: T.red,
-      })
-      releaseLock()
-      return
-    }
-
     if (!tokenIn.isNative) {
       const tokenChains = findChainForToken(tokenIn.symbol)
       if (!tokenChains.includes(chainId)) {
@@ -826,28 +863,70 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
       }
     }
 
-    // ── Direct transfer fallback (no oracle, no FeeRouter) ─────────────────
-    if (!hasFeeRouter && !isSwapMode) {
-      txLog('tx.initiated', { isSwap: false, token: tokenIn.symbol, chain: chainId, fallback: true })
-      setPhase('signing')
+    // ── Fallback path: no FeeRouter on this chain ─────────────────────────
+    if (!hasFeeRouter) {
+      if (isSwapMode) {
+        // ── Direct swap via Uniswap V3 Router (no Oracle, no fee) ───────
+        txLog('tx.initiated', { isSwap: true, token: tokenIn.symbol, chain: chainId, fallback: true })
+        try {
+          if (!tokenIn.isNative) {
+            setPhase('approving')
+            const ah = await writeContractAsync({
+              address: tokenIn.address! as `0x${string}`,
+              abi: erc20Abi,
+              functionName: 'approve',
+              args: [registry.swapRouter as `0x${string}`, r],
+            })
+            setApprovHash(ah); setPhase('wait_approve')
+            // execSwapDirect will be called after approve confirms (via useEffect)
+          } else {
+            await execSwapDirect()
+          }
+        } catch (e) { handleErr(e) }
+      } else {
+        // ── Direct transfer (no Oracle, no fee) ────────────────────────
+        txLog('tx.initiated', { isSwap: false, token: tokenIn.symbol, chain: chainId, fallback: true })
+        setPhase('signing')
+        try {
+          let hash: `0x${string}`
+          if (tokenIn.isNative) {
+            hash = await sendTransactionAsync({
+              to: getAddress(recipient) as `0x${string}`,
+              value: r,
+            })
+          } else {
+            hash = await writeContractAsync({
+              address: tokenIn.address! as `0x${string}`,
+              abi: erc20Abi,
+              functionName: 'transfer',
+              args: [getAddress(recipient) as `0x${string}`, r],
+            })
+          }
+          txLog('direct.broadcast', { hash, token: tokenIn.symbol, fallback: true })
+          setSendHash(hash); setPhase('wait_send')
+        } catch (e) { handleErr(e) }
+      }
+
+      // ── Compliance callback (best-effort, works on ALL chains) ────────
       try {
-        let hash: `0x${string}`
-        if (tokenIn.isNative) {
-          hash = await sendTransactionAsync({
-            to: getAddress(recipient) as `0x${string}`,
-            value: r,
-          })
-        } else {
-          hash = await writeContractAsync({
-            address: tokenIn.address! as `0x${string}`,
-            abi: erc20Abi,
-            functionName: 'transfer',
-            args: [getAddress(recipient) as `0x${string}`, r],
-          })
-        }
-        txLog('direct.broadcast', { hash, token: tokenIn.symbol, fallback: true })
-        setSendHash(hash); setPhase('wait_send')
-      } catch (e) { handleErr(e) }
+        await fetch(`${process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:8000'}/api/v1/tx/callback`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chain_id: chainId,
+            sender: address,
+            recipient,
+            token: tokenIn.symbol,
+            amount,
+            fee_router_used: false,
+            is_swap: isSwapMode,
+            timestamp: new Date().toISOString(),
+          }),
+          signal: AbortSignal.timeout(5000),
+        })
+      } catch {
+        // Backend callback is best-effort — non bloccare il flusso
+      }
       return
     }
 
@@ -957,7 +1036,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
   const sym      = tokenIn?.symbol  ?? 'ETH'
   const symOut   = isSwapMode ? (tokenOut?.symbol ?? 'USDC') : sym
   const displaySym = isExtERC20 ? externalToken!.symbol : sym
-  const isWrong  = isConnected && !([8453, 1, 84532, 11155111] as number[]).includes(chainId as number)
+  const isWrong  = isConnected && !([8453, 1, 42161, 10, 137, 56, 43114, 324, 42220, 81457, 84532, 11155111] as number[]).includes(chainId as number)
   const hasInsuf = isConnected && !!rawIn && !!tokenIn && rawIn > tokenIn.balance
   // Balance check for external ERC-20 token
   const extAmtWei = isExtERC20 && amount ? (() => { try { return parseUnits(amount, externalToken!.decimals) } catch { return null } })() : null
@@ -970,10 +1049,9 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
 
   const ctaState: CtaState = !isConnected   ? 'disconnected'
     : isWrong                               ? 'wrong_network'
-    : (isExtERC20 ? false : noContract)     ? 'wrong_network'
     : busy                                  ? 'busy'
     : (hasInsuf || hasInsufExt)             ? 'insufficient'
-    : (isExtERC20 ? false : oracleDenied)   ? 'oracle_denied'
+    : (isExtERC20 || !feeRouterAvailable ? false : oracleDenied) ? 'oracle_denied'
     : noLiq                                 ? 'no_liquidity'
     : !recipient || !!addrError             ? 'no_recipient'
     : (isExtERC20 ? !extAmtWei : !rawIn)    ? 'no_amount'
@@ -1254,14 +1332,17 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
             </div>
           )}
 
-          {/* ── Fee Router warning ──────────────────────────────── */}
+          {/* ── Direct Mode banner ──────────────────────────────── */}
           {!feeRouterAvailable && isConnected && !isWrong && (
             <div style={{
-              padding: '8px 12px', borderRadius: 8, marginBottom: 8,
-              background: 'rgba(255,183,71,0.08)', border: '1px solid rgba(255,183,71,0.15)',
-              fontFamily: T.M, fontSize: 10, color: '#FFB547',
+              padding: '8px 12px', borderRadius: 10, marginBottom: 8,
+              background: 'rgba(255,183,71,0.06)',
+              border: '1px solid rgba(255,183,71,0.12)',
             }}>
-              Fee routing not available on {regChain?.chainName ?? 'this network'}. Direct transfer will be used.
+              <div style={{ fontFamily: T.M, fontSize: 10, color: '#FFB547', lineHeight: 1.5 }}>
+                <strong>Direct mode</strong> — FeeRouter not deployed on {regChain?.chainName ?? 'this network'}.
+                Transaction will be sent directly without Oracle verification and 0.5% fee.
+              </div>
             </div>
           )}
 
@@ -1325,8 +1406,10 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
                   : ctaState==='no_recipient'   ? 'Inserisci destinatario'
                   : ctaState==='no_amount'      ? 'Inserisci un importo'
                   : needsApproval && !tokenIn?.isNative ? `Approva ${displaySym}`
-                  : isSwapMode                  ? `Swap & Invia ${sym} → ${symOut}`
-                  :                               `Invia ${displaySym}`}
+                  : isSwapMode && feeRouterAvailable  ? `Swap & Invia ${sym} → ${symOut}`
+                  : isSwapMode                        ? `Swap Direct ${sym} → ${symOut}`
+                  : feeRouterAvailable                ? `Invia ${displaySym}`
+                  :                                     `Invia Direct ${displaySym}`}
               </button>
             )}
           </div>

@@ -26,6 +26,7 @@ import { createSolanaAdapter } from '../lib/chain-adapters/solana-adapter'
 import { createTronAdapter } from '../lib/chain-adapters/tron-adapter'
 
 const SolanaProviders = dynamic(() => import('./providers-solana'), { ssr: false })
+const TronProvider = dynamic(() => import('./providers-tron').then(m => ({ default: m.TronProvider })), { ssr: false })
 
 // ── Register all chain adapters at module load ────────────────────────────
 const EVM_CHAIN_IDS = [1, 10, 56, 137, 324, 8453, 42161, 42220, 43114, 81457, 84532]
@@ -204,7 +205,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <ChainGuardProvider>
               <GasWarningBanner />
               <SolanaProviders>
-                {children}
+                <TronProvider>
+                  {children}
+                </TronProvider>
               </SolanaProviders>
             </ChainGuardProvider>
           )}

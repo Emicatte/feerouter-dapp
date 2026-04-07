@@ -95,7 +95,7 @@ export function useForwardingRules(address: string | undefined) {
     try {
       const timeout = new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error(
-          'Signature timed out — open MetaMask and approve the pending request'
+          'Signature timed out — open your wallet and approve the pending request'
         )), 60_000)
       )
       return await Promise.race([signMessageAsync({ message }), timeout])

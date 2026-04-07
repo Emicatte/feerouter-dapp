@@ -13,6 +13,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useAccount, useChainId, useBalance, useWriteContract } from 'wagmi'
+import { useUniversalWallet } from '../hooks/useUniversalWallet'
+import type { ChainFamily } from '../lib/chain-adapters/types'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip,
@@ -289,6 +291,7 @@ export default function CommandCenter({
   const address = ownerAddress ?? hookAddr
   const chainId = chainIdProp ?? hookChainId
   const { data: balance } = useBalance({ address: address as `0x${string}` | undefined })
+  const wallet = useUniversalWallet()
 
   const [tab, setTab] = useState<Tab>('routes')
   const [tabLoading, setTabLoading] = useState(false)
@@ -342,8 +345,8 @@ export default function CommandCenter({
 
   const activeRules = rules.filter(r => r.is_active && !r.is_paused).length
 
-  // ── Not connected ─────────────────────────────────────
-  if (!isConnected) {
+  // ── Not connected (any chain family) ──────────────────
+  if (!isConnected && !wallet.activeAddress) {
     return (
       <div style={{ textAlign: 'center', padding: 40 }}>
         <div style={{ fontFamily: C.D, fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 4 }}>
@@ -365,6 +368,19 @@ export default function CommandCenter({
         background: 'rgba(255,255,255,0.02)',
         borderRadius: 10, border: `1px solid ${C.border}`,
       }}>
+        {/* Chain family badge */}
+        <div style={{
+          padding: '3px 8px', borderRadius: 6,
+          background: wallet.activeFamily === 'evm' ? '#627EEA15' :
+                      wallet.activeFamily === 'solana' ? '#9945FF15' : '#FF001315',
+          fontFamily: C.D, fontSize: 10, fontWeight: 600,
+          color: wallet.activeFamily === 'evm' ? '#627EEA' :
+                 wallet.activeFamily === 'solana' ? '#9945FF' : '#FF0013',
+        }}>
+          {wallet.activeFamily === 'evm' ? `⟠ ${CHAIN_NAMES[chainId] || 'EVM'}` :
+           wallet.activeFamily === 'solana' ? '◎ Solana' : '◆ TRON'}
+        </div>
+
         {[
           { label: 'Volume', value: stats ? `${stats.total_volume_eth.toFixed(4)} ETH` : '--', extra: stats ? `(${fiat(stats.total_volume_eth, ethPrice)})` : '', color: C.purple },
           { label: 'Sweeps', value: stats ? String(stats.total_sweeps) : '--', extra: '', color: C.blue },
@@ -443,6 +459,7 @@ export default function CommandCenter({
                   pauseRule={pauseRule}
                   resumeRule={resumeRule}
                   distLists={distLists}
+                  activeFamily={wallet.activeFamily}
                 />
               )}
               {tab === 'monitor' && (
@@ -456,10 +473,11 @@ export default function CommandCenter({
                   ethPrice={ethPrice}
                   rules={rules}
                   wsStats={wsStats}
+                  activeFamily={wallet.activeFamily}
                 />
               )}
               {tab === 'history' && (
-                <HistoryTab address={address!} ethPrice={ethPrice} stats={stats} rules={rules} />
+                <HistoryTab address={address!} ethPrice={ethPrice} stats={stats} rules={rules} activeFamily={wallet.activeFamily} walletAddress={wallet.activeAddress?.raw ?? null} />
               )}
               {tab === 'analytics' && (
                 <AnalyticsTab stats={stats} daily={daily} loading={statsLoading} ethPrice={ethPrice} isVisible={isVisible} />
@@ -470,6 +488,7 @@ export default function CommandCenter({
                   loading={distLoading}
                   createList={createDistList}
                   deleteList={deleteDistList}
+                  activeFamily={wallet.activeFamily}
                 />
               )}
               {tab === 'settings' && (
@@ -500,7 +519,7 @@ export default function CommandCenter({
 function RoutesTab({
   address, chainId, balance, ethPrice, rules, loading,
   createRule, createRuleBatch, updateRule, deleteRule, pauseRule, resumeRule,
-  distLists,
+  distLists, activeFamily,
 }: {
   address: string
   chainId: number
@@ -515,7 +534,26 @@ function RoutesTab({
   pauseRule: (id: number) => Promise<void>
   resumeRule: (id: number) => Promise<void>
   distLists: any[]
+  activeFamily: ChainFamily
 }) {
+  // ── Non-EVM guard: auto-forwarding is EVM-only for now ──
+  if (activeFamily !== 'evm') {
+    return (
+      <div style={{ textAlign: 'center', padding: 40 }}>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>
+          {activeFamily === 'solana' ? '◎' : '◆'}
+        </div>
+        <div style={{ fontFamily: C.D, fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4 }}>
+          Auto-forwarding on {activeFamily === 'solana' ? 'Solana' : 'TRON'}
+        </div>
+        <div style={{ fontFamily: C.M, fontSize: 11, color: C.dim, lineHeight: 1.5 }}>
+          Cross-chain automation coming soon.<br/>
+          Currently available on EVM chains.
+        </div>
+      </div>
+    )
+  }
+
   const [showWizard, setShowWizard] = useState(false)
 
   const handleToggle = async (id: number, active: boolean) => {
@@ -1096,7 +1134,7 @@ function RouteWizard({
                   transition: 'all 0.2s',
                 }}
               >
-                {saving ? 'Check MetaMask to sign...' : 'Sign & Create Route'}
+                {saving ? 'Check wallet to sign...' : 'Sign & Create Route'}
               </motion.button>
             )}
           </div>
@@ -1998,7 +2036,7 @@ function FlowDiagram({ address, destinations }: { address: string; destinations:
 //  MONITOR TAB
 // ═══════════════════════════════════════════════════════════
 
-function MonitorTab({ gas, stats, activeRules, events, connected, emergencyStop, ethPrice, rules, wsStats }: {
+function MonitorTab({ gas, stats, activeRules, events, connected, emergencyStop, ethPrice, rules, wsStats, activeFamily }: {
   gas: number | null
   stats: any
   activeRules: number
@@ -2008,7 +2046,26 @@ function MonitorTab({ gas, stats, activeRules, events, connected, emergencyStop,
   ethPrice: number
   rules: any[]
   wsStats: { totalEvents: number; reconnects: number }
+  activeFamily: ChainFamily
 }) {
+  // ── Non-EVM guard: sweep monitor is EVM-only ──
+  if (activeFamily !== 'evm') {
+    return (
+      <div style={{ textAlign: 'center', padding: 40 }}>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>
+          {activeFamily === 'solana' ? '◎' : '◆'}
+        </div>
+        <div style={{ fontFamily: C.D, fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4 }}>
+          Live monitoring on {activeFamily === 'solana' ? 'Solana' : 'TRON'}
+        </div>
+        <div style={{ fontFamily: C.M, fontSize: 11, color: C.dim, lineHeight: 1.5 }}>
+          Cross-chain monitoring coming soon.<br/>
+          Currently available on EVM chains.
+        </div>
+      </div>
+    )
+  }
+
   const [flash, setFlash] = useState(false)
   const prevLen = useRef(events.length)
 
@@ -2187,7 +2244,7 @@ interface LogEntry {
   retry_count: number
 }
 
-function HistoryTab({ address, ethPrice, stats: overallStats, rules }: { address: string; ethPrice: number; stats: any; rules: any[] }) {
+function HistoryTab({ address, ethPrice, stats: overallStats, rules, activeFamily, walletAddress }: { address: string; ethPrice: number; stats: any; rules: any[]; activeFamily: ChainFamily; walletAddress: string | null }) {
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
@@ -2205,8 +2262,10 @@ function HistoryTab({ address, ethPrice, stats: overallStats, rules }: { address
   const fetchLogs = useCallback(async () => {
     setLoading(true)
     try {
+      const ownerAddr = walletAddress || address
       const params = new URLSearchParams({
-        owner_address: address.toLowerCase(),
+        owner_address: ownerAddr.toLowerCase(),
+        chain_family: activeFamily,
         page: String(page),
         per_page: '15',
       })
@@ -2228,13 +2287,15 @@ function HistoryTab({ address, ethPrice, stats: overallStats, rules }: { address
       }
     } catch { /* */ }
     setLoading(false)
-  }, [address, page, fToken, fStatus, fDateFrom, fDateTo, fRoute, fSearch])
+  }, [address, walletAddress, activeFamily, page, fToken, fStatus, fDateFrom, fDateTo, fRoute, fSearch])
 
   useEffect(() => { fetchLogs() }, [fetchLogs])
 
   const exportUrl = (fmt: string) => {
+    const ownerAddr = walletAddress || address
     const params = new URLSearchParams({
-      owner_address: address.toLowerCase(),
+      owner_address: ownerAddr.toLowerCase(),
+      chain_family: activeFamily,
       format: fmt,
     })
     if (fToken) params.set('token', fToken)
@@ -2841,13 +2902,32 @@ function AnalyticsTab({ stats: parentStats, daily: parentDaily, loading: parentL
 // ═══════════════════════════════════════════════════════════
 
 function GroupsTab({
-  lists, loading, createList, deleteList,
+  lists, loading, createList, deleteList, activeFamily,
 }: {
   lists: any[]
   loading: boolean
   createList: (name: string, entries: DistributionEntry[]) => Promise<any>
   deleteList: (id: number) => Promise<void>
+  activeFamily: ChainFamily
 }) {
+  // ── Non-EVM guard: distribution groups are EVM-only ──
+  if (activeFamily !== 'evm') {
+    return (
+      <div style={{ textAlign: 'center', padding: 40 }}>
+        <div style={{ fontSize: 32, marginBottom: 12 }}>
+          {activeFamily === 'solana' ? '◎' : '◆'}
+        </div>
+        <div style={{ fontFamily: C.D, fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4 }}>
+          Distribution groups on {activeFamily === 'solana' ? 'Solana' : 'TRON'}
+        </div>
+        <div style={{ fontFamily: C.M, fontSize: 11, color: C.dim, lineHeight: 1.5 }}>
+          Cross-chain distribution coming soon.<br/>
+          Currently available on EVM chains.
+        </div>
+      </div>
+    )
+  }
+
   const [showForm, setShowForm] = useState(false)
   const [name, setName] = useState('')
   const [entries, setEntries] = useState<DistributionEntry[]>([{ address: '', label: '', percent: 100 }])
