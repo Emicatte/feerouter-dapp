@@ -37,6 +37,8 @@ import { useTabLock } from '../lib/useTabLock'
 import { useIdempotencyKey } from '../lib/useIdempotencyKey'
 import { useKeyboardShortcuts } from '../lib/useKeyboardShortcuts'
 import { useClipboardDetection } from '../lib/useClipboardDetection'
+import { logger } from '../lib/logger'
+import { useIsMobile } from '../hooks/useIsMobile'
 
 // ── Theme ──────────────────────────────────────────────────────────────────
 const T = {
@@ -119,13 +121,15 @@ interface OracleResponse {
 
 function txLog(event: string, data: Record<string, unknown>) {
   const entry = { event, ts: new Date().toISOString(), ...data }
-  console.log('[rp_tx]', JSON.stringify(entry))
+  logger.debug('TransferForm', `tx:${event}`, entry)
   try {
     const raw = localStorage.getItem('rp_tx_history')
     const h: unknown[] = raw ? JSON.parse(raw) : []
     h.push(entry); if (h.length > 200) h.splice(0, h.length - 200)
     localStorage.setItem('rp_tx_history', JSON.stringify(h))
-  } catch { /* SSR */ }
+  } catch (err) {
+    logger.warn('TransferForm', 'Failed to persist tx history', { error: String(err) })
+  }
 }
 
 // ── Token Logo ─────────────────────────────────────────────────────────────
@@ -191,11 +195,12 @@ function TokenPill({ token, onClick, accentColor, busy }: {
 }
 
 // ── Token Selector Modal — background solido opaco ────────────────────────
-function TokenSelectorModal({ tokens, onSelect, onClose, title }: {
+function TokenSelectorModal({ tokens, onSelect, onClose, title, isMobile }: {
   tokens: (TokenConfig & { balance: bigint })[]
   onSelect: (t: TokenConfig & { balance: bigint }) => void
   onClose: () => void
   title: string
+  isMobile?: boolean
 }) {
   const ref = useRef<HTMLDivElement>(null)
 
@@ -228,19 +233,21 @@ function TokenSelectorModal({ tokens, onSelect, onClose, title }: {
     <div style={{
       position: 'fixed', inset: 0, zIndex: 200,
       background: 'rgba(0,0,0,0.55)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: '16px',
+      display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center',
+      padding: isMobile ? 0 : '16px',
     }}>
       {/* Modale — background SOLIDO, nessuna trasparenza */}
       <div
         ref={ref}
         style={{
-          width: '100%', maxWidth: 380,
+          width: '100%', maxWidth: isMobile ? '100%' : 380,
+          ...(isMobile ? { height: '85dvh' } : {}),
           background: '#111120',           // T.card — solido
           border: '1px solid rgba(255,255,255,0.10)',
-          borderRadius: 20,
+          borderRadius: isMobile ? '20px 20px 0 0' : 20,
           boxShadow: '0 24px 80px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.04)',
           overflow: 'hidden',
+          display: 'flex', flexDirection: 'column' as const,
           animation: 'rpFadeUp 0.2s var(--ease-spring) both',
         }}
       >
@@ -262,7 +269,7 @@ function TokenSelectorModal({ tokens, onSelect, onClose, title }: {
         </div>
 
         {/* Lista token */}
-        <div style={{ maxHeight: 360, overflowY: 'auto' }}>
+        <div style={{ overflowY: 'auto', ...(isMobile ? { flex: 1 } : { maxHeight: 360 }) }}>
           {tokens.map((t, i) => (
             <button
               key={t.symbol}
@@ -394,6 +401,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
   const { isLocked, acquireLock, releaseLock } = useTabLock()
   const { generateKey: generateIdempotencyKey, getKey: getIdempotencyKey } = useIdempotencyKey()
   const { clipboardAddress, dismiss: dismissClipboard } = useClipboardDetection()
+  const isMobile = useIsMobile()
 
   useKeyboardShortcuts({
     onEscape: () => { if (showConfirmation) setShowConfirmation(false) },
@@ -572,8 +580,8 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
       const args = tokenIn.isNative
         ? [tokenOut.address!, minOut, getAddress(recipient) as `0x${string}`, oracle.oracleNonce as `0x${string}`, BigInt(oracle.oracleDeadline), oracle.oracleSignature as `0x${string}`]
         : [tokenIn.address!, tokenOut.address!, r, minOut, getAddress(recipient) as `0x${string}`, oracle.oracleNonce as `0x${string}`, BigInt(oracle.oracleDeadline), oracle.oracleSignature as `0x${string}`]
-      console.log('[rp_tx] execSwap args:', JSON.stringify(args, (_, v) => typeof v === 'bigint' ? v.toString() : v))
-      console.log('[rp_tx] oracle:', { nonce: oracle.oracleNonce, deadline: oracle.oracleDeadline, sig: oracle.oracleSignature?.slice(0,20)+'...' })
+      logger.debug('TransferForm', 'execSwap args', { tokenIn: tokenIn.symbol, tokenOut: tokenOut?.symbol, isNative: tokenIn.isNative, chainId: String(chainId) })
+      logger.debug('TransferForm', 'execSwap oracle', { deadline: String(oracle.oracleDeadline) })
       const hash = await writeContractAsync({
         address: registry.feeRouter, abi: FEE_ROUTER_ABI,
         functionName: tokenIn.isNative ? 'swapETHAndSend' : 'swapAndSend',
@@ -599,7 +607,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
       const addrOut = tokenOut.isNative ? weth : tokenOut.address!
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 1800) // 30 min
 
-      console.log('[rp_tx] execSwapDirect (no FeeRouter):', { tokenIn: tokenIn.symbol, tokenOut: tokenOut.symbol, amount: r?.toString(), poolFee: swapQuote.poolFee, chainId })
+      logger.debug('TransferForm', 'execSwapDirect (no FeeRouter)', { tokenIn: tokenIn.symbol, tokenOut: tokenOut.symbol, poolFee: String(swapQuote.poolFee), chainId: String(chainId) })
 
       const hash = await writeContractAsync({
         address: registry.swapRouter as `0x${string}`,
@@ -631,21 +639,9 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
 
       if (isFeeRouterAvailable(chainId)) {
         // ── FeeRouter path (Base, Base Sepolia) ─────────────────────
-        console.log('[rp_tx] execDirect oracle:', { nonce: oracle.oracleNonce, deadline: oracle.oracleDeadline, sig: oracle.oracleSignature?.slice(0,20)+'...' })
-        console.log('[rp_tx] execDirect token:', tokenIn.symbol, 'isNative:', tokenIn.isNative, 'registry.feeRouter:', registry.feeRouter)
-        console.log('[rp_tx] execDirect →', { contract: registry.feeRouter, fn: tokenIn.isNative ? 'transferETHWithOracle' : 'transferWithOracle', token: tokenIn.address, amount: r?.toString(), recipient, nonce: oracle.oracleNonce, deadline: oracle.oracleDeadline, sig: oracle.oracleSignature?.slice(0,10) })
+        logger.debug('TransferForm', 'execDirect FeeRouter path', { token: tokenIn.symbol, isNative: tokenIn.isNative, fn: tokenIn.isNative ? 'transferETHWithOracle' : 'transferWithOracle', chainId: String(chainId) })
         if (tokenIn.isNative) {
-          console.log('[rp_tx] transferETHWithOracle args:', {
-            feeRouter:      registry.feeRouter,
-            recipient:      getAddress(recipient),
-            nonce:          oracle.oracleNonce,
-            nonceLen:       oracle.oracleNonce?.length,
-            deadline:       oracle.oracleDeadline,
-            sigSlice:       oracle.oracleSignature?.slice(0, 20),
-            value:          r?.toString(),
-            chainId,
-            contractSigner: (oracle as OracleResponse & { _debug?: { signer?: string } })._debug?.signer,
-          })
+          logger.debug('TransferForm', 'transferETHWithOracle', { chainId: String(chainId), deadline: String(oracle.oracleDeadline) })
           hash = await writeContractAsync({
             address: registry.feeRouter, abi: FEE_ROUTER_ABI,
             functionName: 'transferETHWithOracle',
@@ -661,7 +657,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
         }
       } else {
         // ── Direct transfer fallback (no FeeRouter on this chain) ───
-        console.log('[rp_tx] execDirect fallback (no FeeRouter):', { token: tokenIn.symbol, isNative: tokenIn.isNative, amount: r?.toString(), recipient, chainId })
+        logger.debug('TransferForm', 'execDirect fallback (no FeeRouter)', { token: tokenIn.symbol, isNative: tokenIn.isNative, chainId: String(chainId) })
         if (tokenIn.isNative) {
           hash = await sendTransactionAsync({
             to: getAddress(recipient) as `0x${string}`,
@@ -1029,7 +1025,6 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
     } else { setAmount(formatUnits(tokenIn.balance, tokenIn.decimals)) }
     setTimeout(() => inputRef.current?.focus(), 10)
   }
-
   // ── Valori derivati ────────────────────────────────────────────────────
   const rawIn    = parseAmtIn()
   const busy     = ['preflight','approving','wait_approve','signing','wait_send'].includes(phase)
@@ -1105,7 +1100,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
   return (
     <>
       <div style={noCard ? {} : C.card} className={noCard ? '' : 'bf-blur-32s'}>
-        <div style={{ padding:'10px 10px 10px' }}>
+        <div style={{ padding: isMobile ? '16px' : '10px 10px 10px' }}>
 
           {/* Gas warning L1 — only when needed */}
           {!isL2 && isConnected && (
@@ -1145,7 +1140,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
                     value={amount} onChange={e => setAmount(e.target.value)}
                     onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
                     disabled={busy}
-                    style={{ fontFamily:T.D, fontSize:30, fontWeight:400, letterSpacing:'-0.02em', width:'100%', background:'transparent', border:'none', outline:'none', color:busy?T.muted:T.text, textAlign:'right' as const }}
+                    style={{ fontFamily:T.D, fontSize:isMobile ? 16 : 30, fontWeight:400, letterSpacing:'-0.02em', width:'100%', background:'transparent', border:'none', outline:'none', color:busy?T.muted:T.text, textAlign:'right' as const }}
                   />
                   <div style={{ fontFamily:T.M, fontSize:12, color:T.muted, marginTop:2 }}>
                     {amount && tokenIn ? `$${(parseFloat(amount) * (EUR_RATES[tokenIn.symbol] ?? 1)).toFixed(2)}` : '$0'}
@@ -1422,6 +1417,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
           title={selectingToken === 'in' ? 'Seleziona token di input' : 'Seleziona token di output'}
           tokens={tokenList}
           onClose={() => setSelectingToken(null)}
+          isMobile={isMobile}
           onSelect={t => {
             if (selectingToken === 'in') {
               setTokenIn(t)

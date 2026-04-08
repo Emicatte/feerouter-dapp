@@ -6,9 +6,9 @@ Verifica la x_signature inviata dal frontend usando HMAC-SHA256.
 Firma: HMAC_SHA256(secret, "fiscal_ref|tx_hash|gross_amount|currency|timestamp")
 
 Sicurezza:
-  - Produzione (DEBUG=false): verifica HMAC-SHA256 rigorosa + anti-replay (5 min)
-  - Development (DEBUG=true): accetta sia HMAC reale che PENDING_HMAC_SHA256
+  - Verifica HMAC-SHA256 rigorosa + anti-replay (5 min) in TUTTI gli ambienti
   - Usa hmac.compare_digest per prevenire timing attacks
+  - In DEBUG=true: logga warning extra per diagnostica, ma NON bypassa la verifica
 """
 
 import hashlib
@@ -87,19 +87,29 @@ def verify_signature(
     Verifica che x_signature corrisponda al payload.
 
     - Usa hmac.compare_digest per prevenire timing attacks.
-    - In produzione (DEBUG=false): verifica HMAC rigorosa + anti-replay.
-    - In development (DEBUG=true): accetta anche PENDING_HMAC_SHA256.
+    - Anti-replay: rifiuta timestamp più vecchi di 5 minuti.
+    - In DEBUG=true: logga warning extra ma verifica comunque.
     """
     settings = get_settings()
 
-    # Development mode: accetta placeholder
-    if settings.debug and x_signature == "PENDING_HMAC_SHA256":
-        return True
+    if x_signature == "PENDING_HMAC_SHA256":
+        logger.warning(
+            "HMAC verification REJECTED: received placeholder 'PENDING_HMAC_SHA256'. "
+            "The frontend must compute a real HMAC-SHA256 signature."
+        )
+        return False
 
     # Anti-replay: verifica che il timestamp sia entro la finestra
-    if not settings.debug:
-        if not _check_timestamp_freshness(timestamp):
-            return False
+    if not _check_timestamp_freshness(timestamp):
+        return False
 
     expected = compute_signature(fiscal_ref, tx_hash, amount, currency, timestamp)
-    return hmac.compare_digest(x_signature, expected)
+    valid = hmac.compare_digest(x_signature, expected)
+
+    if not valid and settings.debug:
+        logger.warning(
+            "HMAC mismatch (DEBUG mode). fiscal_ref=%s, tx_hash=%s",
+            fiscal_ref, tx_hash[:16] + "..." if len(tx_hash) > 16 else tx_hash,
+        )
+
+    return valid

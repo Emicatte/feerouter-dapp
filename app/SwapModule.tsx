@@ -15,6 +15,7 @@ import {
 import { getRegistry, type TokenConfig } from '../lib/contractRegistry'
 import { useSwapQuote } from '../lib/useSwapQuote'
 import { mutationHeaders } from '../lib/rsendFetch'
+import { useIsMobile } from '../hooks/useIsMobile'
 
 const BACKEND = process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:8000'
 
@@ -106,6 +107,7 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
   const chainId = useChainId()
   const publicClient = usePublicClient()
   const reg = getRegistry(chainId)
+  const isMobile = useIsMobile()
 
   // Token state
   const tokens = useMemo(() => {
@@ -345,10 +347,10 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
 
   if (!reg) return null
 
-  const cardStyle = noCard ? {} : { background: 'rgba(8,12,30,0.72)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 20, overflow: 'hidden', boxShadow: '0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.15)' }
+  const cardStyle = noCard ? {} : { background: 'rgba(8,12,30,0.72)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: isMobile ? 12 : 20, overflow: 'hidden', boxShadow: '0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.15)' }
   return (
     <div className={noCard ? '' : 'bf-blur-32s'} style={cardStyle}>
-      <div style={{ padding: '10px 10px 10px' }}>
+      <div style={{ padding: isMobile ? '16px' : '10px 10px 10px' }}>
 
         {/* ── SELL ─────────────────────────────────────────────── */}
         <div className="rp-anim-1">
@@ -386,7 +388,7 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
                   value={amount} onChange={e => { setAmount(e.target.value); setPhase('idle') }}
                   disabled={busy}
                   style={{
-                    fontFamily: C.D, fontSize: 30, fontWeight: 400, letterSpacing: '-0.02em',
+                    fontFamily: C.D, fontSize: isMobile ? 16 : 30, fontWeight: 400, letterSpacing: '-0.02em',
                     width: '100%', background: 'transparent', border: 'none', outline: 'none',
                     color: busy ? C.dim : C.text, textAlign: 'right' as const,
                   }}
@@ -394,9 +396,10 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
               </div>
             </div>
             {/* Percentage buttons */}
-            <div style={{ display: 'flex', gap: 4, marginTop: 10 }}>
+            <div style={{ display: 'flex', flexWrap: isMobile ? 'wrap' : 'nowrap', gap: 4, marginTop: 10 }}>
               {[25, 50, 75, 100].map(p => (
                 <button key={p} onClick={() => setPercentage(p)} style={{
+                  flex: isMobile ? '1 1 calc(50% - 2px)' : '1 1 0%',
                   padding: '4px 10px', borderRadius: 8,
                   background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`,
                   color: C.dim, fontFamily: C.M, fontSize: 10, fontWeight: 600,
@@ -468,6 +471,31 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
             </div>
           </div>
         </div>
+
+        {/* ── Route visualization (mobile only) ─────────────── */}
+        {isMobile && quote?.status === 'success' && tokenIn && tokenOut && (
+          <div style={{
+            margin: '8px 0', padding: '10px 14px',
+            background: 'rgba(255,255,255,0.02)', borderRadius: 12,
+            border: `1px solid ${C.border}`,
+          }}>
+            <div style={{ fontFamily: C.D, fontSize: 9, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: C.dim, marginBottom: 8 }}>Route</div>
+            {[
+              { label: tokenIn.symbol, sub: 'Input', color: C.text },
+              { label: 'Fee 0.5%', sub: `${quote.feeFmt} ${tokenOut.symbol}`, color: C.amber },
+              { label: `Pool ${quote.poolFee === 100 ? '0.01%' : quote.poolFee === 500 ? '0.05%' : quote.poolFee === 3000 ? '0.3%' : '1%'}`, sub: 'Uniswap V3', color: C.purple },
+              { label: tokenOut.symbol, sub: 'Output', color: C.green },
+            ].map((s, i, arr) => (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: i < arr.length - 1 ? 6 : 0 }}>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: s.color, boxShadow: `0 0 6px ${s.color}40`, flexShrink: 0 }} />
+                <div>
+                  <span style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: s.color }}>{s.label}</span>
+                  <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim, marginLeft: 6 }}>{s.sub}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* ── Quote details (collapsible) ────────────────────── */}
         {quote?.status === 'success' && tokenOut && (
@@ -589,13 +617,14 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
 
       {/* ── Token Selector Modal ───────────────────────────── */}
       {selectingFor && createPortal(
-        <div style={{ position: 'fixed', inset: 0, zIndex: 100000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100000, display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center' }}>
           <div onClick={() => setSelectingFor(null)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.55)' }} />
           <div style={{
-            position: 'relative', width: 380, maxHeight: 420,
+            position: 'relative',
+            ...(isMobile ? { width: '100%', maxHeight: '85dvh', borderRadius: '20px 20px 0 0' } : { width: 380, maxHeight: 420, borderRadius: 20 }),
             background: '#111120', border: '1px solid rgba(255,255,255,0.10)',
-            borderRadius: 20, boxShadow: '0 24px 80px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.04)',
-            overflow: 'hidden',
+            boxShadow: '0 24px 80px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.04)',
+            overflow: 'hidden', display: 'flex', flexDirection: 'column' as const,
           }}>
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -608,7 +637,7 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>✕</button>
             </div>
-            <div style={{ maxHeight: 360, overflowY: 'auto' }}>
+            <div style={{ overflowY: 'auto', ...(isMobile ? { flex: 1 } : { maxHeight: 360 }) }}>
               {[...tokens]
                 .sort((a, b) => {
                   const bA = Number(getBalance(a)) / (10 ** a.decimals)

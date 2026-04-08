@@ -251,7 +251,7 @@ export function createEVMAdapter(chainId: number): FeeRouterCapableAdapter {
 
       const settled = await Promise.allSettled(tierPromises)
       const validResults = settled
-        .filter((r): r is PromiseFulfilledResult<{ fee: number; amountOut: bigint; gasEstimate: bigint } | null> =>
+        .filter((r): r is PromiseFulfilledResult<{ fee: typeof FEE_TIERS[number]; amountOut: bigint; gasEstimate: bigint }> =>
           r.status === 'fulfilled' && r.value !== null
         )
         .map(r => r.value!)

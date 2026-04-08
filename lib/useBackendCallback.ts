@@ -1,19 +1,11 @@
 import { idempotencyKey, parseRSendError } from './rsendFetch'
+import { logger } from './logger'
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:8000'
-const HMAC_SECRET = process.env.NEXT_PUBLIC_HMAC_SECRET || ''
-
-async function computeHMAC(secret: string, message: string): Promise<string> {
-  const encoder = new TextEncoder()
-  const key = await crypto.subtle.importKey(
-    'raw', encoder.encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
-  )
-  const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(message))
-  return Array.from(new Uint8Array(sig))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-}
+/**
+ * Callback payload sent from the frontend to the Next.js server-side proxy.
+ * The proxy computes the HMAC signature server-side and forwards to the Python backend.
+ * The HMAC secret NEVER reaches the browser.
+ */
 
 interface CallbackPayload {
   txHash: string
@@ -46,11 +38,6 @@ export function useBackendCallback() {
     const ts = data.timestamp || new Date().toISOString()
     const grossAmount = parseFloat(data.grossStr)
 
-    const message = `${data.fiscalRef}|${data.txHash}|${grossAmount}|${data.symbol}|${ts}`
-    const signature = HMAC_SECRET
-      ? await computeHMAC(HMAC_SECRET, message)
-      : 'PENDING_HMAC_SHA256'
-
     const payload = {
       fiscal_ref: data.fiscalRef || `RP-${Date.now()}`,
       payment_ref: data.paymentRef,
@@ -65,12 +52,12 @@ export function useBackendCallback() {
       recipient: data.recipient,
       status: 'completed',
       timestamp: ts,
-      x_signature: signature,
       compliance_record: data.complianceRecord,
     }
 
     try {
-      const res = await fetch(`${BACKEND_URL}/api/v1/tx/callback`, {
+      // Route through Next.js server-side proxy — HMAC computed server-side
+      const res = await fetch('/api/tx/callback', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -80,14 +67,14 @@ export function useBackendCallback() {
       })
       if (!res.ok) {
         const errMsg = await parseRSendError(res)
-        console.error('[RPagos Backend] Callback failed:', errMsg)
+        logger.error('BackendCallback', 'Callback failed', { status: String(res.status), error: errMsg })
         return { success: false, error: errMsg }
       }
       const result = await res.json()
-      console.log('[RPagos Backend] TX logged:', result)
+      logger.debug('BackendCallback', 'TX logged', { fiscalRef: String(payload.fiscal_ref) })
       return { success: true, data: result }
     } catch (err) {
-      console.error('[RPagos Backend] Network error:', err)
+      logger.error('BackendCallback', 'Network error', { error: String(err) })
       return { success: false, error: err }
     }
   }

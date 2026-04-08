@@ -984,3 +984,7 @@ html, body {
   }
 }
 
+/* ── Hide scrollbar utility (tab bar mobile) ──────────────── */
+.hide-scrollbar::-webkit-scrollbar { display: none }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+

@@ -1,3 +1,9 @@
+import withBundleAnalyzer from '@next/bundle-analyzer'
+
+const analyzer = withBundleAnalyzer({
+  enabled: process.env.ANALYZE === 'true',
+})
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   webpack: (config) => {
@@ -20,8 +26,12 @@ const nextConfig = {
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: https: blob:",
             "font-src 'self' data:",
-            "connect-src 'self' https://*.infura.io https://*.alchemy.com https://*.llamarpc.com https://*.publicnode.com https://rpc.ankr.com https://mainnet.base.org https://sepolia.base.org https://arb1.arbitrum.io wss://*.walletconnect.com wss://*.walletconnect.org https://api.coingecko.com http://localhost:*",
+            "connect-src 'self' https://*.infura.io https://*.alchemy.com https://*.llamarpc.com https://*.publicnode.com https://rpc.ankr.com https://mainnet.base.org https://sepolia.base.org https://arb1.arbitrum.io https://api.trongrid.io https://api.shasta.trongrid.io wss://*.walletconnect.com wss://*.walletconnect.org https://api.coingecko.com https://*.railway.app http://localhost:*",
             "frame-src 'self' https://verify.walletconnect.com https://verify.walletconnect.org",
+            "frame-ancestors 'none'",
+            "base-uri 'self'",
+            "form-action 'self'",
+            "upgrade-insecure-requests",
           ].join('; '),
         },
         { key: 'X-Frame-Options', value: 'DENY' },
@@ -41,4 +51,4 @@ const nextConfig = {
   ],
 }
 
-export default nextConfig
+export default analyzer(nextConfig)
