@@ -19,6 +19,7 @@ import '@rainbow-me/rainbowkit/styles.css'
 import '@solana/wallet-adapter-react-ui/styles.css'
 import dynamic from 'next/dynamic'
 import { useState, useEffect, createContext, useContext } from 'react'
+import { usePathname } from 'next/navigation'
 import { useChainId, useSwitchChain } from 'wagmi'
 import { registerAdapter } from '../lib/chain-adapters/registry'
 import { createEVMAdapter } from '../lib/chain-adapters/evm-adapter'
@@ -186,7 +187,13 @@ function GasWarningBanner() {
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(makeQueryClient)
   const [mounted, setMounted] = useState(false)
+  const pathname = usePathname()
   useEffect(() => setMounted(true), [])
+
+  // Admin pages don't need wallet providers — render children directly
+  if (pathname?.startsWith('/admin') || pathname?.startsWith('/pay') || pathname?.startsWith('/merchant')) {
+    return <>{children}</>
+  }
 
   return (
     <WagmiProvider config={config}>

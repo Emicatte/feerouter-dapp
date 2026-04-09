@@ -988,3 +988,71 @@ html, body {
 .hide-scrollbar::-webkit-scrollbar { display: none }
 .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* ============================================================
+   ADMIN ISOLATION — Blocks ALL global background/overlay styles
+   from bleeding into admin pages (RainbowKit, orbs, noise, etc.)
+   ============================================================ */
+
+body.admin-mode .rp-bg,
+body.admin-mode [data-rk],
+body.admin-mode [data-rk-portal],
+body.admin-mode [class*="walletconnect"],
+body.admin-mode [class*="rainbowkit"],
+body.admin-mode [class*="WalletConnect"],
+body.admin-mode [class*="RainbowKit"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+body.admin-mode {
+  background: #060611 !important;
+}
+
+/* Reset any RainbowKit global backdrop/overlay styles */
+body.admin-mode::before,
+body.admin-mode::after {
+  display: none !important;
+}
+
+/* Admin-specific animations */
+@keyframes adminFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes adminPulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}
+
+@keyframes adminGlow {
+  0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.1); }
+  50%      { box-shadow: 0 0 40px rgba(59, 130, 246, 0.2); }
+}
+
+@keyframes adminSlideIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.admin-fade-in {
+  animation: adminFadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.admin-fade-in-1 { animation: adminFadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both; }
+.admin-fade-in-2 { animation: adminFadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both; }
+.admin-fade-in-3 { animation: adminFadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both; }
+.admin-fade-in-4 { animation: adminFadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both; }
+
+/* ─── Checkout Page Animations ──────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeScale {
+  from { opacity: 0; transform: scale(0.92) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+

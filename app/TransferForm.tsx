@@ -19,7 +19,7 @@ import {
 } from './TransactionStatus'
 import { useComplianceEngine, type ComplianceRecord } from '../lib/useComplianceEngine'
 import { useComplianceAPI }   from '../lib/useComplianceAPI'
-import { generatePdfReceipt } from '../lib/usePdfReceipt'
+import { generatePdfReceipt, type PdfReceiptParams } from '../lib/usePdfReceipt'
 import {
   getRegistry, findChainForToken, EUR_RATES, isFeeRouterAvailable,
   type TokenConfig, type NetworkRegistry,
@@ -900,28 +900,22 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
           }
           txLog('direct.broadcast', { hash, token: tokenIn.symbol, fallback: true })
           setSendHash(hash); setPhase('wait_send')
-        } catch (e) { handleErr(e) }
-      }
 
-      // ── Compliance callback (best-effort, works on ALL chains) ────────
-      try {
-        await fetch(`${process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:8000'}/api/v1/tx/callback`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chain_id: chainId,
-            sender: address,
-            recipient,
-            token: tokenIn.symbol,
-            amount,
-            fee_router_used: false,
-            is_swap: isSwapMode,
-            timestamp: new Date().toISOString(),
-          }),
-          signal: AbortSignal.timeout(5000),
-        })
-      } catch {
-        // Backend callback is best-effort — non bloccare il flusso
+          // ── Compliance callback (best-effort) ──────────────────
+          try {
+            sendBackend({
+              txHash:    hash,
+              grossStr:  amount,
+              netStr:    amount,
+              feeStr:    '0',
+              symbol:    tokenIn.symbol,
+              recipient,
+              fiscalRef: `RP-${Date.now()}`,
+              timestamp: new Date().toISOString(),
+              isTestnet: chainId === baseSepolia.id,
+            })
+          } catch { /* best-effort */ }
+        } catch (e) { handleErr(e) }
       }
       return
     }
@@ -990,16 +984,62 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
     setTxError(''); setOracleData(null); setOracleDenied(false); setDirectERC20Mode(false)
   }
 
-  const handlePdf = () => {
+  const handlePdf = async () => {
     if (!report || !address) return
-    generatePdfReceipt({
+
+    // Fetch tasso di cambio reale
+    let exchangeRate: PdfReceiptParams['exchangeRate'] = undefined
+    if (report.symbol !== 'EURC') {
+      try {
+        const cgIds: Record<string, string> = {
+          'ETH': 'ethereum', 'WETH': 'ethereum', 'USDC': 'usd-coin',
+          'USDT': 'tether', 'DAI': 'dai', 'WBTC': 'bitcoin',
+          'cbBTC': 'bitcoin', 'BNB': 'binancecoin', 'AVAX': 'avalanche-2',
+          'MATIC': 'matic-network', 'POL': 'matic-network',
+        }
+        const cgId = cgIds[report.symbol.toUpperCase()]
+        if (cgId) {
+          const res = await fetch(
+            `https://api.coingecko.com/api/v3/simple/price?ids=${cgId}&vs_currencies=eur`,
+            { signal: AbortSignal.timeout(5000) }
+          )
+          const data = await res.json()
+          const rate = data[cgId]?.eur
+          if (rate) {
+            exchangeRate = {
+              tokenSymbol: report.symbol,
+              fiatCurrency: 'EUR',
+              rate,
+              source: 'CoinGecko API (coingecko.com)',
+              fetchedAt: new Date().toISOString(),
+            }
+          }
+        }
+      } catch {
+        // Se CoinGecko fallisce, il PDF mostrerà "stima non verificata"
+      }
+    }
+
+    const registry = getRegistry(chainId)
+    const chainName = registry?.chainName ?? 'Base'
+
+    await generatePdfReceipt({
       txHash: report.txHash, timestamp: report.timestamp, sender: address, recipient,
       grossAmount: formatUnits(report.gross, report.decimals),
       netAmount:   formatUnits(report.net,   report.decimals),
       feeAmount:   formatUnits(report.fee,   report.decimals),
       symbol: report.symbol, paymentRef: oracleData?.paymentRef || '—',
       fiscalRef: oracleData?.fiscalRef || '—', eurValue: report.eurValue,
-      network: getRegistry(chainId)?.chainName ?? 'Base',
+      network: chainName,
+
+      // Campi fiscali
+      emittente: {
+        legalName: process.env.NEXT_PUBLIC_COMPANY_NAME || 'RSend S.r.l.',
+        vatNumber: process.env.NEXT_PUBLIC_COMPANY_VAT || 'IT______________',
+        registeredOffice: process.env.NEXT_PUBLIC_COMPANY_ADDRESS || '(sede da configurare)',
+        pec: process.env.NEXT_PUBLIC_COMPANY_PEC || '',
+      },
+      exchangeRate,
     })
   }
 

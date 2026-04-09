@@ -120,6 +120,25 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Price service init failed: %s — prices will be unavailable", e)
 
+    # ── Webhook delivery + intent expiration loops (asyncio fallback) ──
+    # Se Celery non e' raggiungibile, usa background tasks asyncio
+    _webhook_delivery_task = None
+    _intent_expiration_task = None
+    try:
+        from app.celery_app import celery as celery_app
+        inspector = celery_app.control.inspect(timeout=2)
+        celery_active = bool(inspector.ping())
+    except Exception:
+        celery_active = False
+
+    if not celery_active:
+        from app.tasks.webhook_tasks import webhook_delivery_loop, intent_expiration_loop
+        _webhook_delivery_task = _aio.create_task(webhook_delivery_loop(15.0))
+        _intent_expiration_task = _aio.create_task(intent_expiration_loop(60.0))
+        logger.info("Celery not available — webhook delivery + expiration running as asyncio tasks")
+    else:
+        logger.info("Celery active — webhook delivery + expiration delegated to Celery beat")
+
     webhook_mode = "webhook" if settings.alchemy_webhook_secret else "polling"
     db_display = settings.database_url.split("@")[-1] if "@" in settings.database_url else settings.database_url
     logger.info(
@@ -229,6 +248,8 @@ from app.api.execution_routes import router as execution_router
 app.include_router(execution_router)
 from app.api.strategy_routes import router as strategy_router
 app.include_router(strategy_router)
+from app.api.merchant_routes import merchant_router
+app.include_router(merchant_router)
 
 
 # ── Health checks ────────────────────────────────────────

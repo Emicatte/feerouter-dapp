@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     alchemy_webhook_secret: str = ""
     alchemy_auth_token: str = ""
 
+    # ── Deposit Address Generation ────────────────────────
+    deposit_master_seed: str = ""         # [DEPRECATED] Legacy seed — usato solo per backward compat
+    deposit_master_key: str = ""          # Master private key per derivazione deposit addresses (0x-prefixed 64-char hex)
+                                          # CRITICO: backup sicuro, se persa i fondi non sono recuperabili
+
     # ── Sweeper / Key Management ────────────────────────
     sweep_private_key: str = ""
     signer_mode: str = "local"          # "local" (env key) | "kms" (AWS KMS)
@@ -141,6 +146,20 @@ def validate_settings(settings: Settings) -> None:
         warnings.append(
             "DATABASE_URL points to localhost in production mode. "
             "This is likely incorrect — verify your connection string."
+        )
+
+    # ── DEPOSIT_MASTER_KEY ────────────────────────────────
+    if not settings.deposit_master_key:
+        warnings.append(
+            "DEPOSIT_MASTER_KEY is empty. "
+            "Deposit address generation will fail. "
+            "Set a 0x-prefixed 64-char hex private key in .env."
+        )
+    elif not _HEX_KEY_RE.match(settings.deposit_master_key):
+        errors.append(
+            "DEPOSIT_MASTER_KEY is malformed. "
+            "Expected 0x-prefixed 64-char hex string (32 bytes). "
+            f"Got: {settings.deposit_master_key[:6]}...({len(settings.deposit_master_key)} chars)"
         )
 
     # ── ALCHEMY_WEBHOOK_SECRET ────────────────────────────

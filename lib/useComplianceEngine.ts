@@ -87,7 +87,8 @@ async function fetchFiatRate(symbol: string): Promise<number | null> {
 async function generateComplianceHash(data: string): Promise<string> {
   try {
     const encoder = new TextEncoder()
-    const buffer  = await crypto.subtle.digest('SHA-256', encoder.encode(data))
+    const encoded = encoder.encode(data)
+    const buffer  = await crypto.subtle.digest('SHA-256', encoded.buffer as ArrayBuffer)
     const arr     = Array.from(new Uint8Array(buffer))
     return arr.map(b => b.toString(16).padStart(2, '0')).join('')
   } catch {

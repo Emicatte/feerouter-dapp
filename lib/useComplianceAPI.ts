@@ -1,35 +1,11 @@
-/**
- * lib/useComplianceAPI.ts — DAC8 Compliance API Bridge
- *
- * Invia ComplianceRecord al backend FastAPI Python.
- * Endpoint: POST /api/v1/tx/callback
- *
- * Resilienza:
- *   1. Prova invio immediato dopo tx completed (~2s Base finality)
- *   2. Se server down → salva in localStorage queue (rp_pending_queue)
- *   3. Al prossimo avvio app → drain automatico della queue (retry)
- *   4. HMAC-SHA256 signature per autenticazione backend
- *
- * Sicurezza:
- *   - La firma HMAC è calcolata su: "fiscal_ref|tx_hash|gross_amount|currency|timestamp"
- *   - La chiave viene da NEXT_PUBLIC_HMAC_KEY (env var su Vercel)
- *   - PENDING_HMAC_SHA256 non viene mai usato in produzione
- *
- * Backend Python (FastAPI) atteso:
- *   POST /api/v1/tx/callback
- *   Headers: X-Signature: <hmac-sha256>
- *            Content-Type: application/json
- *   Body: ComplianceRecord JSON
- *   Response: { status: "ok", id: "..." }
- */
+
 
 import { useCallback, useEffect } from 'react'
 import type { ComplianceRecord } from './useComplianceEngine'
 import { idempotencyKey } from './rsendFetch'
 
 // ── Config ─────────────────────────────────────────────────────────────────
-const API_BASE    = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
-const API_ENDPOINT = `${API_BASE}/api/v1/tx/callback`
+const API_ENDPOINT = '/api/tx/callback'  // Next.js proxy — no CORS, HMAC computed server-side
 const QUEUE_KEY   = 'rp_pending_queue'
 const MAX_RETRIES = 5
 const HMAC_KEY    = process.env.NEXT_PUBLIC_HMAC_KEY ?? 'dev_secret_replace_in_prod'
@@ -49,11 +25,11 @@ async function generateHmac(
     const keyData = enc.encode(HMAC_KEY)
     const msgData = enc.encode(message)
     const key     = await crypto.subtle.importKey(
-      'raw', keyData,
+      'raw', keyData.buffer as ArrayBuffer,
       { name: 'HMAC', hash: 'SHA-256' },
       false, ['sign']
     )
-    const sig  = await crypto.subtle.sign('HMAC', key, msgData)
+    const sig  = await crypto.subtle.sign('HMAC', key, msgData.buffer as ArrayBuffer)
     const arr  = Array.from(new Uint8Array(sig))
     return arr.map(b => b.toString(16).padStart(2, '0')).join('')
   } catch {
@@ -130,16 +106,22 @@ async function sendRecord(record: ComplianceRecord): Promise<boolean> {
       return false
     }
 
-    const payload = JSON.stringify(enriched)
+    // Assicura i campi richiesti dal proxy Next.js (route.ts)
+    const proxyPayload = {
+      ...enriched,
+      fiscal_ref:   enriched.fiscal_ref,
+      tx_hash:      enriched.tx_hash,
+      gross_amount: grossAmount,
+      currency:     enriched.currency,
+      timestamp:    timestamp,
+    }
     const res = await fetch(API_ENDPOINT, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-Signature':  signature,
-        'X-Client':     'feerouter-dapp/1.0',
         'X-Idempotency-Key': idempotencyKey(),
       },
-      body:    payload,
+      body:    JSON.stringify(proxyPayload),
       signal:  AbortSignal.timeout(8000), // 8s timeout
     })
 

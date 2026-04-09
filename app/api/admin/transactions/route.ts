@@ -1,0 +1,64 @@
+import { NextRequest, NextResponse } from 'next/server'
+
+function getBackendUrl() {
+  return process.env.RPAGOS_BACKEND_URL || process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:8000'
+}
+
+function getAdminSecret() {
+  return process.env.ADMIN_SECRET || ''
+}
+
+export async function GET(req: NextRequest) {
+  const secret = getAdminSecret()
+
+  if (!secret) {
+    return NextResponse.json(
+      { error: 'ADMIN_NOT_CONFIGURED', message: 'ADMIN_SECRET is not set.' },
+      { status: 503 },
+    )
+  }
+
+  const auth = req.headers.get('Authorization') ?? ''
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : auth
+
+  if (token !== secret) {
+    return NextResponse.json(
+      { error: 'UNAUTHORIZED', message: 'Invalid or missing admin token.' },
+      { status: 401 },
+    )
+  }
+
+  const { searchParams } = req.nextUrl
+  const limit    = searchParams.get('limit') ?? '20'
+  const page     = parseInt(searchParams.get('page') ?? '1', 10)
+  const wallet   = searchParams.get('wallet')
+  const currency = searchParams.get('currency')
+  const status   = searchParams.get('status')
+  const network  = searchParams.get('network')
+
+  const backendParams = new URLSearchParams()
+  backendParams.set('limit', limit)
+  if (wallet)   backendParams.set('wallet', wallet)
+  if (currency) backendParams.set('currency', currency)
+  if (status)   backendParams.set('status', status)
+  if (network)  backendParams.set('network', network)
+  if (page > 1) backendParams.set('offset', String((page - 1) * parseInt(limit, 10)))
+
+  const url = `${getBackendUrl()}/api/v1/tx/recent?${backendParams.toString()}`
+
+  try {
+    const backendRes = await fetch(url, {
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(10000),
+    })
+
+    const data = await backendRes.json().catch(() => ({}))
+    return NextResponse.json(data, { status: backendRes.status })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return NextResponse.json(
+      { error: 'BACKEND_UNREACHABLE', message: `Failed to reach backend: ${msg}` },
+      { status: 502 },
+    )
+  }
+}

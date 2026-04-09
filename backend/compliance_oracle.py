@@ -347,6 +347,17 @@ async def compliance_check_compat(request: Request):
 
 @app.post("/api/v1/tx/callback")
 async def tx_callback(request: Request):
+    """
+    Receives confirmed TX data from the Next.js HMAC proxy (route.ts).
+
+    Field contract (from route.ts):
+      - X-Signature header: HMAC-SHA256 of full JSON body
+      - body.x_signature:   HMAC-SHA256 of pipe-separated canonical message
+      - body.compliance_id: flattened from compliance_record.compliance_id
+      - body.merchant_transaction_id: alias for tx_hash
+      - body.compliance_record: nested object with DAC8/MiCA fields
+      - body.tx_hash, body.fiscal_ref, body.gross_amount, body.currency, body.timestamp
+    """
     body_bytes = await request.body()
     body_str   = body_bytes.decode("utf-8")
     x_sig      = request.headers.get("X-Signature", "")
@@ -358,10 +369,19 @@ async def tx_callback(request: Request):
         data = json.loads(body_str)
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="JSON non valido")
+
+    # compliance_id: root (flattened by route.ts) or nested in compliance_record
+    compliance_id = (
+        data.get("compliance_id")
+        or (data.get("compliance_record") or {}).get("compliance_id", "")
+    )
+    # merchant_transaction_id: route.ts maps this from tx_hash
+    tx_hash = data.get("merchant_transaction_id") or data.get("tx_hash", "")
+
     for record in pending_store[:]:
-        if record.get("oracle_nonce") == data.get("compliance_id"):
+        if record.get("oracle_nonce") == compliance_id:
             record.update({
-                "tx_hash":      data.get("tx_hash", ""),
+                "tx_hash":      tx_hash,
                 "status":       "confirmed",
                 "confirmed_at": datetime.now(timezone.utc).isoformat(),
             })

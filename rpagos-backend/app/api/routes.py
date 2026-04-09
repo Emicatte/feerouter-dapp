@@ -26,6 +26,11 @@ from app.services.anomaly_service import analyze_transactions
 from app.services.dac8_service import generate_dac8_report
 from app.services.idempotency_service import check_idempotency, ConflictError
 from app.services.audit_service import log_event
+from app.services.transaction_matcher import match_transaction, IncomingTx
+
+import logging
+
+_logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["transactions"])
 
@@ -173,6 +178,39 @@ async def receive_transaction(
         compliance_logged = True
         dac8_reportable = cr.dac8_reportable
 
+    # ── 5. Transaction matching — cerca PaymentIntent corrispondente ──
+    matched_intent_id = None
+    webhook_triggered = False
+
+    if payload.recipient and payload.status == "completed":
+        try:
+            match_result = await match_transaction(
+                db,
+                IncomingTx(
+                    tx_hash=payload.tx_hash,
+                    recipient=payload.recipient,
+                    amount=payload.gross_amount,
+                    currency=payload.currency,
+                ),
+            )
+            if match_result.matched:
+                matched_intent_id = match_result.intent_id
+                webhook_triggered = match_result.webhook_triggered
+                _logger.info(
+                    "TX %s matched intent %s (webhook=%s)",
+                    payload.tx_hash[:16], matched_intent_id, webhook_triggered,
+                )
+            else:
+                _logger.debug(
+                    "TX %s no match: reason=%s",
+                    payload.tx_hash[:16], match_result.reason,
+                )
+        except Exception:
+            _logger.exception(
+                "Transaction matcher failed for tx=%s — TX saved, matching skipped",
+                payload.tx_hash[:16],
+            )
+
     await db.commit()
 
     return CallbackResponse(
@@ -181,7 +219,49 @@ async def receive_transaction(
         transaction_id=tx.id,
         compliance_logged=compliance_logged,
         dac8_reportable=dac8_reportable,
+        matched_intent_id=matched_intent_id,
+        webhook_triggered=webhook_triggered,
     )
+
+
+# ═══════════════════════════════════════════════════════════════
+#  GET /api/v1/tx/recent — Ultime TX per wallet
+#  MUST be registered BEFORE /tx/{fiscal_ref} so FastAPI matches
+#  the literal "/tx/recent" before the path parameter "{fiscal_ref}"
+# ═══════════════════════════════════════════════════════════════
+
+@router.get("/tx/recent")
+async def get_recent_transactions(
+    wallet: Optional[str] = Query(None, description="Indirizzo wallet"),
+    limit: int = Query(5, ge=1, le=20),
+    db: AsyncSession = Depends(get_db),
+):
+    """Recupera le ultime N transazioni, opzionalmente filtrate per wallet."""
+    query = select(TransactionLog).order_by(TransactionLog.tx_timestamp.desc())
+    if wallet:
+        wallet_lower = wallet.lower()
+        query = query.where(TransactionLog.recipient == wallet_lower)
+    query = query.limit(limit)
+    result = await db.execute(query)
+    txs = result.scalars().all()
+
+    return {
+        "records": [
+            {
+                "tx_hash": tx.tx_hash,
+                "gross_amount": tx.gross_amount,
+                "net_amount": tx.net_amount,
+                "fee_amount": tx.fee_amount,
+                "currency": tx.currency,
+                "eur_value": tx.eur_value,
+                "status": tx.status.value,
+                "network": tx.network,
+                "recipient": tx.recipient,
+                "tx_timestamp": tx.tx_timestamp.isoformat() if tx.tx_timestamp else None,
+            }
+            for tx in txs
+        ]
+    }
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -271,41 +351,3 @@ async def generate_dac8(
     fiscali europee per le cripto-attività.
     """
     return await generate_dac8_report(db, fiscal_year)
-
-
-# ═══════════════════════════════════════════════════════════════
-#  GET /api/v1/tx/recent — Ultime TX per wallet
-# ═══════════════════════════════════════════════════════════════
-
-@router.get("/tx/recent")
-async def get_recent_transactions(
-    wallet: Optional[str] = Query(None, description="Indirizzo wallet"),
-    limit: int = Query(5, ge=1, le=20),
-    db: AsyncSession = Depends(get_db),
-):
-    """Recupera le ultime N transazioni, opzionalmente filtrate per wallet."""
-    query = select(TransactionLog).order_by(TransactionLog.tx_timestamp.desc())
-    if wallet:
-        wallet_lower = wallet.lower()
-        query = query.where(TransactionLog.recipient == wallet_lower)
-    query = query.limit(limit)
-    result = await db.execute(query)
-    txs = result.scalars().all()
-
-    return {
-        "records": [
-            {
-                "tx_hash": tx.tx_hash,
-                "gross_amount": tx.gross_amount,
-                "net_amount": tx.net_amount,
-                "fee_amount": tx.fee_amount,
-                "currency": tx.currency,
-                "eur_value": tx.eur_value,
-                "status": tx.status.value,
-                "network": tx.network,
-                "recipient": tx.recipient,
-                "tx_timestamp": tx.tx_timestamp.isoformat() if tx.tx_timestamp else None,
-            }
-            for tx in txs
-        ]
-    }

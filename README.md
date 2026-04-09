@@ -58,6 +58,16 @@ Hooks                          ├── api_auth.py
 - Dry-run simulator via `/api/v1/strategies/simulate`
 - Priority-based evaluation, execution limits, cooldowns
 
+### Merchant B2B API (Payment Gateway)
+- Payment intent creation with configurable expiration (5min–24h)
+- Auto-matching: confirmed TX → pending intent (amount + currency + recipient, FIFO)
+- Webhook delivery with HMAC-SHA256 signature (`X-RSend-Signature`)
+- Exponential backoff retry (30s → 2m → 8m → 32m → 2h, max 5 attempts)
+- Idempotent delivery: same TX triggers one webhook per endpoint
+- Event filtering: `payment.completed`, `payment.expired`, `payment.cancelled`
+- Paginated transaction listing with status/currency filters
+- Bearer API key authentication per merchant
+
 ### Smart Contracts
 - **FeeRouterV4** — Fee-splitting router with 0.5% protocol fee, multi-recipient support
 - **RSendBatchDistributor** — Gas-optimized batch distribution (ETH + ERC-20)
@@ -181,6 +191,7 @@ fee-router-dapp/
 │   │   ├── celery_app.py         # Celery config
 │   │   ├── api/
 │   │   │   ├── routes.py         # TX callback, anomalies, DAC8
+│   │   │   ├── merchant_routes.py # B2B merchant API (payment intents, webhooks)
 │   │   │   ├── sweeper_routes.py # Sweep operations
 │   │   │   ├── distribution_routes.py
 │   │   │   ├── execution_routes.py    # Cross-chain engine
@@ -195,6 +206,7 @@ fee-router-dapp/
 │   │   │   ├── ledger_models.py       # Account, LedgerEntry (double-entry)
 │   │   │   ├── command_models.py      # DistributionList, SweepBatch
 │   │   │   ├── strategy_models.py     # Strategy (conditions + actions)
+│   │   │   ├── merchant_models.py     # PaymentIntent, MerchantWebhook, WebhookDelivery
 │   │   │   ├── aml_models.py          # BlacklistedWallet
 │   │   │   └── schemas.py            # Pydantic schemas
 │   │   ├── services/
@@ -204,6 +216,7 @@ fee-router-dapp/
 │   │   │   ├── distribution_service.py
 │   │   │   ├── ledger_service.py      # Double-entry bookkeeping
 │   │   │   ├── reconciliation_service.py
+│   │   │   ├── webhook_service.py     # Merchant webhook delivery + retry
 │   │   │   ├── aml_service.py         # AML/OFAC screening
 │   │   │   ├── anomaly_service.py     # Statistical detection
 │   │   │   ├── circuit_breaker.py     # Fault tolerance
@@ -328,6 +341,15 @@ docker-compose up -d  # PostgreSQL + Redis + Celery
 | DELETE | `/api/v1/strategies/{id}` | Delete strategy |
 | POST | `/api/v1/strategies/simulate` | Dry-run condition test |
 
+### Merchant B2B API
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/v1/merchant/payment-intent` | Create payment intent |
+| GET | `/api/v1/merchant/payment-intent/{id}` | Get intent status |
+| POST | `/api/v1/merchant/webhook/register` | Register webhook URL |
+| POST | `/api/v1/merchant/webhook/test` | Send test event |
+| GET | `/api/v1/merchant/transactions` | List merchant transactions |
+
 ### Compliance
 | Method | Endpoint | Description |
 |---|---|---|
@@ -364,6 +386,9 @@ docker-compose up -d  # PostgreSQL + Redis + Celery
 NEXT_PUBLIC_WC_PROJECT_ID=        # WalletConnect Cloud
 NEXT_PUBLIC_TREASURY_ADDRESS=     # Protocol fee wallet
 NEXT_PUBLIC_ALCHEMY_API_KEY=      # Alchemy RPC
+HMAC_SECRET=                      # HMAC-SHA256 secret (must match backend). Server-side only.
+RPAGOS_BACKEND_URL=               # Python backend URL (e.g. https://rpagos-backend.onrender.com)
+ADMIN_SECRET=                     # Admin dashboard access token. Min 32 random chars.
 ```
 
 ### Backend (.env)

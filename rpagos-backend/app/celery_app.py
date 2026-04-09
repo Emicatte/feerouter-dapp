@@ -72,6 +72,8 @@ celery.conf.update(
         "app.tasks.periodic_tasks.cleanup_old_locks": {"queue": "analytics"},
         "app.tasks.notification_tasks.send_notification_task": {"queue": "notify"},
         "app.tasks.notification_tasks.send_daily_digest": {"queue": "notify"},
+        "app.tasks.webhook_tasks.process_webhook_deliveries": {"queue": "notify"},
+        "app.tasks.webhook_tasks.expire_pending_intents": {"queue": "notify"},
     },
 
     # Default queue for unrouted tasks
@@ -82,6 +84,7 @@ celery.conf.update(
         "app.tasks.sweep_tasks",
         "app.tasks.periodic_tasks",
         "app.tasks.notification_tasks",
+        "app.tasks.webhook_tasks",
     ],
 )
 
@@ -113,5 +116,13 @@ celery.conf.beat_schedule = {
     "send-daily-digest": {
         "task": "app.tasks.notification_tasks.send_daily_digest",
         "schedule": crontab(hour=0, minute=30),  # daily 00:30 UTC
+    },
+    "process-webhook-deliveries": {
+        "task": "app.tasks.webhook_tasks.process_webhook_deliveries",
+        "schedule": 15.0,  # every 15 seconds
+    },
+    "expire-pending-intents": {
+        "task": "app.tasks.webhook_tasks.expire_pending_intents",
+        "schedule": 60.0,  # every 60 seconds
     },
 }

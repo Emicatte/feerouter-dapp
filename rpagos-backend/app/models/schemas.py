@@ -134,6 +134,8 @@ class CallbackResponse(BaseModel):
     transaction_id: int
     compliance_logged: bool = False
     dac8_reportable: bool = False
+    matched_intent_id: Optional[str] = None
+    webhook_triggered: bool = False
 
 
 class AnomalyAlertResponse(BaseModel):

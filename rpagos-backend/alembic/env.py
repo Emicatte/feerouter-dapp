@@ -23,6 +23,7 @@ from app.models import forwarding_models as _fwd   # noqa: F401 — forwarding t
 from app.models import ledger_models as _led       # noqa: F401 — ledger tables
 from app.models import command_models as _cmd      # noqa: F401 — command center tables
 from app.models import strategy_models as _strat   # noqa: F401 — strategy tables
+from app.models import merchant_models as _merch   # noqa: F401 — merchant B2B tables
 
 from app.config import get_settings
 
