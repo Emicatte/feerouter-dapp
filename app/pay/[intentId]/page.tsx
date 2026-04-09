@@ -35,6 +35,11 @@ type PageState =
 // ═══════════════════════════════════════════════════════════════
 
 const POLL_INTERVAL = 5_000
+const WS_RECONNECT_DELAY = 3_000
+const WS_MAX_RECONNECTS = 5
+
+type ConnectionMode = 'connecting' | 'live' | 'polling'
+
 const CHAIN_LABELS: Record<string, string> = {
   BASE: 'Base', ETH: 'Ethereum', ARBITRUM: 'Arbitrum', OPTIMISM: 'Optimism',
   POLYGON: 'Polygon', BSC: 'BNB Chain', AVALANCHE: 'Avalanche',
@@ -156,6 +161,97 @@ function merchantName(meta: Record<string, unknown> | null): string {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  WebSocket Hook — real-time payment updates with polling fallback
+// ═══════════════════════════════════════════════════════════════
+
+function usePaymentWebSocket(
+  intentId: string,
+  status: string | null,
+  onEvent: (event: { event: string; tx_hash?: string }) => void,
+): ConnectionMode {
+  const [mode, setMode] = useState<ConnectionMode>('connecting')
+  const wsRef = useRef<WebSocket | null>(null)
+  const reconnectsRef = useRef(0)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
+
+  useEffect(() => {
+    // Only connect while pending
+    if (status !== 'pending') {
+      if (wsRef.current) {
+        wsRef.current.close()
+        wsRef.current = null
+      }
+      return
+    }
+
+    function connect() {
+      if (!mountedRef.current) return
+
+      const backendUrl = process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:8000'
+      const wsUrl = backendUrl.replace(/^http/, 'ws') + `/ws/payment/${intentId}`
+
+      const ws = new WebSocket(wsUrl)
+      wsRef.current = ws
+
+      ws.onopen = () => {
+        if (!mountedRef.current) return
+        reconnectsRef.current = 0
+        setMode('live')
+      }
+
+      ws.onmessage = (ev) => {
+        if (!mountedRef.current) return
+        try {
+          const data = JSON.parse(ev.data)
+          if (data.event === 'ping') {
+            ws.send(JSON.stringify({ type: 'pong' }))
+            return
+          }
+          if (data.event === 'payment.completed' || data.event === 'payment.expired') {
+            onEvent(data)
+          }
+        } catch {
+          // ignore malformed messages
+        }
+      }
+
+      ws.onclose = () => {
+        if (!mountedRef.current) return
+        wsRef.current = null
+        setMode('polling')
+        // Attempt reconnect
+        if (reconnectsRef.current < WS_MAX_RECONNECTS) {
+          reconnectsRef.current += 1
+          setTimeout(connect, WS_RECONNECT_DELAY)
+        }
+      }
+
+      ws.onerror = () => {
+        // onclose will fire after onerror — fallback handled there
+        if (!mountedRef.current) return
+        setMode('polling')
+      }
+    }
+
+    connect()
+
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close()
+        wsRef.current = null
+      }
+    }
+  }, [intentId, status, onEvent])
+
+  return mode
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  Page Component
 // ═══════════════════════════════════════════════════════════════
 
@@ -195,7 +291,21 @@ export default function CheckoutPage() {
     fetchIntent()
   }, [fetchIntent])
 
-  // ── Polling ──────────────────────────────────────────────
+  // ── WebSocket — real-time updates ────────────────────────
+  const currentStatus = state.kind === 'ready' ? state.intent.status : null
+
+  const handleWsEvent = useCallback((event: { event: string; tx_hash?: string }) => {
+    if (event.event === 'payment.completed') {
+      // Immediate UI update, then fetch full intent for tx_hash etc.
+      fetchIntent()
+    } else if (event.event === 'payment.expired') {
+      fetchIntent()
+    }
+  }, [fetchIntent])
+
+  const connectionMode = usePaymentWebSocket(intentId, currentStatus, handleWsEvent)
+
+  // ── Polling — fallback when WebSocket is not connected ───
   useEffect(() => {
     if (state.kind !== 'ready') return
     const { status } = state.intent
@@ -213,11 +323,17 @@ export default function CheckoutPage() {
       return
     }
 
+    // If WebSocket is live, skip polling
+    if (connectionMode === 'live') {
+      if (pollRef.current) clearInterval(pollRef.current)
+      return
+    }
+
     pollRef.current = setInterval(fetchIntent, POLL_INTERVAL)
     return () => {
       if (pollRef.current) clearInterval(pollRef.current)
     }
-  }, [state, fetchIntent, prevStatus])
+  }, [state, fetchIntent, prevStatus, connectionMode])
 
   // ── Copy to clipboard ────────────────────────────────────
   const copyAddress = useCallback((addr: string) => {
@@ -247,6 +363,7 @@ export default function CheckoutPage() {
         intent={intent}
         copied={copied}
         onCopy={copyAddress}
+        connectionMode={connectionMode}
       />
     </Shell>
   )
@@ -417,10 +534,12 @@ function PendingView({
   intent,
   copied,
   onCopy,
+  connectionMode,
 }: {
   intent: PaymentIntent
   copied: boolean
   onCopy: (addr: string) => void
+  connectionMode: ConnectionMode
 }) {
   const [remaining, setRemaining] = useState('')
   const [expired, setExpired] = useState(false)
@@ -535,13 +654,24 @@ function PendingView({
       {/* Divider */}
       <div className="border-t border-white/[0.06] my-5" />
 
-      {/* Waiting indicator */}
+      {/* Waiting indicator with connection status */}
       <div className="flex items-center justify-center gap-2">
         <span
           className="w-2 h-2 rounded-full animate-pulse"
-          style={{ background: '#eab308' }}
+          style={{ background: connectionMode === 'live' ? '#22c55e' : '#eab308' }}
         />
-        <span className="text-xs text-zinc-500">Waiting for payment...</span>
+        <span className="text-xs text-zinc-500">
+          Waiting for payment...
+        </span>
+        <span
+          className="text-[10px] px-1.5 py-0.5 rounded-full"
+          style={{
+            background: connectionMode === 'live' ? 'rgba(34,197,94,0.1)' : 'rgba(234,179,8,0.1)',
+            color: connectionMode === 'live' ? '#22c55e' : '#eab308',
+          }}
+        >
+          {connectionMode === 'live' ? 'live' : 'polling'}
+        </span>
       </div>
 
       {/* Footer */}

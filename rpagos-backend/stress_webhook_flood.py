@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 
 BACKEND_URL    = "http://127.0.0.1:8001"
 WEBHOOK_SECRET = "test-secret-for-qa"
-DB_PATH        = os.path.join(os.path.dirname(__file__), "stress_s4.db")
+DB_PATH        = os.path.join(os.path.dirname(__file__), "dev.db")
 
 NUM_WEBHOOKS      = 500
 DURATION_SECONDS  = 60

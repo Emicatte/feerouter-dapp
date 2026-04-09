@@ -1,11 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+const COOKIE_NAME = 'admin_session'
+
 function getBackendUrl() {
   return process.env.RPAGOS_BACKEND_URL || process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:8000'
 }
 
 function getAdminSecret() {
   return process.env.ADMIN_SECRET || ''
+}
+
+async function isAuthorized(req: NextRequest): Promise<boolean> {
+  // 1. Cookie-based auth (new httpOnly session)
+  const cookie = req.cookies.get(COOKIE_NAME)?.value
+  if (cookie) {
+    const { validateToken } = await import('../login/route')
+    return validateToken(cookie)
+  }
+
+  // 2. Fallback: Authorization header (backward compatibility)
+  const auth = req.headers.get('Authorization') ?? ''
+  const bearer = auth.startsWith('Bearer ') ? auth.slice(7) : ''
+  const secret = getAdminSecret()
+  return !!(secret && bearer && bearer === secret)
 }
 
 export async function GET(req: NextRequest) {
@@ -18,10 +35,7 @@ export async function GET(req: NextRequest) {
     )
   }
 
-  const auth = req.headers.get('Authorization') ?? ''
-  const token = auth.startsWith('Bearer ') ? auth.slice(7) : auth
-
-  if (token !== secret) {
+  if (!(await isAuthorized(req))) {
     return NextResponse.json(
       { error: 'UNAUTHORIZED', message: 'Invalid or missing admin token.' },
       { status: 401 },

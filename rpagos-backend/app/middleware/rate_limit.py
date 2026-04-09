@@ -1,19 +1,30 @@
 """
-RPagos Backend — Rate Limiting Middleware
+RPagos Backend — Rate Limiting Middleware v2
 
-Sliding window rate limiting:
+Sliding window rate limiting con limiti per-endpoint e per-chiave:
   - Se Redis è disponibile → sliding window via sorted set
   - Se Redis non è disponibile → fallback in-memory (con warning)
 
-Limiti:
-  POST /api/v1/tx/callback:    10/min per IP
-  POST /api/v1/dac8/generate:   5/min per IP
-  GET endpoints:                60/min per IP
-  /health/*:                    nessun limite
+Limiti configurabili per endpoint, con chiave basata su:
+  - API key (merchant_id) per endpoint autenticati
+  - IP address per endpoint pubblici
+
+Limiti specifici:
+  POST /api/v1/merchant/payment-intent       → 30/min  per API key
+  POST /api/v1/merchant/webhook/register      → 5/hora  per API key
+  GET  /api/v1/merchant/payment-intent/{id}   → 60/min  per API key
+  GET  /api/v1/merchant/payment-intent/{id}
+       + X-Checkout-Public header              → 20/min  per IP
+  POST /api/v1/tx/callback                    → 10/min  per IP
+  POST /api/v1/dac8/generate                  → 5/min   per IP
+  GET  /api/v1/audit/log                      → 30/min  per IP
+  Admin brute-force: 5/min per IP, ban 15min dopo 10 fail/ora
 
 Headers di risposta:
   X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset
 """
+
+from __future__ import annotations
 
 import logging
 import time
@@ -26,22 +37,46 @@ from starlette.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
-# ── Limiti per endpoint (max_requests, window_seconds) ─────────────────────
-RATE_LIMITS: dict[str, tuple[int, int]] = {
-    "POST:/api/v1/tx/callback":          (10, 60),
-    "POST:/api/v1/dac8/generate":        (5, 60),
-    "POST:/api/v1/webhooks/alchemy":     (1000, 60),  # Alchemy webhook bursts (payroll/airdrop)
-}
 
-# Paths exempt from rate limiting entirely (they have their own auth/throttle)
-RATE_LIMIT_EXEMPTIONS: set[str] = {
-    "/api/v1/webhooks/alchemy",
-}
-DEFAULT_GET_LIMIT = (60, 60)   # 60 req/min per GET
-DEFAULT_POST_LIMIT = (30, 60)  # 30 req/min per POST generici
+# ═══════════════════════════════════════════════════════════════
+#  Rate limit rules
+# ═══════════════════════════════════════════════════════════════
+
+# (max_requests, window_seconds, key_type)
+# key_type: "api_key" = per merchant API key, "ip" = per IP
+ENDPOINT_LIMITS: list[tuple[str, str, int, int, str]] = [
+    # method, path_prefix,                          max,  window, key_type
+    ("POST", "/api/v1/merchant/payment-intent",      30,    60,  "api_key"),
+    ("POST", "/api/v1/merchant/webhook/register",     5,  3600,  "api_key"),
+    ("POST", "/api/v1/merchant/webhook/test",        10,    60,  "api_key"),
+    ("POST", "/api/v1/merchant/payment-intent/",     10,    60,  "api_key"),  # cancel, resolve
+    ("GET",  "/api/v1/merchant/payment-intent/",     60,    60,  "api_key"),  # get by id
+    ("GET",  "/api/v1/merchant/transactions",        60,    60,  "api_key"),
+    ("POST", "/api/v1/tx/callback",                  10,    60,  "ip"),
+    ("POST", "/api/v1/dac8/generate",                 5,    60,  "ip"),
+    ("POST", "/api/v1/webhooks/alchemy",           1000,    60,  "ip"),
+    ("GET",  "/api/v1/audit/log",                    30,    60,  "ip"),
+]
+
+# Public checkout polling: when X-Checkout-Public header present
+CHECKOUT_PUBLIC_LIMIT = (20, 60)  # 20/min per IP
+
+# Admin brute-force protection
+ADMIN_RATE_LIMIT = (5, 60)             # 5 attempts/min per IP
+ADMIN_BAN_THRESHOLD = 10               # 10 failed attempts in 1 hour
+ADMIN_BAN_WINDOW = 3600                # 1 hour window for counting failures
+ADMIN_BAN_DURATION = 900               # 15 min ban
+
+DEFAULT_GET_LIMIT = (60, 60)
+DEFAULT_POST_LIMIT = (30, 60)
+
+# Paths exempt from rate limiting entirely
+RATE_LIMIT_EXEMPTIONS: set[str] = set()
 
 
-# ── In-memory fallback ─────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════
+#  In-memory fallback
+# ═══════════════════════════════════════════════════════════════
 
 class InMemoryRateLimiter:
     """Fallback in-memory sliding window usando liste di timestamp."""
@@ -49,6 +84,8 @@ class InMemoryRateLimiter:
     def __init__(self) -> None:
         self._buckets: dict[str, list[float]] = defaultdict(list)
         self._lock = Lock()
+        # Periodic cleanup counter
+        self._ops = 0
 
     def check(self, key: str, max_requests: int, window_seconds: int) -> tuple[bool, int, int]:
         """Returns (allowed, remaining, reset_epoch)."""
@@ -56,11 +93,13 @@ class InMemoryRateLimiter:
         window_start = now - window_seconds
 
         with self._lock:
-            # Rimuovi entries scadute
+            self._ops += 1
+            # Periodic cleanup every 1000 ops to prevent memory leak
+            if self._ops % 1000 == 0:
+                self._cleanup(now)
+
             bucket = self._buckets[key]
             self._buckets[key] = [t for t in bucket if t > window_start]
-
-            # Aggiungi la richiesta corrente
             self._buckets[key].append(now)
             count = len(self._buckets[key])
 
@@ -70,12 +109,37 @@ class InMemoryRateLimiter:
 
         return allowed, remaining, reset_epoch
 
+    def count(self, key: str, window_seconds: int) -> int:
+        """Count entries in window without adding a new one."""
+        now = time.time()
+        window_start = now - window_seconds
+        with self._lock:
+            bucket = self._buckets.get(key, [])
+            return sum(1 for t in bucket if t > window_start)
+
+    def record(self, key: str) -> None:
+        """Record a timestamp without checking limits."""
+        now = time.time()
+        with self._lock:
+            self._buckets[key].append(now)
+
+    def _cleanup(self, now: float) -> None:
+        """Remove stale keys (older than 1 hour)."""
+        stale_keys = [
+            k for k, v in self._buckets.items()
+            if not v or v[-1] < now - 3600
+        ]
+        for k in stale_keys:
+            del self._buckets[k]
+
 
 _memory_limiter = InMemoryRateLimiter()
 _redis_warned = False
 
 
-# ── Redis sliding window ──────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════
+#  Redis sliding window
+# ═══════════════════════════════════════════════════════════════
 
 async def _check_redis(
     key: str, max_requests: int, window_seconds: int,
@@ -105,7 +169,52 @@ async def _check_redis(
     return allowed, remaining, reset_epoch
 
 
-# ── Helper ─────────────────────────────────────────────────────────────────
+async def _redis_count(key: str, window_seconds: int) -> int:
+    """Count entries in a Redis sorted set window without adding."""
+    from app.services.cache_service import get_redis
+
+    r = await get_redis()
+    now = time.time()
+    window_start = now - window_seconds
+
+    pipe = r.pipeline()
+    pipe.zremrangebyscore(key, 0, window_start)
+    pipe.zcard(key)
+    results = await pipe.execute()
+    return results[1]
+
+
+async def _redis_record(key: str, window_seconds: int) -> None:
+    """Record a timestamp in a Redis sorted set."""
+    from app.services.cache_service import get_redis
+
+    r = await get_redis()
+    now = time.time()
+    pipe = r.pipeline()
+    pipe.zadd(key, {str(now): now})
+    pipe.expire(key, window_seconds)
+    await pipe.execute()
+
+
+async def _redis_is_banned(key: str) -> bool:
+    """Check if a ban key exists in Redis."""
+    from app.services.cache_service import get_redis
+
+    r = await get_redis()
+    return await r.exists(key) > 0
+
+
+async def _redis_ban(key: str, duration: int) -> None:
+    """Set a ban key with TTL."""
+    from app.services.cache_service import get_redis
+
+    r = await get_redis()
+    await r.setex(key, duration, "1")
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Helpers
+# ═══════════════════════════════════════════════════════════════
 
 def _get_client_ip(request: Request) -> str:
     """Estrai il client IP reale (dietro reverse proxy)."""
@@ -119,85 +228,178 @@ def _get_client_ip(request: Request) -> str:
     return ip
 
 
-def _get_limits(method: str, path: str) -> tuple[int, int]:
-    """Trova il limite per questo method:path."""
-    key = f"{method}:{path}"
-    if key in RATE_LIMITS:
-        return RATE_LIMITS[key]
-
-    # Cerca per prefisso
-    for prefix, limits in RATE_LIMITS.items():
-        if key.startswith(prefix):
-            return limits
-
-    if method == "GET":
-        return DEFAULT_GET_LIMIT
-    return DEFAULT_POST_LIMIT
+def _get_api_key_id(request: Request) -> str | None:
+    """Estrai l'API key identifier dal request (set by APIKeyMiddleware)."""
+    client = getattr(request.state, "client", None)
+    if client and isinstance(client, dict):
+        return client.get("client_id")
+    # Fallback: estrarre dall'header Authorization prima che il middleware lo processi
+    auth = request.headers.get("authorization", "")
+    if auth.startswith("Bearer "):
+        token = auth[7:].strip()
+        if token:
+            return token[:24]  # Use prefix as identifier (no full key in Redis)
+    return None
 
 
-# ── Middleware ─────────────────────────────────────────────────────────────
+def _match_endpoint(method: str, path: str) -> tuple[int, int, str] | None:
+    """Trova il limite specifico per questo endpoint."""
+    for rule_method, rule_prefix, max_req, window, key_type in ENDPOINT_LIMITS:
+        if method == rule_method and path.startswith(rule_prefix):
+            return max_req, window, key_type
+    return None
+
+
+def _make_rate_headers(max_req: int, remaining: int, reset_epoch: int) -> dict[str, str]:
+    return {
+        "X-RateLimit-Limit": str(max_req),
+        "X-RateLimit-Remaining": str(remaining),
+        "X-RateLimit-Reset": str(reset_epoch),
+    }
+
+
+def _make_429(max_req: int, remaining: int, reset_epoch: int, retry_after: int) -> JSONResponse:
+    return JSONResponse(
+        status_code=429,
+        content={
+            "error": "RATE_LIMIT_EXCEEDED",
+            "retry_after": retry_after,
+        },
+        headers={
+            **_make_rate_headers(max_req, remaining, reset_epoch),
+            "Retry-After": str(retry_after),
+        },
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Admin brute-force tracking
+# ═══════════════════════════════════════════════════════════════
+
+# In-memory ban set (fallback)
+_ip_bans: dict[str, float] = {}
+_ip_bans_lock = Lock()
+
+
+async def _check_admin_ban(ip: str) -> bool:
+    """Check if IP is banned from admin access."""
+    ban_key = f"admin_ban:{ip}"
+    try:
+        return await _redis_is_banned(ban_key)
+    except Exception:
+        with _ip_bans_lock:
+            ban_until = _ip_bans.get(ip, 0)
+            if ban_until > time.time():
+                return True
+            elif ip in _ip_bans:
+                del _ip_bans[ip]
+        return False
+
+
+async def record_admin_failure(ip: str) -> None:
+    """Record a failed admin auth attempt. Ban IP if threshold exceeded."""
+    fail_key = f"admin_fail:{ip}"
+    ban_key = f"admin_ban:{ip}"
+
+    try:
+        await _redis_record(fail_key, ADMIN_BAN_WINDOW)
+        fail_count = await _redis_count(fail_key, ADMIN_BAN_WINDOW)
+        if fail_count >= ADMIN_BAN_THRESHOLD:
+            await _redis_ban(ban_key, ADMIN_BAN_DURATION)
+            logger.warning("Admin IP banned: %s (%d failures in window)", ip, fail_count)
+    except Exception:
+        _memory_limiter.record(fail_key)
+        fail_count = _memory_limiter.count(fail_key, ADMIN_BAN_WINDOW)
+        if fail_count >= ADMIN_BAN_THRESHOLD:
+            with _ip_bans_lock:
+                _ip_bans[ip] = time.time() + ADMIN_BAN_DURATION
+            logger.warning("Admin IP banned (in-memory): %s (%d failures)", ip, fail_count)
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Middleware
+# ═══════════════════════════════════════════════════════════════
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         global _redis_warned
 
-        # Skip health checks
-        if request.url.path.startswith("/health"):
+        path = request.url.path
+        method = request.method
+
+        # Skip health checks and metrics
+        if path.startswith("/health") or path == "/metrics":
             return await call_next(request)
 
-        # Skip metrics
-        if request.url.path == "/metrics":
-            return await call_next(request)
-
-        # Skip exempt paths (e.g. webhooks — they have their own auth/throttle)
-        if request.url.path in RATE_LIMIT_EXEMPTIONS:
+        # Skip exempt paths
+        if path in RATE_LIMIT_EXEMPTIONS:
             return await call_next(request)
 
         client_ip = _get_client_ip(request)
-        method = request.method
-        path = request.url.path
-        max_req, window = _get_limits(method, path)
 
-        # Rate limit key: rl:{ip}:{method}:{path_prefix}
-        path_group = path.rsplit("/", 1)[0] if "/" in path[1:] else path
-        rl_key = f"rl:{client_ip}:{method}:{path_group}"
+        # ── Admin brute-force protection ─────────────────────
+        if path.startswith("/api/v1/audit/"):
+            if await _check_admin_ban(client_ip):
+                return JSONResponse(
+                    status_code=429,
+                    content={
+                        "error": "RATE_LIMIT_EXCEEDED",
+                        "retry_after": ADMIN_BAN_DURATION,
+                        "message": "Too many failed attempts. Try again later.",
+                    },
+                    headers={"Retry-After": str(ADMIN_BAN_DURATION)},
+                )
 
-        # Prova Redis, fallback in-memory
+        # ── Determine rate limit key and limits ──────────────
+        is_checkout_public = (
+            method == "GET"
+            and path.startswith("/api/v1/merchant/payment-intent/")
+            and request.headers.get("X-Checkout-Public") == "1"
+        )
+
+        if is_checkout_public:
+            max_req, window = CHECKOUT_PUBLIC_LIMIT
+            rl_key = f"rl:checkout:{client_ip}"
+        else:
+            endpoint_rule = _match_endpoint(method, path)
+            if endpoint_rule:
+                max_req, window, key_type = endpoint_rule
+                if key_type == "api_key":
+                    api_key_id = _get_api_key_id(request)
+                    rl_key = f"rl:key:{api_key_id or client_ip}:{method}:{path.split('?')[0]}"
+                else:
+                    rl_key = f"rl:ip:{client_ip}:{method}:{path.split('?')[0]}"
+            else:
+                # Default limits
+                if method == "GET":
+                    max_req, window = DEFAULT_GET_LIMIT
+                else:
+                    max_req, window = DEFAULT_POST_LIMIT
+                rl_key = f"rl:ip:{client_ip}:{method}:{path.rsplit('/', 1)[0]}"
+
+        # ── Check rate limit ─────────────────────────────────
         try:
-            allowed, remaining, reset_epoch = await _check_redis(
-                rl_key, max_req, window,
-            )
+            allowed, remaining, reset_epoch = await _check_redis(rl_key, max_req, window)
         except Exception:
             if not _redis_warned:
-                logger.warning(
-                    "Redis unavailable for rate limiting — using in-memory fallback"
-                )
+                logger.warning("Redis unavailable for rate limiting — using in-memory fallback")
                 _redis_warned = True
-            allowed, remaining, reset_epoch = _memory_limiter.check(
-                rl_key, max_req, window,
-            )
+            allowed, remaining, reset_epoch = _memory_limiter.check(rl_key, max_req, window)
 
-        rate_headers = {
-            "X-RateLimit-Limit": str(max_req),
-            "X-RateLimit-Remaining": str(remaining),
-            "X-RateLimit-Reset": str(reset_epoch),
-        }
+        rate_headers = _make_rate_headers(max_req, remaining, reset_epoch)
 
         if not allowed:
-            return JSONResponse(
-                status_code=429,
-                content={
-                    "error": "RATE_LIMITED",
-                    "message": "Troppe richieste. Riprova tra qualche secondo.",
-                    "retry_after": window,
-                },
-                headers={
-                    **rate_headers,
-                    "Retry-After": str(window),
-                },
-            )
+            return _make_429(max_req, remaining, reset_epoch, retry_after=window)
 
+        # ── Execute request ──────────────────────────────────
         response = await call_next(request)
+
+        # ── Track admin auth failures ────────────────────────
+        if path.startswith("/api/v1/audit/") and response.status_code == 403:
+            await record_admin_failure(client_ip)
+
+        # ── Attach rate limit headers ────────────────────────
         for k, v in rate_headers.items():
             response.headers[k] = v
+
         return response

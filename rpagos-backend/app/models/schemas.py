@@ -136,6 +136,7 @@ class CallbackResponse(BaseModel):
     dac8_reportable: bool = False
     matched_intent_id: Optional[str] = None
     webhook_triggered: bool = False
+    matching: Optional[str] = None       # "queued" | "inline" | None (no match attempted)
 
 
 class AnomalyAlertResponse(BaseModel):

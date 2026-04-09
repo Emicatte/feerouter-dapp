@@ -324,6 +324,15 @@ async def match_transaction(
         webhook_triggered, overpaid_amt,
     )
 
+    # ── Notify checkout WebSocket clients ────────────────────
+    try:
+        from app.api.payment_ws import notify_payment_completed
+        ws_count = await notify_payment_completed(intent.intent_id, tx_hash)
+        if ws_count:
+            logger.info("WS notified %d checkout client(s) for intent %s", ws_count, intent.intent_id)
+    except Exception:
+        logger.debug("WS notification skipped for intent %s", intent.intent_id, exc_info=True)
+
     # ── Trigger sweep as background task ─────────────────────
     _schedule_sweep(intent.intent_id, intent.currency, intent.chain)
 

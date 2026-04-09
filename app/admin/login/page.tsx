@@ -3,9 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-const COOKIE_NAME = 'admin_session'
-const TOKEN_KEY = 'rp_admin_token'
-
 export default function AdminLoginPage() {
   const router = useRouter()
   const [password, setPassword] = useState('')
@@ -15,17 +12,27 @@ export default function AdminLoginPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
-    const token = password.trim()
-    if (!token) { setError('Inserisci il token di accesso.'); return }
+    const pw = password.trim()
+    if (!pw) { setError('Inserisci il token di accesso.'); return }
 
     setLoading(true)
     try {
-      const res = await fetch('/api/admin/transactions?limit=1', {
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw }),
       })
 
       if (res.status === 401) {
         setError('Token non valido.')
+        setLoading(false)
+        return
+      }
+
+      if (res.status === 429) {
+        const body = await res.json().catch(() => ({}))
+        const retryAfter = body.retry_after ?? 60
+        setError(`Troppi tentativi. Riprova tra ${retryAfter}s.`)
         setLoading(false)
         return
       }
@@ -36,8 +43,7 @@ export default function AdminLoginPage() {
         return
       }
 
-      document.cookie = `${COOKIE_NAME}=${token}; path=/; max-age=${7 * 86400}; samesite=strict`
-      sessionStorage.setItem(TOKEN_KEY, token)
+      // Cookie is set by server (httpOnly) — no JS access needed
       router.push('/admin/transactions')
     } catch {
       setError('Errore di rete. Riprova.')
@@ -120,7 +126,7 @@ export default function AdminLoginPage() {
 
           {/* Footer inside card */}
           <div className="mt-6 pt-5 border-t border-white/[0.04] text-center">
-            <p className="text-[11px] text-zinc-600">Sessione protetta con autenticazione Bearer</p>
+            <p className="text-[11px] text-zinc-600">Sessione protetta con cookie httpOnly</p>
           </div>
         </div>
 

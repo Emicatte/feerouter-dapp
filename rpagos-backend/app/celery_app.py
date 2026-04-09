@@ -74,6 +74,7 @@ celery.conf.update(
         "app.tasks.notification_tasks.send_daily_digest": {"queue": "notify"},
         "app.tasks.webhook_tasks.process_webhook_deliveries": {"queue": "notify"},
         "app.tasks.webhook_tasks.expire_pending_intents": {"queue": "notify"},
+        "app.tasks.matching_tasks.match_transaction_task": {"queue": "default"},
     },
 
     # Default queue for unrouted tasks
@@ -85,6 +86,7 @@ celery.conf.update(
         "app.tasks.periodic_tasks",
         "app.tasks.notification_tasks",
         "app.tasks.webhook_tasks",
+        "app.tasks.matching_tasks",
     ],
 )
 

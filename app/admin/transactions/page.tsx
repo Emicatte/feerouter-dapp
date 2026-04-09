@@ -26,20 +26,17 @@ interface ApiResponse {
 
 // ── Auth helpers ─────────────────────────────────────────────────────────────
 
-const TOKEN_KEY = 'rp_admin_token'
-const COOKIE_NAME = 'admin_session'
+async function verifySession(): Promise<boolean> {
+  try {
+    const res = await fetch('/api/admin/verify', { credentials: 'same-origin' })
+    return res.ok
+  } catch {
+    return false
+  }
+}
 
-function getCookie(name: string): string {
-  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`))
-  return match ? decodeURIComponent(match[1]) : ''
-}
-function getToken(): string {
-  if (typeof window === 'undefined') return ''
-  return sessionStorage.getItem(TOKEN_KEY) ?? getCookie(COOKIE_NAME) ?? ''
-}
-function clearToken() {
-  sessionStorage.removeItem(TOKEN_KEY)
-  document.cookie = `${COOKIE_NAME}=; path=/; max-age=0`
+async function logout(): Promise<void> {
+  await fetch('/api/admin/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {})
 }
 
 // ── Format helpers ───────────────────────────────────────────────────────────
@@ -184,11 +181,14 @@ export default function AdminTransactionsPage() {
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null)
   const autoRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  useEffect(() => { if (getToken()) setAuthed(true) }, [])
+  useEffect(() => {
+    verifySession().then(ok => {
+      if (ok) setAuthed(true)
+      else router.push('/admin/login')
+    })
+  }, [router])
 
   const fetchData = useCallback(async (opts?: { silent?: boolean }) => {
-    const token = getToken()
-    if (!token) { setAuthed(false); return }
     if (!opts?.silent) setLoading(true)
     setError('')
     const p = new URLSearchParams()
@@ -199,9 +199,9 @@ export default function AdminTransactionsPage() {
     if (fWallet) p.set('wallet', fWallet)
     try {
       const res = await fetch(`/api/admin/transactions?${p}`, {
-        headers: { Authorization: `Bearer ${token}` },
+        credentials: 'same-origin',
       })
-      if (res.status === 401) { clearToken(); router.push('/admin/login'); return }
+      if (res.status === 401) { await logout(); router.push('/admin/login'); return }
       const json: ApiResponse = await res.json()
       if (!res.ok) { setError(json.error ?? `Errore ${res.status}`); return }
       setRecords(json.records ?? [])
@@ -280,7 +280,7 @@ export default function AdminTransactionsPage() {
               Aggiorna
             </button>
             <button
-              onClick={() => { clearToken(); router.push('/admin/login') }}
+              onClick={() => { logout().then(() => router.push('/admin/login')) }}
               className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3.5 py-2 text-xs font-medium text-zinc-500 hover:text-red-400 hover:border-red-500/15 transition-all"
             >
               Esci

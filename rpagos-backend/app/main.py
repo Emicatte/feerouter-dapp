@@ -24,6 +24,7 @@ from app.services.cache_service import close_redis
 from app.services.polling_service import start_polling_if_needed, stop_polling
 from app.services.price_service import fetch_all_prices, price_refresh_loop
 from app.api.websocket_routes import ws_router, feed_manager
+from app.api.payment_ws import payment_ws_router, payment_manager
 from app.logging_config import setup_logging
 from app.jobs.reconciliation_job import (
     start_reconciliation_job,
@@ -96,6 +97,7 @@ async def lifespan(app: FastAPI):
 
     # ── Start WebSocket background tasks ─────────────
     feed_manager.start_background_tasks()
+    payment_manager.start_heartbeat()
 
     # ── Start block polling if webhook not configured ──
     poller = await start_polling_if_needed()
@@ -160,6 +162,7 @@ async def lifespan(app: FastAPI):
     await stop_reconciliation_job()
     await stop_polling()
     await feed_manager.shutdown()
+    await payment_manager.shutdown()
     await close_redis()
 
 
@@ -238,6 +241,7 @@ app.include_router(sweeper_router)
 from app.api.distribution_routes import distribution_router
 app.include_router(distribution_router)
 app.include_router(ws_router)
+app.include_router(payment_ws_router)
 from app.api.audit_routes import audit_router
 app.include_router(audit_router)
 from app.api.ledger_routes import ledger_router

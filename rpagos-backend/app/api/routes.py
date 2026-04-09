@@ -178,50 +178,98 @@ async def receive_transaction(
         compliance_logged = True
         dac8_reportable = cr.dac8_reportable
 
-    # ── 5. Transaction matching — cerca PaymentIntent corrispondente ──
-    matched_intent_id = None
-    webhook_triggered = False
-
-    if payload.recipient and payload.status == "completed":
-        try:
-            match_result = await match_transaction(
-                db,
-                IncomingTx(
-                    tx_hash=payload.tx_hash,
-                    recipient=payload.recipient,
-                    amount=payload.gross_amount,
-                    currency=payload.currency,
-                ),
-            )
-            if match_result.matched:
-                matched_intent_id = match_result.intent_id
-                webhook_triggered = match_result.webhook_triggered
-                _logger.info(
-                    "TX %s matched intent %s (webhook=%s)",
-                    payload.tx_hash[:16], matched_intent_id, webhook_triggered,
-                )
-            else:
-                _logger.debug(
-                    "TX %s no match: reason=%s",
-                    payload.tx_hash[:16], match_result.reason,
-                )
-        except Exception:
-            _logger.exception(
-                "Transaction matcher failed for tx=%s — TX saved, matching skipped",
-                payload.tx_hash[:16],
-            )
-
+    # ── 5. Commit TX to DB before matching ────────────────────
     await db.commit()
 
+    # ── 6. Transaction matching — dispatch async or inline ──
+    matched_intent_id = None
+    webhook_triggered = False
+    matching_mode = None
+
+    if payload.recipient and payload.status == "completed":
+        matching_mode = _dispatch_matching(
+            tx_id=tx.id,
+            tx_hash=payload.tx_hash,
+            recipient=payload.recipient,
+            gross_amount=payload.gross_amount,
+            currency=payload.currency,
+        )
+
+        if matching_mode == "inline":
+            # Fallback sincrono: esegui il match nella stessa request
+            try:
+                match_result = await match_transaction(
+                    db,
+                    IncomingTx(
+                        tx_hash=payload.tx_hash,
+                        recipient=payload.recipient,
+                        amount=payload.gross_amount,
+                        currency=payload.currency,
+                    ),
+                )
+                await db.commit()
+                if match_result.matched:
+                    matched_intent_id = match_result.intent_id
+                    webhook_triggered = match_result.webhook_triggered
+                    _logger.info(
+                        "TX %s matched intent %s (webhook=%s) [inline]",
+                        payload.tx_hash[:16], matched_intent_id, webhook_triggered,
+                    )
+                else:
+                    _logger.debug(
+                        "TX %s no match: reason=%s [inline]",
+                        payload.tx_hash[:16], match_result.reason,
+                    )
+            except Exception:
+                _logger.exception(
+                    "Transaction matcher failed for tx=%s — TX saved, matching skipped",
+                    payload.tx_hash[:16],
+                )
+
     return CallbackResponse(
-        status="success",
+        status="success" if matching_mode != "queued" else "received",
         message=f"TX {payload.tx_hash[:16]}… loggata per compliance DAC8",
         transaction_id=tx.id,
         compliance_logged=compliance_logged,
         dac8_reportable=dac8_reportable,
         matched_intent_id=matched_intent_id,
         webhook_triggered=webhook_triggered,
+        matching=matching_mode,
     )
+
+
+def _dispatch_matching(
+    tx_id: int,
+    tx_hash: str,
+    recipient: str,
+    gross_amount: float,
+    currency: str,
+) -> str:
+    """
+    Prova a dispatchare il matching via Celery.
+    Se Celery non è disponibile, ritorna "inline" per fallback sincrono.
+
+    Returns:
+        "queued" se il task è stato inviato a Celery
+        "inline" se Celery non è disponibile (dev senza Redis/worker)
+    """
+    try:
+        from app.tasks.matching_tasks import match_transaction_task
+        match_transaction_task.delay(
+            tx_id=tx_id,
+            tx_hash=tx_hash,
+            recipient=recipient,
+            gross_amount=gross_amount,
+            currency=currency,
+        )
+        _logger.info("Matching queued for tx %s (tx_id=%s)", tx_hash[:16], tx_id)
+        return "queued"
+    except Exception as exc:
+        _logger.info(
+            "Matching inline (Celery unavailable: %s) for tx %s",
+            type(exc).__name__, tx_hash[:16],
+        )
+        return "inline"
 
 
 # ═══════════════════════════════════════════════════════════════
