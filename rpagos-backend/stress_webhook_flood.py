@@ -3,13 +3,15 @@ Stress Test S4: 500 Webhook Alchemy in 60 secondi (+ burst mode 100@0ms)
 Testa il backend throughput senza toccare la blockchain.
 
 NOTE:
-- Rate limit middleware: 30 POST/min/IP in-memory (no Redis).
+- Rate limit middleware: Redis-backed (100 POST/min/IP).
   Fix: rotazione X-Forwarded-For con IP 10.0.0.{1..N} (accettati in DEBUG mode
-  dall'IP whitelist webhook_verifier.py). Ogni IP ha 30 slot → 17 IP coprono 500 req.
+  dall'IP whitelist webhook_verifier.py). Ogni IP ha quota separata.
   Questo simula correttamente traffico reale Alchemy (multi-IP egress).
-- Idempotency check fail-open senza Redis → nessuna dedup
+- Idempotency: Redis SETNX-based dedup attiva
 - Ogni webhook ha un `id` UUID unico → no duplicati by design
 - HMAC calcolato sullo stesso body bytes inviato (data=bytes, non json=dict)
+- DB: PostgreSQL (asyncpg) — concorrenza nativa, no write serialization needed
+- Celery: worker attivo per task sweep asincroni
 """
 import asyncio
 import aiohttp
@@ -21,12 +23,12 @@ import random
 import uuid
 import sys
 import os
-import sqlite3
+import asyncpg
 from datetime import datetime, timezone
 
 BACKEND_URL    = "http://127.0.0.1:8001"
 WEBHOOK_SECRET = "test-secret-for-qa"
-DB_PATH        = os.path.join(os.path.dirname(__file__), "dev.db")
+PG_DSN         = "postgresql://rsend:rsend_dev_password@localhost:5432/rsend_dev"
 
 NUM_WEBHOOKS      = 500
 DURATION_SECONDS  = 60
@@ -201,31 +203,36 @@ async def run_flood(n: int, duration: float, label: str) -> dict:
     }
 
 
-def query_db(since_seconds: int = 300) -> dict:
-    """Query sweep_logs and sweep_batches created in last `since_seconds`."""
+async def query_db(since_seconds: int = 300) -> dict:
+    """Query sweep_logs and sweep_batches created in last `since_seconds` via PostgreSQL."""
     try:
-        conn = sqlite3.connect(DB_PATH)
-        cur  = conn.cursor()
-        cur.execute(
-            "SELECT COUNT(*) FROM sweep_logs WHERE created_at >= datetime('now', ?)",
-            (f"-{since_seconds} seconds",)
+        conn = await asyncpg.connect(PG_DSN)
+        total_logs = await conn.fetchval(
+            "SELECT COUNT(*) FROM sweep_logs WHERE created_at >= NOW() - $1 * INTERVAL '1 second'",
+            since_seconds,
         )
-        total_logs = cur.fetchone()[0]
-        cur.execute(
-            "SELECT status, COUNT(*) FROM sweep_logs WHERE created_at >= datetime('now', ?) GROUP BY status",
-            (f"-{since_seconds} seconds",)
+        rows = await conn.fetch(
+            "SELECT status, COUNT(*) AS cnt FROM sweep_logs "
+            "WHERE created_at >= NOW() - $1 * INTERVAL '1 second' GROUP BY status",
+            since_seconds,
         )
-        by_status = dict(cur.fetchall())
-        cur.execute(
-            "SELECT COUNT(*) FROM sweep_batches WHERE created_at >= datetime('now', ?)",
-            (f"-{since_seconds} seconds",)
+        by_status = {r["status"]: r["cnt"] for r in rows}
+        total_batches = await conn.fetchval(
+            "SELECT COUNT(*) FROM sweep_batches WHERE created_at >= NOW() - $1 * INTERVAL '1 second'",
+            since_seconds,
         )
-        total_batches = cur.fetchone()[0]
-        conn.close()
+        # Count distinct trigger_tx_hash for dedup verification
+        distinct_tx = await conn.fetchval(
+            "SELECT COUNT(DISTINCT trigger_tx_hash) FROM sweep_logs "
+            "WHERE created_at >= NOW() - $1 * INTERVAL '1 second'",
+            since_seconds,
+        )
+        await conn.close()
         return {
             "total_sweep_logs":    total_logs,
             "by_status":           by_status,
             "total_sweep_batches": total_batches,
+            "distinct_tx_hashes":  distinct_tx,
         }
     except Exception as e:
         return {"error": str(e)}
@@ -233,10 +240,10 @@ def query_db(since_seconds: int = 300) -> dict:
 
 async def main():
     print("=" * 60, flush=True)
-    print("Stress Test S4 — Webhook Flood", flush=True)
+    print("Stress Test S4 — Webhook Flood (PostgreSQL + Redis + Celery)", flush=True)
     print("=" * 60, flush=True)
     print(f"Backend: {BACKEND_URL}", flush=True)
-    print(f"DB:      {DB_PATH}", flush=True)
+    print(f"DB:      PostgreSQL ({PG_DSN.split('@')[1]})", flush=True)
     print(f"Secret:  {WEBHOOK_SECRET}", flush=True)
     print(f"Sources: {len(SOURCE_ADDRESSES)} addresses", flush=True)
     print(flush=True)
@@ -248,38 +255,56 @@ async def main():
     print(f"Health: {health}", flush=True)
 
     # DB baseline before test
-    db_before = query_db(since_seconds=10)
+    db_before = await query_db(since_seconds=10)
     print(f"DB baseline (last 10s): {db_before}", flush=True)
     t_test_start = time.time()
 
     # ── TEST A: 500 webhooks over 60s ─────────────────────────────────────────
     result_a = await run_flood(NUM_WEBHOOKS, DURATION_SECONDS, "TEST A — 500 webhooks / 60s")
-    time.sleep(2)  # allow async DB writes to complete
+    await asyncio.sleep(5)  # allow Celery workers to process queued tasks
 
     # DB state after test A
     elapsed_a = int(time.time() - t_test_start) + 10
-    db_after_a = query_db(since_seconds=elapsed_a)
+    db_after_a = await query_db(since_seconds=elapsed_a)
     print(f"\nDB after TEST A: {db_after_a}", flush=True)
 
     # ── TEST B: 100 webhooks burst (delay=0) ──────────────────────────────────
     result_b = await run_flood(BURST_WEBHOOKS, 0, "TEST B — 100 webhooks BURST (delay=0)")
-    time.sleep(2)
+    await asyncio.sleep(10)  # longer settle for burst — Celery task queue drain
 
     elapsed_b = int(time.time() - t_test_start) + 10
-    db_after_b = query_db(since_seconds=elapsed_b)
+    db_after_b = await query_db(since_seconds=elapsed_b)
     print(f"\nDB after TEST B: {db_after_b}", flush=True)
 
+    # ── Final settle + verification ─────────────────────────────────────────────
+    print("\nWaiting 30s for Celery workers to drain all tasks...", flush=True)
+    await asyncio.sleep(30)
+    elapsed_final = int(time.time() - t_test_start) + 30
+    db_final = await query_db(since_seconds=elapsed_final)
+    print(f"DB final (after settle): {db_final}", flush=True)
+
+    total_accepted = result_a['ok'] + result_b['ok']
+    total_logs = db_final.get('total_sweep_logs', 0)
+    distinct_tx = db_final.get('distinct_tx_hashes', 0)
+    processing_rate = (total_logs / total_accepted * 100) if total_accepted > 0 else 0
+
+    print(f"\n{'='*60}", flush=True)
+    print(f"PROCESSING RATE: {total_logs}/{total_accepted} = {processing_rate:.1f}%", flush=True)
+    print(f"Distinct tx hashes: {distinct_tx}", flush=True)
+    print(f"{'='*60}", flush=True)
+
     # ── Write STRESS_S4_RESULTS.md ────────────────────────────────────────────
+    today = datetime.now().strftime("%Y-%m-%d")
     out_path = os.path.join(os.path.dirname(__file__), "..", "STRESS_S4_RESULTS.md")
     with open(out_path, "w") as f:
         def w(s=""): f.write(s + "\n")
 
         w("# Stress Test S4 — Webhook Flood (500 + 100 Burst)")
         w()
-        w("**Date:** 2026-04-04")
-        w("**Backend:** FastAPI + uvicorn (1 worker, SQLite — no PostgreSQL/Redis available)")
-        w("**Rate limit:** 100/min/IP — fail-open without Redis → all webhooks accepted")
-        w("**Idempotency:** fail-open without Redis → no dedup (each webhook has unique UUID `id`)")
+        w(f"**Date:** {today}")
+        w("**Backend:** FastAPI + uvicorn (1 worker) + PostgreSQL 16 + Redis 7 + Celery (8 workers)")
+        w("**Rate limit:** Redis-backed (100/min/IP)")
+        w("**Idempotency:** Redis SETNX dedup active (each webhook has unique UUID `id`)")
         w()
         w("---")
         w()
@@ -323,44 +348,47 @@ async def main():
         w()
         w("## Database Verification")
         w()
-        w("| Metric | Before TEST A | After TEST A | After TEST B |")
-        w("|--------|--------------|--------------|--------------|")
-        w(f"| Total sweep_logs | {db_before.get('total_sweep_logs', '?')} | {db_after_a.get('total_sweep_logs', '?')} | {db_after_b.get('total_sweep_logs', '?')} |")
-        w(f"| Total sweep_batches | {db_before.get('total_sweep_batches', '?')} | {db_after_a.get('total_sweep_batches', '?')} | {db_after_b.get('total_sweep_batches', '?')} |")
+        w("| Metric | Before TEST A | After TEST A | After TEST B | Final (30s settle) |")
+        w("|--------|--------------|--------------|--------------|-------------------|")
+        w(f"| Total sweep_logs | {db_before.get('total_sweep_logs', '?')} | {db_after_a.get('total_sweep_logs', '?')} | {db_after_b.get('total_sweep_logs', '?')} | **{total_logs}** |")
+        w(f"| Total sweep_batches | {db_before.get('total_sweep_batches', '?')} | {db_after_a.get('total_sweep_batches', '?')} | {db_after_b.get('total_sweep_batches', '?')} | {db_final.get('total_sweep_batches', '?')} |")
+        w(f"| Distinct trigger_tx_hash | — | — | — | **{distinct_tx}** |")
         w()
-        w("### Sweep log status breakdown (after both tests):")
+        w("### Sweep log status breakdown (after settle):")
         w()
         w("| Status | Count |")
         w("|--------|-------|")
-        for status, cnt in (db_after_b.get("by_status") or {}).items():
+        for status, cnt in (db_final.get("by_status") or {}).items():
             w(f"| {status} | {cnt} |")
         w()
-        w("**Expected:** `sweep_logs ≥ webhooks_accepted` because each accepted webhook with a matching rule creates 1 sweep_log.")
-        w(f"**Accepted (A+B):** {result_a['ok'] + result_b['ok']}")
-        w(f"**sweep_logs created:** {db_after_b.get('total_sweep_logs', '?')}")
+        w(f"**Accepted (A+B):** {total_accepted}")
+        w(f"**sweep_logs created:** {total_logs}")
+        w(f"**Processing rate:** {processing_rate:.1f}%")
+        w(f"**Distinct tx hashes:** {distinct_tx} (0 duplicates)" if distinct_tx == total_logs else f"**Distinct tx hashes:** {distinct_tx} ({total_logs - distinct_tx} duplicates)")
         w()
         w("---")
         w()
-        w("## Infrastructure Limitations (SQLite, no Redis)")
+        w("## Infrastructure Stack")
         w()
-        w("| Limit | Impact |")
-        w("|-------|--------|")
-        w("| No Redis | Rate limit uses in-memory fallback (30 POST/min/IP) — test rotates X-Forwarded-For to simulate Alchemy multi-IP egress |")
-        w("| No Redis | Idempotency dedup disabled → replay attacks possible in prod |")
-        w("| SQLite 1-writer | Concurrent webhook processing serialized → lower throughput than PostgreSQL |")
-        w("| No Celery | Sweep tasks run inline (sync fallback) → each webhook blocks until sweep completes |")
-        w("| Sweep fails | No ALCHEMY_API_KEY → sweep_logs created but sweep TX always fails |")
+        w("| Component | Version/Config |")
+        w("|-----------|---------------|")
+        w("| FastAPI + uvicorn | 1 worker (single-process) |")
+        w("| PostgreSQL | 16-alpine (asyncpg, pool_size=20, max_overflow=30) |")
+        w("| Redis | 7-alpine (256MB, allkeys-lru) |")
+        w("| Celery | 8 workers, queues: sweep+default+confirm |")
+        w("| Rate limiting | Redis-backed, 100/min/IP |")
+        w("| Idempotency | Redis SETNX, TTL-based dedup |")
+        w("| Distributed locks | Redis SETNX, fail-closed |")
         w()
         w("---")
         w()
-        w("## Throughput Scaling")
+        w("## Throughput Comparison")
         w()
-        w(f"| Setup | Max Rate |")
-        w("|-------|----------|")
-        w(f"| **This test (SQLite, 1 worker)** | **{result_a['throughput']:.0f} webhooks/s** |")
-        w(f"| Projected (PostgreSQL, 4 workers) | ~{result_a['throughput']*4:.0f}–{result_a['throughput']*6:.0f} webhooks/s |")
-        w(f"| Projected (PostgreSQL + Redis + Celery) | ~200–500 webhooks/s |")
-        w(f"| Rate limit ceiling (Redis, free tier) | 100 webhooks/min = 1.67/s per IP |")
+        w("| Setup | Throughput |")
+        w("|-------|-----------|")
+        w(f"| Previous (SQLite, no Redis, no Celery) | 8.3 webhooks/s |")
+        w(f"| **This test (PostgreSQL + Redis + Celery)** | **{result_a['throughput']:.1f} webhooks/s** |")
+        w(f"| Burst throughput (TEST B) | **{result_b['throughput']:.1f} webhooks/s** |")
 
     print(f"\nResults saved to: {os.path.abspath(out_path)}", flush=True)
     print("Done.", flush=True)

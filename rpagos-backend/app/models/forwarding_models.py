@@ -186,6 +186,7 @@ class SweepLog(Base):
         Index("ix_sweep_rule_status", "rule_id", "status"),
         Index("ix_sweep_executed", "executed_at"),
         Index("ix_sweep_fiscal", "fiscal_ref"),
+        Index("ix_sweep_trigger_rule", "trigger_tx_hash", "rule_id"),
     )
 
 

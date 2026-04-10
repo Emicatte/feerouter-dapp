@@ -3,6 +3,10 @@ RSend Database Session — PostgreSQL only (production).
 SQLite supportato SOLO per test unitari.
 """
 
+import asyncio
+from contextlib import asynccontextmanager
+
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
@@ -27,6 +31,15 @@ if _is_sqlite:
         echo=settings.debug,
         connect_args={"check_same_thread": False},  # SQLite only
     )
+
+    @event.listens_for(engine.sync_engine, "connect")
+    def _set_sqlite_pragma(dbapi_conn, connection_record):
+        """Enable WAL mode and busy timeout for concurrent write safety."""
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=10000")
+        cursor.execute("PRAGMA synchronous=NORMAL")
+        cursor.close()
 else:
     engine = create_async_engine(
         settings.database_url,
@@ -62,3 +75,25 @@ async def get_db() -> AsyncSession:  # type: ignore[misc]
             yield session
         finally:
             await session.close()
+
+
+# ── SQLite Write Serialization ────────────────────────────────
+# SQLite allows only one writer at a time. Under concurrent load,
+# even with WAL + busy_timeout, "database is locked" errors occur
+# when many coroutines compete for the write lock.
+# This asyncio.Lock serializes writes at the application level,
+# eliminating contention entirely. No-op for PostgreSQL.
+_sqlite_write_lock = None  # lazy-init (needs event loop)
+
+
+@asynccontextmanager
+async def db_write_lock():
+    """Serialize DB writes for SQLite. No-op for PostgreSQL."""
+    if not _is_sqlite:
+        yield
+        return
+    global _sqlite_write_lock
+    if _sqlite_write_lock is None:
+        _sqlite_write_lock = asyncio.Lock()
+    async with _sqlite_write_lock:
+        yield

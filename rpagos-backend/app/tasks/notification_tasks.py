@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 RSends Backend — Celery Notification Tasks.
 

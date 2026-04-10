@@ -349,6 +349,45 @@ _CONN_ERROR_LOG_INTERVAL: float = 60.0
 
 _CELERY_DISPATCH_TIMEOUT: float = 2.0
 
+# ── Celery worker availability check (cached 30s) ───────
+_celery_workers_available: bool = False
+_celery_workers_checked_at: float = 0.0
+_CELERY_CHECK_INTERVAL: float = 30.0
+
+
+async def _check_celery_workers() -> bool:
+    """Return True if at least one Celery worker is registered. Cached for 30s."""
+    global _celery_workers_available, _celery_workers_checked_at
+    now = time.monotonic()
+    if now - _celery_workers_checked_at < _CELERY_CHECK_INTERVAL:
+        return _celery_workers_available
+
+    loop = asyncio.get_running_loop()
+    try:
+        result = await asyncio.wait_for(
+            loop.run_in_executor(None, _ping_celery_workers),
+            timeout=2.0,
+        )
+        _celery_workers_available = result
+    except (asyncio.TimeoutError, Exception):
+        _celery_workers_available = False
+
+    _celery_workers_checked_at = now
+    if not _celery_workers_available:
+        logger.debug("[webhook] No Celery workers detected — using direct async fallback")
+    return _celery_workers_available
+
+
+def _ping_celery_workers() -> bool:
+    """Synchronous Celery worker ping (runs in thread pool)."""
+    try:
+        from app.celery_app import celery as celery_app
+        inspect = celery_app.control.inspect(timeout=1.0)
+        pong = inspect.ping()
+        return bool(pong)
+    except Exception:
+        return False
+
 
 async def _check_redis_health() -> bool:
     """Return True if Redis broker is reachable. Result cached for 5s."""
@@ -463,8 +502,9 @@ async def _process_alchemy_activity(activity: list, network: str = "") -> None:
         }
 
         # Fast path: Celery via thread pool (non-blocking, 2s timeout)
+        # Only dispatch if Redis is up AND at least one Celery worker is running
         dispatched = False
-        if redis_up:
+        if redis_up and await _check_celery_workers():
             dispatched = await _dispatch_to_celery(celery_process_tx, payload)
 
         # Slow path: direct async processing (still non-blocking)

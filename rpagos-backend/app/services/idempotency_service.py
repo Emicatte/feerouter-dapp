@@ -13,6 +13,7 @@ Due livelli di idempotency:
    - Se esiste e status PENDING/PROCESSING → solleva ConflictError (409)
 """
 
+import asyncio
 import logging
 from typing import Optional
 
@@ -35,6 +36,7 @@ WEBHOOK_DEDUP_TTL = 7200
 async def check_and_mark(webhook_id: str, tx_hash: str = "") -> tuple:
     """
     Verifica se questo webhook è già stato processato.
+    Retries once (100ms delay) on transient Redis failures before rejecting.
 
     Returns:
         (is_new: bool, reason: str):
@@ -46,31 +48,37 @@ async def check_and_mark(webhook_id: str, tx_hash: str = "") -> tuple:
     from app.services.cache_service import get_redis
 
     # Componi dedup key: combina webhook_id e tx_hash per sicurezza
-    if tx_hash:
-        dedup_key = f"wh:idem:{webhook_id}:{tx_hash}"
-    else:
-        dedup_key = f"wh:idem:{webhook_id}"
+    dedup_key = f"wh:idem:{webhook_id}" + (f":{tx_hash}" if tx_hash else "")
 
-    r = await get_redis()
-    if r is None:
-        # Redis down → RIFIUTA il webhook (fail-closed)
-        # Alchemy lo re-invierà, e quando Redis torna su, lo processeremo
-        logger.warning(
-            "Redis unavailable — rejecting webhook %s for safety (will be retried by Alchemy)",
-            webhook_id[:12],
-        )
-        return False, "redis_unavailable"
+    for attempt in range(2):  # max 2 attempts (original + 1 retry)
+        r = await get_redis()
+        if r is None:
+            if attempt == 0:
+                await asyncio.sleep(0.1)  # 100ms retry on transient unavailability
+                continue
+            # Redis down → RIFIUTA il webhook (fail-closed)
+            # Alchemy lo re-invierà, e quando Redis torna su, lo processeremo
+            logger.warning(
+                "Redis unavailable — rejecting webhook %s for safety (will be retried by Alchemy)",
+                webhook_id[:12],
+            )
+            return False, "redis_unavailable"
 
-    try:
-        # SETNX atomico: se la key non esiste, la crea e ritorna True
-        is_new = await r.set(dedup_key, "1", nx=True, ex=WEBHOOK_DEDUP_TTL)
-        if not is_new:
-            logger.info("Duplicate webhook detected: %s (tx: %s)", webhook_id[:12], tx_hash[:16] if tx_hash else "n/a")
-            return False, "duplicate"
-        return True, "new"
-    except Exception as e:
-        logger.error("Idempotency check failed: %s — rejecting for safety", e)
-        return False, "redis_error"
+        try:
+            # SETNX atomico: se la key non esiste, la crea e ritorna True
+            is_new = await r.set(dedup_key, "1", nx=True, ex=WEBHOOK_DEDUP_TTL)
+            if not is_new:
+                logger.info("Duplicate webhook detected: %s (tx: %s)", webhook_id[:12], tx_hash[:16] if tx_hash else "n/a")
+                return False, "duplicate"
+            return True, "new"
+        except Exception as e:
+            if attempt == 0:
+                await asyncio.sleep(0.1)  # 100ms retry on transient error
+                continue
+            logger.error("Idempotency check failed: %s — rejecting for safety", e)
+            return False, "redis_error"
+
+    return False, "redis_unavailable"  # unreachable safety fallback
 
 
 async def is_tx_processed(tx_hash: str) -> bool:
