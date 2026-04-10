@@ -254,6 +254,8 @@ from app.api.strategy_routes import router as strategy_router
 app.include_router(strategy_router)
 from app.api.merchant_routes import merchant_router
 app.include_router(merchant_router)
+from app.api.split_routes import split_router
+app.include_router(split_router)
 
 
 # ── Health checks ────────────────────────────────────────

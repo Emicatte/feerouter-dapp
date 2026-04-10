@@ -19,6 +19,7 @@ from app.models import ledger_models as _ledger_models    # noqa: F401 — regis
 from app.models import command_models as _cmd_models      # noqa: F401 — registra tabelle command center in Base.metadata
 from app.models import aml_models as _aml_models            # noqa: F401 — registra tabella blacklisted_wallets in Base.metadata
 from app.models import strategy_models as _strat_models      # noqa: F401 — registra tabella strategies in Base.metadata
+from app.models import split_models as _split_models         # noqa: F401 — registra tabelle split_contracts / split_recipients / split_executions in Base.metadata
 
 settings = get_settings()
 

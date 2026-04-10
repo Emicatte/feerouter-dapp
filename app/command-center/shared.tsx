@@ -40,7 +40,9 @@ export type DestMode = 'quick' | 'bulk'
 export interface Destination {
   address: string
   label: string
-  percent: number
+  percent: number      // Display (es: 95.00) — usato per UI
+  shareBps: number     // Canonical (es: 9500) — usato per API
+  role?: 'primary' | 'commission' | 'fee'
 }
 
 export interface AdvancedSettings {

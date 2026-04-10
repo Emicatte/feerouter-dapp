@@ -501,6 +501,41 @@ async def _process_alchemy_activity(activity: list, network: str = "") -> None:
             "block_number": block_num,
         }
 
+        # ── Split contract priority path ──────────────────
+        # Se esiste uno SplitContract attivo per questo (wallet, chain),
+        # esegui il piano multi-wallet (SplitEngine + SplitExecutor) PRIMA
+        # delle forwarding rules. Idempotente su (contract_id, tx_hash):
+        # una stessa TX non viene mai ri-splittata.
+        # Se ritorna handled=True, skip forwarding rules per questa TX.
+        try:
+            from app.services.split_webhook_bridge import maybe_execute_split
+
+            split_result = await maybe_execute_split(
+                to_addr=to_addr,
+                chain_id=chain_id,
+                amount_human=value,
+                token_symbol=asset,
+                token_decimals=token_decimals,
+                source_tx_hash=tx_hash,
+            )
+        except Exception as split_err:
+            logger.error(
+                "[webhook] split bridge raised for TX %s: %s — falling back to forwarding",
+                tx_hash[:16] if tx_hash else "?", split_err,
+            )
+            split_result = None
+
+        if split_result is not None and split_result.get("handled"):
+            logger.info(
+                "[webhook] Split handled TX %s: contract=%s execution=%s status=%s%s",
+                tx_hash[:16] if tx_hash else "?",
+                split_result.get("contract_id"),
+                split_result.get("execution_id"),
+                split_result.get("status"),
+                " (duplicate)" if split_result.get("duplicate") else "",
+            )
+            continue  # Skip forwarding rules for this TX
+
         # Fast path: Celery via thread pool (non-blocking, 2s timeout)
         # Only dispatch if Redis is up AND at least one Celery worker is running
         dispatched = False

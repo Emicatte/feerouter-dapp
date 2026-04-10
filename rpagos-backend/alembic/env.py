@@ -24,6 +24,7 @@ from app.models import ledger_models as _led       # noqa: F401 — ledger table
 from app.models import command_models as _cmd      # noqa: F401 — command center tables
 from app.models import strategy_models as _strat   # noqa: F401 — strategy tables
 from app.models import merchant_models as _merch   # noqa: F401 — merchant B2B tables
+from app.models import split_models as _split      # noqa: F401 — multi-wallet split tables
 
 from app.config import get_settings
 

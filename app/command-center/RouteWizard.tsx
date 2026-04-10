@@ -59,7 +59,7 @@ function RouteWizard({
 
   // Step 2 state
   const [destMode, setDestMode] = useState<DestMode>('quick')
-  const [destinations, setDestinations] = useState<Destination[]>([{ address: '', label: '', percent: 100 }])
+  const [destinations, setDestinations] = useState<Destination[]>([{ address: '', label: '', percent: 100, shareBps: 10000 }])
   const [csvText, setCsvText] = useState('')
   const [csvParsed, setCsvParsed] = useState<{ address: string; label: string; valid: boolean }[]>([])
   const [showAdvanced, setShowAdvanced] = useState(false)
@@ -77,17 +77,31 @@ function RouteWizard({
   // Active destinations (resolved from quick or bulk)
   const activeDests: Destination[] = useMemo(() => {
     if (destMode === 'quick') return destinations
-    return csvParsed.filter(r => r.valid).map((r, _, arr) => ({
-      address: r.address, label: r.label, percent: Math.round(100 / arr.length),
-    }))
+    const valid = csvParsed.filter(r => r.valid)
+    const n = valid.length
+    if (n === 0) return []
+    // BPS-aware even distribution: first gets the remainder so sum === 10000 exact
+    const evenBps = Math.floor(10000 / n)
+    const remainderBps = 10000 - evenBps * n
+    return valid.map((r, i) => {
+      const bps = i === 0 ? evenBps + remainderBps : evenBps
+      return {
+        address: r.address,
+        label: r.label,
+        percent: bps / 100,
+        shareBps: bps,
+      }
+    })
   }, [destMode, destinations, csvParsed])
 
   const totalPercent = activeDests.reduce((s, d) => s + d.percent, 0)
+  const activeTotalBps = activeDests.reduce((s, d) => s + (d.shareBps || Math.round(d.percent * 100)), 0)
+  const activeBpsExact = activeTotalBps === 10000
 
-  // Validation
+  // Validation — BPS exact (no "close enough" for money)
   const canNext2 = activeDests.length > 0 &&
     activeDests.every(d => isValidAddr(d.address)) &&
-    (activeDests.length === 1 || Math.abs(totalPercent - 100) < 1)
+    (activeDests.length === 1 || activeBpsExact)
 
   // Navigation
   const goNext = () => { setDirection(1); setStep(s => Math.min(3, s + 1) as WizardStep) }
@@ -216,12 +230,16 @@ function RouteWizard({
           split_percent: 100,
         } as CreateRulePayload)
       } else if (dests.length === 2 && destMode === 'quick') {
+        // Derive split_percent from canonical shareBps (BPS → percent)
+        // Backend legacy 2-way split still uses split_percent, but we compute
+        // it from the authoritative BPS value to preserve 0.01% precision.
+        const primaryBps = dests[0].shareBps || Math.round(dests[0].percent * 100)
         await onCreate({
           ...base,
           destination_wallet: dests[0].address,
           label: dests[0].label || undefined,
           split_enabled: true,
-          split_percent: dests[0].percent,
+          split_percent: primaryBps / 100,
           split_destination: dests[1].address,
         } as CreateRulePayload)
       } else {
@@ -252,7 +270,12 @@ function RouteWizard({
 
   // Load distribution group
   const loadGroup = (entries: DistributionEntry[]) => {
-    setDestinations(entries.map(e => ({ address: e.address, label: e.label, percent: e.percent })))
+    setDestinations(entries.map(e => ({
+      address: e.address,
+      label: e.label,
+      percent: e.percent,
+      shareBps: Math.round(e.percent * 100),
+    })))
     setDestMode('quick')
   }
 
@@ -584,25 +607,45 @@ function Step2Destinations({
   ethPrice: number
   distLists: any[]; loadGroup: (entries: DistributionEntry[]) => void
 }) {
-  const total = destinations.reduce((s, d) => s + d.percent, 0)
+  // BPS-aware totals (canonical) — exact to 0.01%
+  const totalBps = destinations.reduce((s, d) => s + (d.shareBps || Math.round(d.percent * 100)), 0)
+  const bpsExact = totalBps === 10000
 
   const addDest = () => {
     if (destinations.length >= 5) return
-    const even = Math.floor(100 / (destinations.length + 1))
-    const updated = destinations.map(d => ({ ...d, percent: even }))
-    updated.push({ address: '', label: '', percent: 100 - even * destinations.length })
+    // BPS-aware even split: first dest absorbs remainder so sum === 10000 exact
+    const n = destinations.length + 1
+    const evenBps = Math.floor(10000 / n)
+    const remainderBps = 10000 - evenBps * n
+    const updated = destinations.map((d, i) => {
+      const bps = i === 0 ? evenBps + remainderBps : evenBps
+      return { ...d, percent: bps / 100, shareBps: bps }
+    })
+    updated.push({ address: '', label: '', percent: evenBps / 100, shareBps: evenBps })
     setDestinations(updated)
   }
 
   const removeDest = (i: number) => {
     const next = destinations.filter((_, idx) => idx !== i)
-    if (next.length === 1) next[0].percent = 100
+    if (next.length === 1) {
+      next[0] = { ...next[0], percent: 100, shareBps: 10000 }
+    }
     setDestinations(next)
   }
 
   const updateDest = (i: number, field: keyof Destination, value: any) => {
     const next = [...destinations]
-    next[i] = { ...next[i], [field]: value }
+    if (field === 'percent') {
+      // Sync canonical shareBps whenever percent changes (UI → BPS)
+      const p = Math.max(0, Math.min(100, parseFloat(String(value)) || 0))
+      next[i] = { ...next[i], percent: p, shareBps: Math.round(p * 100) }
+    } else if (field === 'shareBps') {
+      // Sync display percent whenever shareBps changes (BPS → UI)
+      const bps = Math.max(0, Math.min(10000, parseInt(String(value)) || 0))
+      next[i] = { ...next[i], shareBps: bps, percent: bps / 100 }
+    } else {
+      next[i] = { ...next[i], [field]: value }
+    }
     setDestinations(next)
   }
 
@@ -713,20 +756,38 @@ function Step2Destinations({
                 )}
               </div>
 
-              {/* Percentage slider (only when multiple dests) */}
+              {/* Percentage slider + precise numeric input (only when multiple dests) */}
               {destinations.length > 1 && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{
-                    fontFamily: C.D, fontSize: 13, fontWeight: 700, color: C.purple,
-                    width: 44, textAlign: 'right',
+                  {/* Precise numeric input — 0.01% (1 bps) precision */}
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 2,
+                    width: 72,
+                    padding: '4px 6px', borderRadius: 8,
+                    background: 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${C.border}`,
                   }}>
-                    {d.percent}%
-                  </span>
+                    <input
+                      type="number"
+                      min={0} max={100} step="0.01"
+                      value={d.percent}
+                      onChange={e => updateDest(i, 'percent', e.target.value)}
+                      style={{
+                        width: '100%',
+                        background: 'transparent', border: 'none', outline: 'none',
+                        color: C.purple, fontFamily: C.D, fontSize: 12, fontWeight: 700,
+                        textAlign: 'right', padding: 0,
+                      }}
+                    />
+                    <span style={{
+                      fontFamily: C.D, fontSize: 11, fontWeight: 700, color: C.purple,
+                    }}>%</span>
+                  </div>
                   <input
                     type="range"
-                    min={0} max={100} step={1}
+                    min={0} max={100} step="0.01"
                     value={d.percent}
-                    onChange={e => updateDest(i, 'percent', parseInt(e.target.value))}
+                    onChange={e => updateDest(i, 'percent', e.target.value)}
                     style={{ flex: 1, accentColor: C.purple, height: 4 }}
                   />
                 </div>
@@ -751,23 +812,34 @@ function Step2Destinations({
             </button>
           )}
 
-          {/* Total check */}
+          {/* Total check — BPS exact (0.01% precision) */}
           {destinations.length > 1 && (
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               padding: '8px 12px', borderRadius: 10,
-              background: total === 100 ? `${C.green}08` : `${C.amber}08`,
-              border: `1px solid ${total === 100 ? `${C.green}20` : `${C.amber}20`}`,
+              background: bpsExact ? `${C.green}08` : `${C.red}08`,
+              border: `1px solid ${bpsExact ? `${C.green}20` : `${C.red}20`}`,
               marginBottom: 8,
             }}>
-              <span style={{ fontFamily: C.M, fontSize: 11, color: total === 100 ? C.green : C.amber }}>
-                Total: {total}%
+              <span style={{ fontFamily: C.M, fontSize: 11, color: bpsExact ? C.green : C.red }}>
+                Total: {(totalBps / 100).toFixed(2)}%
               </span>
-              {total !== 100 && (
-                <span style={{ fontFamily: C.M, fontSize: 10, color: C.amber }}>
-                  Must equal 100%
+              {!bpsExact && (
+                <span style={{ fontFamily: C.M, fontSize: 10, color: C.red }}>
+                  {totalBps > 10000
+                    ? `${((totalBps - 10000) / 100).toFixed(2)}% over`
+                    : `${((10000 - totalBps) / 100).toFixed(2)}% under`}
                 </span>
               )}
+            </div>
+          )}
+
+          {/* Precise BPS error — shown inline under the total bar */}
+          {destinations.length > 1 && !bpsExact && (
+            <div style={{
+              fontFamily: C.M, fontSize: 10, color: C.red, marginTop: 4, marginBottom: 8,
+            }}>
+              Total must be exactly 100.00% — currently {(totalBps / 100).toFixed(2)}%
             </div>
           )}
         </div>
@@ -1140,6 +1212,92 @@ function Step3Review({
 
       {/* ── Animated Flow Diagram ──────────────────── */}
       <FlowDiagram address={address} destinations={destinations} />
+
+      {/* ── Split Preview — visual distribution per 100 token units ── */}
+      {destinations.length > 1 && (
+        <div style={{
+          padding: 12, borderRadius: 12,
+          background: 'rgba(255,255,255,0.02)',
+          border: `1px solid ${C.border}`,
+          marginBottom: 10,
+        }}>
+          <div style={{
+            fontFamily: C.M, fontSize: 8, color: C.dim,
+            textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8,
+          }}>
+            Split Preview (per 100 {advanced.tokenFilter[0] || 'USDC'})
+          </div>
+
+          {/* Visual bar */}
+          <div style={{
+            display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden',
+            marginBottom: 8,
+          }}>
+            {destinations.map((d, i) => {
+              const flexVal = d.shareBps || Math.round(d.percent * 100)
+              return (
+                <div key={i} style={{
+                  flex: flexVal,
+                  background: [C.green, C.blue, C.purple, C.amber, C.red][i % 5],
+                  transition: 'flex 0.3s',
+                }} />
+              )
+            })}
+          </div>
+
+          {/* Table */}
+          {destinations.map((d, i) => {
+            const bps = d.shareBps || Math.round(d.percent * 100)
+            const sampleAmount = (bps / 100).toFixed(2) // Per 100 units
+            return (
+              <div key={i} style={{
+                display: 'flex', justifyContent: 'space-between',
+                padding: '4px 0',
+                borderBottom: i < destinations.length - 1 ? `1px solid ${C.border}` : 'none',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{
+                    width: 6, height: 6, borderRadius: '50%',
+                    background: [C.green, C.blue, C.purple, C.amber, C.red][i % 5],
+                  }} />
+                  <span style={{ fontFamily: C.M, fontSize: 10, color: C.text }}>
+                    {d.label || tr(d.address)}
+                  </span>
+                  {d.role && d.role !== 'primary' && (
+                    <span style={{
+                      fontFamily: C.M, fontSize: 7, color: C.dim,
+                      padding: '1px 4px', borderRadius: 4,
+                      background: 'rgba(255,255,255,0.04)',
+                    }}>
+                      {d.role}
+                    </span>
+                  )}
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <span style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.text }}>
+                    {(bps / 100).toFixed(2)}%
+                  </span>
+                  <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim, marginLeft: 6 }}>
+                    ({sampleAmount})
+                  </span>
+                </div>
+              </div>
+            )
+          })}
+
+          {/* RSend fee */}
+          <div style={{
+            display: 'flex', justifyContent: 'space-between',
+            padding: '6px 0 0', marginTop: 4,
+            borderTop: `1px solid ${C.border}`,
+          }}>
+            <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>RSend fee</span>
+            <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>
+              {RSEND_FEE_PCT.toFixed(2)}% ({RSEND_FEE_PCT.toFixed(2)})
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* ── Calculation Table ──────────────────────── */}
       <div style={{
