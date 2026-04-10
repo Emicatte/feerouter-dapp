@@ -1222,7 +1222,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
               {/* Top row: label + balance */}
               <div style={{ ...C.row, marginBottom:10 }}>
                 <span style={{ fontFamily:T.D, fontSize:13, fontWeight:600, color:T.muted }}>
-                  Recive
+                  Receive
                 </span>
                 {isConnected && (isSwapMode ? tokenOut : tokenIn) && (
                   <span style={{ fontFamily:T.M, fontSize:12, color:T.muted }}>
