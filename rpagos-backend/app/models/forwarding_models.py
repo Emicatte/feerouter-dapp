@@ -113,7 +113,7 @@ class ForwardingRule(Base):
 
     # ── Relationships ───────────────────────────────────────
     sweep_logs = relationship("SweepLog", back_populates="rule", lazy="selectin")
-    audit_logs = relationship("AuditLog", back_populates="rule", lazy="selectin")
+    audit_logs = relationship("AuditLog", back_populates="rule", lazy="selectin", cascade="all, delete-orphan", passive_deletes=True)
     distribution_list = relationship(
         "DistributionList", back_populates="forwarding_rules", lazy="selectin"
     )
@@ -138,7 +138,7 @@ class SweepLog(Base):
     __tablename__ = "sweep_logs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    rule_id = Column(Integer, ForeignKey("forwarding_rules.id"), nullable=False, index=True)
+    rule_id = Column(Integer, ForeignKey("forwarding_rules.id", ondelete="CASCADE"), nullable=False, index=True)
     source_wallet = Column(String(42), nullable=False)
     destination_wallet = Column(String(42), nullable=False)
 

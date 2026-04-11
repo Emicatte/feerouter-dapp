@@ -179,9 +179,11 @@ app = FastAPI(
 settings = get_settings()
 if settings.debug:
     cors_origins = [
-        "http://localhost:3001",
         "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
         "http://localhost:5173",
+        "https://fee-router-dapp.vercel.app",
     ]
 else:
     cors_origins = (

@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic'
 import { useAccount, useChainId, useBalance } from 'wagmi'
 import { useUniversalWallet } from '../../hooks/useUniversalWallet'
 import { useForwardingRules } from '../../lib/useForwardingRules'
+import { useSplitContracts } from '../../lib/useSplitContracts'
 import { useSweepWebSocket } from '../../lib/useSweepWebSocket'
 import { useSweepStats } from '../../lib/useSweepStats'
 import { useDistributionList } from '../../lib/useDistributionList'
@@ -16,6 +17,7 @@ import { C, TABS, CHAIN_NAMES, smooth, tabContent, fiat, TabSkeleton } from './s
 import type { Tab } from './shared'
 
 const RoutesTab = dynamic(() => import('./RoutesTab'), { loading: () => <TabSkeleton /> })
+const SplitsTab = dynamic(() => import('./SplitsTab'), { loading: () => <TabSkeleton /> })
 const MonitorTab = dynamic(() => import('./MonitorTab'), { loading: () => <TabSkeleton /> })
 const HistoryTab = dynamic(() => import('./HistoryTab'), { loading: () => <TabSkeleton /> })
 const AnalyticsTab = dynamic(() => import('./AnalyticsTab'), { loading: () => <TabSkeleton /> })
@@ -52,6 +54,17 @@ export default function CommandCenter({
     createRule, createRuleBatch, updateRule, deleteRule,
     pauseRule, resumeRule, emergencyStop,
   } = useForwardingRules(address)
+
+  // N-wallet split system (S2/S3) — coexists with legacy forwarding rules.
+  const {
+    contracts: splitContracts,
+    loading: splitLoading,
+    createContract: createSplitContract,
+    deactivateContract: deactivateSplitContract,
+    simulateSplit,
+    listExecutions: listSplitExecutions,
+    refresh: refreshSplitContracts,
+  } = useSplitContracts(address)
 
   const { events, connected, wsStats } = useSweepWebSocket(address)
   const { stats, daily, loading: statsLoading } = useSweepStats(address)
@@ -208,6 +221,8 @@ export default function CommandCenter({
                   loading={rulesLoading}
                   createRule={createRule}
                   createRuleBatch={createRuleBatch}
+                  createSplitContract={createSplitContract}
+                  simulateSplit={simulateSplit}
                   updateRule={updateRule}
                   deleteRule={deleteRule}
                   pauseRule={pauseRule}
@@ -215,6 +230,16 @@ export default function CommandCenter({
                   distLists={distLists}
                   activeFamily={wallet.activeFamily}
                   isMobile={isMobile}
+                />
+              )}
+              {tab === 'splits' && (
+                <SplitsTab
+                  contracts={splitContracts}
+                  loading={splitLoading}
+                  deactivateContract={deactivateSplitContract}
+                  listExecutions={listSplitExecutions}
+                  refresh={refreshSplitContracts}
+                  activeFamily={wallet.activeFamily}
                 />
               )}
               {tab === 'monitor' && (

@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 
-const BACKEND = process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:8000'
+// Same-origin proxy → see app/api/backend/[...path]/route.ts
+const BACKEND = '/api/backend'
 
 // ═══════════════════════════════════════════════════════════
 //  TYPES

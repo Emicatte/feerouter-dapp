@@ -3,7 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { getAllCoingeckoIds } from '../tokens/tokenRegistry'
 
-const BACKEND = process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:8000'
+// Same-origin proxy → see app/api/backend/[...path]/route.ts
+const BACKEND = '/api/backend'
 const COINGECKO_API = 'https://api.coingecko.com/api/v3'
 const REFRESH_INTERVAL = 30_000 // 30 secondi — prezzi più reattivi
 

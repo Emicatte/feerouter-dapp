@@ -12,7 +12,8 @@ import { useAccount, useChainId } from 'wagmi'
 import { motion, AnimatePresence } from 'framer-motion'
 import { mutationHeaders } from '../lib/rsendFetch'
 
-const BACKEND = process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:8000'
+// Same-origin proxy → see app/api/backend/[...path]/route.ts
+const BACKEND = '/api/backend'
 
 const C = {
   bg:'#080810', surface:'#0d0d1a', card:'rgba(8,12,30,0.72)',

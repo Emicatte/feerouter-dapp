@@ -36,7 +36,8 @@ function tr(addr: string, s=6, e=4): string {
   return `${addr.slice(0,s)}…${addr.slice(-e)}`
 }
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:8000'
+// Same-origin proxy → see app/api/backend/[...path]/route.ts
+const BACKEND_URL = '/api/backend'
 
 interface RecentTx {
   tx_hash: string; gross_amount: number; currency: string

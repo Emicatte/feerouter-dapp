@@ -4,7 +4,40 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useSignMessage } from 'wagmi'
 import { mutationHeaders, parseRSendError } from './rsendFetch'
 
-const BACKEND = process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:8000'
+// Same-origin proxy → eliminates CORS entirely.
+// All requests go through /api/backend/* which is forwarded server-side
+// to ${RPAGOS_BACKEND_URL}/* by app/api/backend/[...path]/route.ts
+const BACKEND = '/api/backend'
+
+// ═══════════════════════════════════════════════════════════
+//  NETWORK RETRY HELPER
+// ═══════════════════════════════════════════════════════════
+//
+// Wraps fetch() so transient network errors (the browser's
+// `TypeError: Failed to fetch`, raised when the backend rejects
+// a CORS preflight or briefly drops the connection) get retried
+// instead of immediately bubbling up to the UI. Only network-level
+// failures are retried — HTTP error responses (4xx/5xx) are returned
+// as-is so the caller can parse the structured error.
+
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  maxRetries = 2,
+  delayMs = 1500,
+): Promise<Response> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fetch(url, options)
+    } catch (err) {
+      const isNetworkError = err instanceof TypeError && err.message === 'Failed to fetch'
+      if (!isNetworkError || attempt === maxRetries) throw err
+      console.warn(`[RSend] Network error, retrying in ${delayMs}ms (attempt ${attempt + 1}/${maxRetries})`)
+      await new Promise(r => setTimeout(r, delayMs))
+    }
+  }
+  throw new Error('Unreachable')
+}
 
 // ═══════════════════════════════════════════════════════════
 //  TYPES
@@ -196,7 +229,7 @@ export function useForwardingRules(address: string | undefined) {
     const message = `RSends:${address}:${isoTimestamp}`
     const signature = await signOnce(message)
 
-    const res = await fetch(`${BACKEND}/api/v1/forwarding/rules/${ruleId}`, {
+    const res = await fetchWithRetry(`${BACKEND}/api/v1/forwarding/rules/${ruleId}`, {
       method: 'PUT',
       headers: mutationHeaders({
         'X-Wallet-Address': address!,
@@ -217,7 +250,7 @@ export function useForwardingRules(address: string | undefined) {
     const message = `RSends:${address}:${isoTimestamp}`
     const signature = await signOnce(message)
 
-    const res = await fetch(`${BACKEND}/api/v1/forwarding/rules/${ruleId}`, {
+    const res = await fetchWithRetry(`${BACKEND}/api/v1/forwarding/rules/${ruleId}`, {
       method: 'DELETE',
       headers: mutationHeaders({
         'X-Wallet-Address': address!,
@@ -237,7 +270,7 @@ export function useForwardingRules(address: string | undefined) {
     const message = `RSends:${address}:${isoTimestamp}`
     const signature = await signOnce(message)
 
-    const res = await fetch(`${BACKEND}/api/v1/forwarding/rules/${ruleId}/pause`, {
+    const res = await fetchWithRetry(`${BACKEND}/api/v1/forwarding/rules/${ruleId}/pause`, {
       method: 'POST',
       headers: mutationHeaders({
         'X-Wallet-Address': address!,
@@ -255,7 +288,7 @@ export function useForwardingRules(address: string | undefined) {
     const message = `RSends:${address}:${isoTimestamp}`
     const signature = await signOnce(message)
 
-    const res = await fetch(`${BACKEND}/api/v1/forwarding/rules/${ruleId}/resume`, {
+    const res = await fetchWithRetry(`${BACKEND}/api/v1/forwarding/rules/${ruleId}/resume`, {
       method: 'POST',
       headers: mutationHeaders({
         'X-Wallet-Address': address!,
@@ -275,7 +308,7 @@ export function useForwardingRules(address: string | undefined) {
     const message = `RSends:${address}:${isoTimestamp}`
     const signature = await signOnce(message)
 
-    const res = await fetch(`${BACKEND}/api/v1/forwarding/emergency-stop`, {
+    const res = await fetchWithRetry(`${BACKEND}/api/v1/forwarding/emergency-stop`, {
       method: 'POST',
       headers: mutationHeaders({
         'X-Wallet-Address': address!,

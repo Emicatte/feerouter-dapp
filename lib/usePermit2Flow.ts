@@ -102,7 +102,8 @@ export interface Permit2FlowResult {
 }
 
 // ── API Base URL ────────────────────────────────────────────────────────────
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
+// Same-origin proxy → see app/api/backend/[...path]/route.ts
+const API_BASE = '/api/backend'
 
 // ── Hook ───────────────────────────────────────────────────────────────────
 export function usePermit2Flow(feeRouterV3: `0x${string}`) {

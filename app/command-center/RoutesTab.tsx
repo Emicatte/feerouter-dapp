@@ -8,13 +8,20 @@ import RuleCard from '../RuleCard'
 import { logger } from '../../lib/logger'
 import type { ChainFamily } from '../../lib/chain-adapters/types'
 import type { CreateRulePayload } from '../../lib/useForwardingRules'
+import type {
+  CreateSplitContractPayload,
+  SimulateSplitPayload,
+  SimulationResult,
+  SplitContract,
+} from '../../lib/useSplitContracts'
 import { C, EASE, TabSkeleton } from './shared'
 
 const RouteWizard = dynamic(() => import('./RouteWizard'), { ssr: false })
 
 function RoutesTab({
   address, chainId, balance, ethPrice, rules, loading,
-  createRule, createRuleBatch, updateRule, deleteRule, pauseRule, resumeRule,
+  createRule, createRuleBatch, createSplitContract, simulateSplit,
+  updateRule, deleteRule, pauseRule, resumeRule,
   distLists, activeFamily, isMobile,
 }: {
   address: string
@@ -25,6 +32,8 @@ function RoutesTab({
   loading: boolean
   createRule: (p: CreateRulePayload) => Promise<any>
   createRuleBatch: (p: CreateRulePayload[]) => Promise<void>
+  createSplitContract?: (p: CreateSplitContractPayload) => Promise<SplitContract>
+  simulateSplit?: (p: SimulateSplitPayload) => Promise<SimulationResult>
   updateRule: (id: number, u: Record<string, any>) => Promise<void>
   deleteRule: (id: number) => Promise<void>
   pauseRule: (id: number) => Promise<void>
@@ -70,6 +79,8 @@ function RoutesTab({
           onClose={() => setShowWizard(false)}
           onCreate={createRule}
           onCreateBatch={createRuleBatch}
+          onCreateSplitContract={createSplitContract}
+          onSimulateSplit={simulateSplit}
           address={address}
           chainId={chainId}
           balance={balance}

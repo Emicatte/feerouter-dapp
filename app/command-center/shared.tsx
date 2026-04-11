@@ -25,7 +25,8 @@ export const C = {
   M:       'var(--font-mono)',
 }
 
-export const BACKEND = process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:8000'
+// Same-origin proxy → see app/api/backend/[...path]/route.ts
+export const BACKEND = '/api/backend'
 export const EASE: [number, number, number, number] = [0.4, 0, 0.2, 1]
 export const RSEND_FEE_PCT = 0.1
 
@@ -33,7 +34,7 @@ export const RSEND_FEE_PCT = 0.1
 //  TYPES
 // ═══════════════════════════════════════════════════════════
 
-export type Tab = 'routes' | 'monitor' | 'history' | 'analytics' | 'groups' | 'settings'
+export type Tab = 'routes' | 'splits' | 'monitor' | 'history' | 'analytics' | 'groups' | 'settings'
 export type WizardStep = 1 | 2 | 3
 export type DestMode = 'quick' | 'bulk'
 
@@ -106,6 +107,7 @@ export const STATUS_OPTIONS = ['completed', 'failed', 'pending', 'executing', 'g
 
 export const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: 'routes',    label: 'Routes',    icon: '\u27D0' },
+  { key: 'splits',    label: 'Splits',    icon: '\u2982' },
   { key: 'monitor',   label: 'Monitor',   icon: '\u25C9' },
   { key: 'history',   label: 'History',   icon: '\u2630' },
   { key: 'analytics', label: 'Analytics', icon: '\u2197' },

@@ -7,6 +7,12 @@ import { parseEther, parseUnits, formatUnits, getAddress } from 'viem'
 import { getRegistry } from '../../lib/contractRegistry'
 import { FEE_ROUTER_ABI } from '../../lib/feeRouterAbi'
 import type { CreateRulePayload } from '../../lib/useForwardingRules'
+import type {
+  CreateSplitContractPayload,
+  SimulateSplitPayload,
+  SimulationResult,
+  SplitContract,
+} from '../../lib/useSplitContracts'
 import { mutationHeaders, parseRSendError } from '../../lib/rsendFetch'
 import { logger } from '../../lib/logger'
 import type { DistributionEntry } from '../../lib/useDistributionList'
@@ -42,11 +48,26 @@ function fiat(eth: number, price: number): string {
 // ═══════════════════════════════════════════════════════════
 
 function RouteWizard({
-  onClose, onCreate, onCreateBatch, address, chainId, balance, ethPrice, distLists, isMobile,
+  onClose, onCreate, onCreateBatch, onCreateSplitContract, onSimulateSplit,
+  address, chainId, balance, ethPrice, distLists, isMobile,
 }: {
   onClose: () => void
   onCreate: (p: CreateRulePayload) => Promise<any>
   onCreateBatch: (p: CreateRulePayload[]) => Promise<void>
+  /**
+   * N-wallet split path (S3): when destinations > 2, the wizard creates a
+   * SplitContract via POST /api/v1/splits/contracts instead of N separate
+   * ForwardingRules. Optional for backward compatibility: if not provided,
+   * the wizard falls back to the legacy batch-of-rules path.
+   */
+  onCreateSplitContract?: (p: CreateSplitContractPayload) => Promise<SplitContract>
+  /**
+   * Pure simulation hook (POST /api/v1/splits/simulate). Used by Step 3 to
+   * render a backend-computed preview of the distribution plan (BPS-exact
+   * math + RSend fee). Optional: if absent, the static client-side preview
+   * is used.
+   */
+  onSimulateSplit?: (p: SimulateSplitPayload) => Promise<SimulationResult>
   address: string
   chainId: number
   balance: any
@@ -99,8 +120,13 @@ function RouteWizard({
   const activeBpsExact = activeTotalBps === 10000
 
   // Validation — BPS exact (no "close enough" for money)
+  // Also reject duplicate recipient addresses: backend SplitContract rejects them,
+  // and 2-way legacy splits would silently mean "send 100% to the same wallet twice".
+  const activeAddrsLower = activeDests.map(d => d.address.toLowerCase())
+  const noDuplicateAddrs = new Set(activeAddrsLower).size === activeAddrsLower.length
   const canNext2 = activeDests.length > 0 &&
     activeDests.every(d => isValidAddr(d.address)) &&
+    noDuplicateAddrs &&
     (activeDests.length === 1 || activeBpsExact)
 
   // Navigation
@@ -145,7 +171,14 @@ function RouteWizard({
   })
 
   // Create handler (ref guard prevents double-click)
-  // Flow: oracle sign → writeContractAsync (MetaMask opens) → backend rule creation
+  //
+  // Two branches:
+  //   • N-wallet split (N > 2 and onCreateSplitContract provided):
+  //     SplitContract is backend-only config — no on-chain tx, no oracle sign.
+  //     The actual split happens when a payment arrives at master_wallet
+  //     (webhook → split_webhook_bridge → SplitExecutor).
+  //   • Legacy 1/2-dest path:
+  //     oracle sign → writeContractAsync (MetaMask opens) → backend rule creation.
   const handleCreate = async () => {
     if (savingRef.current) return
     savingRef.current = true
@@ -154,6 +187,52 @@ function RouteWizard({
     try {
       const base = buildPayloadBase()
       const dests = activeDests
+
+      // ═══════ N-wallet split path (N > 2) ═══════
+      // SplitContract is backend-only config → skip oracle+on-chain entirely.
+      if (dests.length > 2 && onCreateSplitContract) {
+        // Invariante BPS: la somma di shareBps deve essere ESATTAMENTE 10000.
+        // Già garantita da canNext2 (activeBpsExact) ma ri-verifichiamo qui per
+        // difesa in profondità — meglio un errore client che un 400 dal backend.
+        const totalBps = dests.reduce(
+          (s, d) => s + (d.shareBps || Math.round(d.percent * 100)),
+          0,
+        )
+        if (totalBps !== 10000) {
+          throw new Error(
+            `Split shares must sum to exactly 10000 BPS (100.00%), got ${totalBps}`,
+          )
+        }
+
+        // Backend SplitContract rejects duplicate recipient addresses.
+        // Re-check here so the user gets a clear client error instead of a 422.
+        const lowered = dests.map(d => d.address.toLowerCase())
+        if (new Set(lowered).size !== lowered.length) {
+          throw new Error('Duplicate recipient addresses not allowed in a split')
+        }
+
+        const splitPayload: CreateSplitContractPayload = {
+          client_id: address.toLowerCase(),
+          client_name: undefined,
+          contract_ref: undefined,
+          master_wallet: address.toLowerCase(),
+          chain_id: chainId,
+          rsend_fee_bps: 50, // TODO: wire to advanced settings once exposed in UI
+          allowed_tokens: advanced.tokenFilter.length > 0 ? advanced.tokenFilter : [],
+          recipients: dests.map((d, i) => ({
+            wallet_address: d.address.toLowerCase(),
+            label: d.label || '',
+            role: d.role ?? (i === 0 ? 'primary' : 'recipient'),
+            share_bps: d.shareBps || Math.round(d.percent * 100),
+            position: i,
+          })),
+        }
+        await onCreateSplitContract(splitPayload)
+        onClose()
+        return
+      }
+
+      // ═══════ Legacy 1- or 2-dest path ═══════
       const primaryDest = dests[0]
 
       // ── Step 1: Oracle signature ──────────────────────────
@@ -243,6 +322,9 @@ function RouteWizard({
           split_destination: dests[1].address,
         } as CreateRulePayload)
       } else {
+        // ── Legacy fallback (N > 2 with no SplitContract wiring) ──
+        // Reached only when onCreateSplitContract is not provided — the N>2
+        // short-circuit above handles the normal split case.
         const payloads: CreateRulePayload[] = dests.map(d => ({
           ...base,
           destination_wallet: d.address,
@@ -374,6 +456,7 @@ function RouteWizard({
                   advanced={advanced}
                   confirmed={confirmed}
                   setConfirmed={setConfirmed}
+                  onSimulateSplit={onSimulateSplit}
                 />
               )}
             </motion.div>
@@ -728,6 +811,13 @@ function Step2Destinations({
                   {d.address && !isValidAddr(d.address) && (
                     <div style={{ fontFamily: C.M, fontSize: 9, color: C.red, marginTop: 2 }}>
                       Invalid address
+                    </div>
+                  )}
+                  {d.address && isValidAddr(d.address) && destinations.filter(
+                    x => x.address && x.address.toLowerCase() === d.address.toLowerCase()
+                  ).length > 1 && (
+                    <div style={{ fontFamily: C.M, fontSize: 9, color: C.amber, marginTop: 2 }}>
+                      Duplicate address
                     </div>
                   )}
                 </div>
@@ -1186,6 +1276,7 @@ function AdvancedAccordion({
 
 function Step3Review({
   address, destinations, ethPrice, balance, advanced, confirmed, setConfirmed,
+  onSimulateSplit,
 }: {
   address: string
   destinations: Destination[]
@@ -1194,12 +1285,104 @@ function Step3Review({
   advanced: AdvancedSettings
   confirmed: boolean
   setConfirmed: (v: boolean) => void
+  onSimulateSplit?: (p: SimulateSplitPayload) => Promise<SimulationResult>
 }) {
   const userBal = balance ? parseFloat(balance.formatted) : 0
   const exampleEth = userBal > 0 ? userBal : 1
   const fee = exampleEth * RSEND_FEE_PCT / 100
   const afterFee = exampleEth - fee
   const total = destinations.reduce((s, d) => s + d.percent, 0)
+
+  // ── Live simulation via POST /api/v1/splits/simulate ──
+  // Backend-computed BPS-exact preview, only when N>2 and the simulation
+  // hook is wired. Falls back gracefully to the static client preview.
+  const [simulation, setSimulation] = useState<SimulationResult | null>(null)
+  const [simLoading, setSimLoading] = useState(false)
+  const [simError, setSimError] = useState<string | null>(null)
+
+  // Derive token + decimals heuristically from advanced.tokenFilter
+  // (USDC=6, USDT=6, DAI=18, ETH/WETH=18, fallback to USDC).
+  // We compute the preview "per 100 units" to match the existing static UX.
+  const previewToken = advanced.tokenFilter[0] || 'USDC'
+  const previewDecimals = (() => {
+    const t = previewToken.toUpperCase()
+    if (t === 'USDC' || t === 'USDT') return 6
+    return 18
+  })()
+
+  // Stable signature of recipients for the effect dep — avoids re-fetching
+  // on every render when destinations[] is the same content.
+  const recipientsKey = useMemo(
+    () => destinations.map(d =>
+      `${d.address}:${d.shareBps || Math.round(d.percent * 100)}:${d.label || ''}:${d.role || ''}`
+    ).join('|'),
+    [destinations],
+  )
+
+  useEffect(() => {
+    // Only simulate when:
+    //   • the simulation hook is provided (i.e., split-system path),
+    //   • we have N>2 destinations (the path that maps to a SplitContract),
+    //   • every recipient has a valid EVM address,
+    //   • all recipient addresses are unique (backend rejects duplicates),
+    //   • the BPS sum is exactly 10000 (otherwise the backend will 400).
+    if (!onSimulateSplit) return
+    if (destinations.length <= 2) {
+      setSimulation(null)
+      setSimError(null)
+      return
+    }
+    if (!destinations.every(d => isValidAddr(d.address))) {
+      setSimulation(null)
+      setSimError(null)
+      return
+    }
+    const lowered = destinations.map(d => d.address.toLowerCase())
+    if (new Set(lowered).size !== lowered.length) {
+      setSimulation(null)
+      setSimError(null)
+      return
+    }
+    const totalBps = destinations.reduce(
+      (s, d) => s + (d.shareBps || Math.round(d.percent * 100)),
+      0,
+    )
+    if (totalBps !== 10000) {
+      setSimulation(null)
+      setSimError(null)
+      return
+    }
+
+    let cancelled = false
+    setSimLoading(true)
+    setSimError(null)
+
+    onSimulateSplit({
+      amount: '100',
+      token: previewToken,
+      decimals: previewDecimals,
+      rsend_fee_bps: 50,
+      recipients: destinations.map((d, i) => ({
+        wallet_address: d.address,
+        label: d.label || '',
+        role: d.role ?? (i === 0 ? 'primary' : 'recipient'),
+        share_bps: d.shareBps || Math.round(d.percent * 100),
+        position: i,
+      })),
+    })
+      .then(res => { if (!cancelled) setSimulation(res) })
+      .catch(err => {
+        if (!cancelled) {
+          setSimError(err instanceof Error ? err.message : String(err))
+          setSimulation(null)
+        }
+      })
+      .finally(() => { if (!cancelled) setSimLoading(false) })
+
+    return () => { cancelled = true }
+    // recipientsKey is the stable identity proxy for `destinations`
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recipientsKey, previewToken, previewDecimals, onSimulateSplit])
 
   return (
     <div>
@@ -1214,6 +1397,13 @@ function Step3Review({
       <FlowDiagram address={address} destinations={destinations} />
 
       {/* ── Split Preview — visual distribution per 100 token units ── */}
+      {/*                                                                 */}
+      {/* Two modes:                                                      */}
+      {/*   1. LIVE — when destinations > 2 and onSimulateSplit is wired, */}
+      {/*      we render the BPS-exact plan returned by                   */}
+      {/*      POST /api/v1/splits/simulate (authoritative backend math). */}
+      {/*   2. STATIC — for 2-dest splits (legacy 2-way path) we keep the */}
+      {/*      client-side preview based on shareBps.                     */}
       {destinations.length > 1 && (
         <div style={{
           padding: 12, borderRadius: 12,
@@ -1222,70 +1412,127 @@ function Step3Review({
           marginBottom: 10,
         }}>
           <div style={{
-            fontFamily: C.M, fontSize: 8, color: C.dim,
-            textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8,
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            marginBottom: 8,
           }}>
-            Split Preview (per 100 {advanced.tokenFilter[0] || 'USDC'})
+            <div style={{
+              fontFamily: C.M, fontSize: 8, color: C.dim,
+              textTransform: 'uppercase', letterSpacing: '0.08em',
+            }}>
+              {simulation
+                ? `Split Preview · live (per 100 ${simulation.input.token})`
+                : `Split Preview (per 100 ${previewToken})`
+              }
+            </div>
+            {simulation && (
+              <span style={{
+                fontFamily: C.M, fontSize: 7, color: C.green,
+                padding: '1px 6px', borderRadius: 4,
+                background: `${C.green}10`,
+                border: `1px solid ${C.green}25`,
+              }}>
+                BACKEND
+              </span>
+            )}
+            {simLoading && !simulation && (
+              <span style={{ fontFamily: C.M, fontSize: 8, color: C.dim }}>simulating…</span>
+            )}
           </div>
 
-          {/* Visual bar */}
+          {/* ── Visual bar ── */}
           <div style={{
             display: 'flex', height: 6, borderRadius: 3, overflow: 'hidden',
             marginBottom: 8,
           }}>
-            {destinations.map((d, i) => {
-              const flexVal = d.shareBps || Math.round(d.percent * 100)
-              return (
-                <div key={i} style={{
-                  flex: flexVal,
-                  background: [C.green, C.blue, C.purple, C.amber, C.red][i % 5],
-                  transition: 'flex 0.3s',
-                }} />
-              )
-            })}
+            {(simulation
+              ? simulation.recipients.map(r => ({ flex: r.share_bps }))
+              : destinations.map(d => ({ flex: d.shareBps || Math.round(d.percent * 100) }))
+            ).map((row, i) => (
+              <div key={i} style={{
+                flex: row.flex,
+                background: [C.green, C.blue, C.purple, C.amber, C.red][i % 5],
+                transition: 'flex 0.3s',
+              }} />
+            ))}
           </div>
 
-          {/* Table */}
-          {destinations.map((d, i) => {
-            const bps = d.shareBps || Math.round(d.percent * 100)
-            const sampleAmount = (bps / 100).toFixed(2) // Per 100 units
-            return (
-              <div key={i} style={{
-                display: 'flex', justifyContent: 'space-between',
-                padding: '4px 0',
-                borderBottom: i < destinations.length - 1 ? `1px solid ${C.border}` : 'none',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <div style={{
-                    width: 6, height: 6, borderRadius: '50%',
-                    background: [C.green, C.blue, C.purple, C.amber, C.red][i % 5],
-                  }} />
-                  <span style={{ fontFamily: C.M, fontSize: 10, color: C.text }}>
-                    {d.label || tr(d.address)}
-                  </span>
-                  {d.role && d.role !== 'primary' && (
-                    <span style={{
-                      fontFamily: C.M, fontSize: 7, color: C.dim,
-                      padding: '1px 4px', borderRadius: 4,
-                      background: 'rgba(255,255,255,0.04)',
-                    }}>
-                      {d.role}
+          {/* ── Table ── */}
+          {simulation
+            ? simulation.recipients.map((r, i) => (
+                <div key={i} style={{
+                  display: 'flex', justifyContent: 'space-between',
+                  padding: '4px 0',
+                  borderBottom: i < simulation.recipients.length - 1 ? `1px solid ${C.border}` : 'none',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <div style={{
+                      width: 6, height: 6, borderRadius: '50%',
+                      background: [C.green, C.blue, C.purple, C.amber, C.red][i % 5],
+                    }} />
+                    <span style={{ fontFamily: C.M, fontSize: 10, color: C.text }}>
+                      {r.label || tr(r.wallet)}
                     </span>
-                  )}
+                    {r.role && r.role !== 'primary' && r.role !== 'recipient' && (
+                      <span style={{
+                        fontFamily: C.M, fontSize: 7, color: C.dim,
+                        padding: '1px 4px', borderRadius: 4,
+                        background: 'rgba(255,255,255,0.04)',
+                      }}>
+                        {r.role}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.text }}>
+                      {r.share_percent}
+                    </span>
+                    <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim, marginLeft: 6 }}>
+                      ({r.amount_human})
+                    </span>
+                  </div>
                 </div>
-                <div style={{ textAlign: 'right' }}>
-                  <span style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.text }}>
-                    {(bps / 100).toFixed(2)}%
-                  </span>
-                  <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim, marginLeft: 6 }}>
-                    ({sampleAmount})
-                  </span>
-                </div>
-              </div>
-            )
-          })}
+              ))
+            : destinations.map((d, i) => {
+                const bps = d.shareBps || Math.round(d.percent * 100)
+                const sampleAmount = (bps / 100).toFixed(2) // Per 100 units
+                return (
+                  <div key={i} style={{
+                    display: 'flex', justifyContent: 'space-between',
+                    padding: '4px 0',
+                    borderBottom: i < destinations.length - 1 ? `1px solid ${C.border}` : 'none',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{
+                        width: 6, height: 6, borderRadius: '50%',
+                        background: [C.green, C.blue, C.purple, C.amber, C.red][i % 5],
+                      }} />
+                      <span style={{ fontFamily: C.M, fontSize: 10, color: C.text }}>
+                        {d.label || tr(d.address)}
+                      </span>
+                      {d.role && d.role !== 'primary' && (
+                        <span style={{
+                          fontFamily: C.M, fontSize: 7, color: C.dim,
+                          padding: '1px 4px', borderRadius: 4,
+                          background: 'rgba(255,255,255,0.04)',
+                        }}>
+                          {d.role}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.text }}>
+                        {(bps / 100).toFixed(2)}%
+                      </span>
+                      <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim, marginLeft: 6 }}>
+                        ({sampleAmount})
+                      </span>
+                    </div>
+                  </div>
+                )
+              })
+          }
 
-          {/* RSend fee */}
+          {/* ── RSend fee ── */}
           <div style={{
             display: 'flex', justifyContent: 'space-between',
             padding: '6px 0 0', marginTop: 4,
@@ -1293,9 +1540,21 @@ function Step3Review({
           }}>
             <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>RSend fee</span>
             <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>
-              {RSEND_FEE_PCT.toFixed(2)}% ({RSEND_FEE_PCT.toFixed(2)})
+              {simulation
+                ? `${(simulation.rsend_fee.bps / 100).toFixed(2)}% (${simulation.rsend_fee.amount_human})`
+                : `${RSEND_FEE_PCT.toFixed(2)}% (${RSEND_FEE_PCT.toFixed(2)})`
+              }
             </span>
           </div>
+
+          {simError && (
+            <div style={{
+              fontFamily: C.M, fontSize: 9, color: C.red, marginTop: 6,
+              padding: '4px 8px', background: `${C.red}08`, borderRadius: 6,
+            }}>
+              Live preview unavailable: {simError}
+            </div>
+          )}
         </div>
       )}
 

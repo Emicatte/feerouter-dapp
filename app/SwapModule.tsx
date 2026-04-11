@@ -17,7 +17,8 @@ import { useSwapQuote } from '../lib/useSwapQuote'
 import { mutationHeaders } from '../lib/rsendFetch'
 import { useIsMobile } from '../hooks/useIsMobile'
 
-const BACKEND = process.env.NEXT_PUBLIC_RPAGOS_BACKEND_URL || 'http://localhost:8000'
+// Same-origin proxy → see app/api/backend/[...path]/route.ts
+const BACKEND = '/api/backend'
 
 // ═══════════════════════════════════════════════════════════
 //  PALETTE
