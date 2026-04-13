@@ -259,7 +259,7 @@ function RouteWizard({
           symbol: base.token_symbol || 'ETH',
           chainId,
         }),
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(5000),
       })
       if (!oracleRes.ok) throw new Error('Oracle signature request failed')
       const oracle = await oracleRes.json()

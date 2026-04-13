@@ -1,0 +1,148 @@
+.footer {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: transparent;
+}
+
+.topGradient {
+  width: 100%;
+  height: 260px;
+  background: linear-gradient(to bottom, transparent 0%, rgba(10, 10, 15, 0.1) 15%, rgba(10, 10, 15, 0.3) 30%, rgba(10, 10, 15, 0.55) 45%, rgba(10, 10, 15, 0.75) 60%, rgba(10, 10, 15, 0.9) 75%, #0a0a0f 100%);
+  pointer-events: none;
+}
+
+.linksBackground {
+  background: #0a0a0f;
+}
+
+.linksBar {
+  position: relative;
+  z-index: 3;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 32px 32px;
+}
+
+.accentLine {
+  height: 1px;
+  max-width: 1200px;
+  margin: 0 auto 40px;
+  background: linear-gradient(90deg, transparent, #ff2d7820 25%, #a855f720 75%, transparent);
+}
+
+.disclaimer {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #64748b;
+  line-height: 1.7;
+  font-style: italic;
+  max-width: 900px;
+  margin-bottom: 40px;
+  opacity: 0.8;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 32px;
+  margin-bottom: 48px;
+}
+
+.colTitle {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 16px;
+  letter-spacing: -0.01em;
+}
+
+.colLink {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #94a3b8;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: color 150ms;
+}
+
+.colLink:hover {
+  color: #ffffff;
+}
+
+.divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  margin-bottom: 20px;
+}
+
+.bottomBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.bottomLeft {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brandName {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #FF4C6A, #8B5CF6);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.bottomTextLink {
+  cursor: pointer;
+  transition: color 150ms;
+}
+
+.bottomTextLink:hover {
+  color: #94a3b8;
+}
+
+.socials {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.socialIcon {
+  color: #64748b;
+  transition: color 150ms, transform 150ms;
+  display: flex;
+  align-items: center;
+}
+
+.socialIcon:hover {
+  color: #ffffff;
+  transform: scale(1.15);
+}
+
+@media (max-width: 768px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .linksBar {
+    padding: 0 20px 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

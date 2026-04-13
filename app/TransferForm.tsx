@@ -1094,8 +1094,8 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
 
   const C = {
     card:  { borderRadius:20, background:'rgba(8,12,30,0.72)', border:'1px solid rgba(255,255,255,0.18)', overflow:'hidden' as const, boxShadow:'0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.15)' } satisfies React.CSSProperties,
-    box:   { borderRadius:14, background:focused?'rgba(255,255,255,0.08)':'rgba(255,255,255,0.04)', padding:'14px 14px', border:'1.5px solid', borderColor:focused?`${T.emerald}60`:'rgba(255,255,255,0.14)', transition:'all 0.2s ease', cursor:'text', boxShadow:focused?`0 0 0 3px ${T.emerald}12`:'inset 0 1px 0 rgba(255,255,255,0.07)' } satisfies React.CSSProperties,
-    box2:  { borderRadius:14, background:'rgba(255,255,255,0.04)', padding:'14px 14px', border:'1.5px solid rgba(255,255,255,0.12)' } satisfies React.CSSProperties,
+    box:   { borderRadius:14, background:focused?'rgba(255,255,255,0.08)':'rgba(255,255,255,0.04)', padding:'10px 14px', border:'1.5px solid', borderColor:focused?`${T.emerald}60`:'rgba(255,255,255,0.14)', transition:'all 0.2s ease', cursor:'text', boxShadow:focused?`0 0 0 3px ${T.emerald}12`:'inset 0 1px 0 rgba(255,255,255,0.07)' } satisfies React.CSSProperties,
+    box2:  { borderRadius:14, background:'rgba(255,255,255,0.04)', padding:'10px 14px', border:'1.5px solid rgba(255,255,255,0.12)' } satisfies React.CSSProperties,
     row:   { display:'flex', alignItems:'center', justifyContent:'space-between' } satisfies React.CSSProperties,
     input: { width:'100%', background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:10, padding:'10px 12px', color:T.text, fontSize:13, outline:'none', transition:'border-color 0.2s ease, box-shadow 0.2s ease', fontFamily:T.M, boxSizing:'border-box' as const, backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)' } satisfies React.CSSProperties,
   }
@@ -1140,7 +1140,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
   return (
     <>
       <div style={noCard ? {} : C.card} className={noCard ? '' : 'bf-blur-32s'}>
-        <div style={{ padding: isMobile ? '16px' : '10px 10px 10px' }}>
+        <div style={{ padding: isMobile ? '12px' : '6px 8px 6px' }}>
 
           {/* Gas warning L1 — only when needed */}
           {!isL2 && isConnected && (
@@ -1153,9 +1153,9 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
           <div className="rp-anim-1">
             <div style={C.box} onClick={() => inputRef.current?.focus()}>
               {/* Top row: label + balance */}
-              <div style={{ ...C.row, marginBottom:10 }}>
+              <div style={{ ...C.row, marginBottom:6 }}>
                 <span style={{ fontFamily:T.D, fontSize:13, fontWeight:600, color:T.muted }}>
-                  Pay             
+                  Pay
                      </span>
                 {isConnected && tokenIn && (
                   <button
@@ -1180,7 +1180,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
                     value={amount} onChange={e => setAmount(e.target.value)}
                     onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
                     disabled={busy}
-                    style={{ fontFamily:T.D, fontSize:isMobile ? 16 : 30, fontWeight:400, letterSpacing:'-0.02em', width:'100%', background:'transparent', border:'none', outline:'none', color:busy?T.muted:T.text, textAlign:'right' as const }}
+                    style={{ fontFamily:T.D, fontSize:isMobile ? 16 : 24, fontWeight:400, letterSpacing:'-0.02em', width:'100%', background:'transparent', border:'none', outline:'none', color:busy?T.muted:T.text, textAlign:'right' as const }}
                   />
                   <div style={{ fontFamily:T.M, fontSize:12, color:T.muted, marginTop:2 }}>
                     {amount && tokenIn ? `$${(parseFloat(amount) * (EUR_RATES[tokenIn.symbol] ?? 1)).toFixed(2)}` : '$0'}
@@ -1220,7 +1220,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
           <div className="rp-anim-2">
             <div style={C.box2}>
               {/* Top row: label + balance */}
-              <div style={{ ...C.row, marginBottom:10 }}>
+              <div style={{ ...C.row, marginBottom:6 }}>
                 <span style={{ fontFamily:T.D, fontSize:13, fontWeight:600, color:T.muted }}>
                   Receive
                 </span>
@@ -1241,7 +1241,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
                   />
                 </div>
                 <div style={{ flex:1, textAlign:'right' as const }}>
-                  <span style={{ fontFamily:T.D, fontSize:30, fontWeight:400, letterSpacing:'-0.02em', color:T.text, display:'block' }}>
+                  <span style={{ fontFamily:T.D, fontSize:24, fontWeight:400, letterSpacing:'-0.02em', color:T.text, display:'block' }}>
                     {isSwapMode
                       ? (swapQuote?.status === 'success' ? swapQuote.netAmountFmt
                          : swapQuote?.status === 'loading' ? '…' : '0')
@@ -1268,7 +1268,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
 
           {/* ── RECIPIENT ────────────────────────────────────────── */}
           <div className="rp-anim-3" style={{ marginTop:6 }}>
-            <div style={{ padding:'12px 14px', borderRadius:14, background:'rgba(255,255,255,0.025)', border:`1px solid ${T.border}` }}>
+            <div style={{ padding:'10px 14px 6px', borderRadius:14, background:'rgba(255,255,255,0.025)', border:`1px solid ${T.border}` }}>
               <div style={{ ...C.row, marginBottom:6 }}>
                 <span style={{ fontFamily:T.D, fontSize:11, fontWeight:700, textTransform:'uppercase' as const, letterSpacing:'0.08em', color:T.muted }}>
                   To

@@ -1,13 +1,15 @@
 import type { Metadata } from 'next'
-import { Syne, DM_Mono } from 'next/font/google'
+import { Inter, DM_Mono } from 'next/font/google'
 import './globals.css'
 import { Providers } from './providers'
+import dynamic from 'next/dynamic'
 
-const syne = Syne({
+const FooterGlobe = dynamic(() => import('../components/FooterGlobe'), { ssr: false })
+
+const inter = Inter({
   subsets:  ['latin'],
   variable: '--font-display',
   display:  'swap',
-  weight:   ['400', '600', '700', '800'],
 })
 
 const dmMono = DM_Mono({
@@ -28,13 +30,14 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="it" className={`${syne.variable} ${dmMono.variable}`}>
+    <html lang="it" className={`${inter.variable} ${dmMono.variable}`}>
       <head>
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
       </head>
-      <body style={{ background: '#0a0a0f' }}>
+      <body className={inter.className} style={{ background: '#0a0a0f' }}>
         <Providers>
           {children}
+          <FooterGlobe />
         </Providers>
       </body>
     </html>

@@ -142,7 +142,7 @@ export async function POST(req: NextRequest) {
       method: 'POST',
       headers,
       body: payloadStr,
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(8000),
     })
 
     const data = await backendRes.json().catch(() => ({}))

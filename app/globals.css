@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* ============================================================
    globals.css — GPU-Accelerated Background System
    RPagos · Ultra-Bright Cyan + Magenta Light Sources
@@ -33,13 +37,13 @@ body {
   overflow-x: hidden;
   min-height: 100vh;
   position: relative;
+  font-family: var(--font-display), system-ui, sans-serif;
+
 }
 
-/* ── Font variables ───────────────────────────────────────── */
+/* ── Theme variables ──────────────────────────────────────── */
 :root {
-  --font-display: 'Syne', system-ui, sans-serif;
-  --font-display-weight: 700;
-  --font-mono:    'DM Mono', 'Fira Code', monospace;
+  /* --font-display and --font-mono are set by next/font classes on <html> */
 
   /* Colori tema */
   --c-bg:      #050510;
@@ -1055,4 +1059,3 @@ body.admin-mode::after {
   from { opacity: 0; transform: scale(0.92) translateY(8px); }
   to   { opacity: 1; transform: scale(1) translateY(0); }
 }
-

@@ -195,7 +195,7 @@ function ParticleIntro({ onDone }: { onDone: () => void }) {
     <div style={{ position: 'fixed', inset: 0, zIndex: 10000, opacity: phase === 4 ? 0 : 1, transition: 'opacity 0.7s ease', pointerEvents: phase === 4 ? 'none' : 'auto' }}>
       <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0 }} />
       <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center' }}>
-        <div style={{ opacity: phase >= 2 ? 1 : 0, transition: 'opacity 0.6s ease', marginBottom: 16 }}>
+        <div style={{ opacity: phase >= 2 ? 1 : 0, transition: 'opacity 0.6s ease', marginBottom: 8 }}>
           <div style={{ width: 52, height: 52, borderRadius: 13, background: 'linear-gradient(135deg,#3B82F6,#8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', boxShadow: phase >= 2 ? '0 0 50px rgba(139,92,246,0.4)' : 'none' }}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M13 2L4.5 12.5h5.5l-1 9.5 8.5-11.5h-5.5L13 2z" fill="white" fillOpacity="0.95"/></svg>
           </div>
@@ -865,10 +865,12 @@ function HeroTitle({ view, setView, isMobile }: { view: View; setView: (v: View)
         className="hero-title"
         style={{
           fontFamily: C.D,
-          fontSize: isMobile ? 'clamp(20px, 6vw, 28px)' : 'clamp(40px, 6.0vw, 58px)',
+          fontSize: isMobile ? 'clamp(20px, 6vw, 28px)' : 'clamp(40px, 6.0vw, 55px)',
+          whiteSpace: 'nowrap' as const,
           fontWeight: 700,
           letterSpacing: '-0.02em',
           textAlign: 'center',
+          width: '100%',
           marginBottom: 8,
           lineHeight: 1.2,
           wordSpacing: '0.15em',
@@ -895,8 +897,9 @@ function HeroTitle({ view, setView, isMobile }: { view: View; setView: (v: View)
             fontWeight: 400,
             letterSpacing: '0.02em',
             textAlign: 'center',
+            width: '100%',
             color: C.sub,
-            marginBottom: 1,
+            marginBottom: 2,
           }}
         >
           Built for European Businesses
@@ -1054,14 +1057,14 @@ export default function Home() {
       {/* Main content — padded below navbar */}
       <main className="main-content" style={{
         minHeight: '100dvh',
-        paddingTop: isMobileHome ? '60px' : 'clamp(80px, 12vh, 140px)',
+        paddingTop: isMobileHome ? '60px' : 'clamp(70px, 10vh, 120px)',
         paddingBottom: `calc(60px + var(--sab, 0px))`, paddingLeft: 16, paddingRight: 16,
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         opacity: ready ? 1 : 0, transition: 'opacity 0.9s ease',
       }}>
 
         {/* Hero */}
-        <div style={{ marginBottom: isMobileHome ? 8 : 28, width: '100%', maxWidth: 900 }}>
+        <div style={{ marginBottom: isMobileHome ? 6 : 20, width: '100%' }}>
           <HeroTitle view={view} setView={setView} isMobile={isMobileHome} />
         </div>
 
@@ -1078,7 +1081,7 @@ export default function Home() {
               background: 'rgba(255,255,255,0.04)',
               border: '1px solid rgba(255,255,255,0.10)',
               borderRadius: 18,
-              marginBottom: isMobileHome ? 6 : 28,
+              marginBottom: isMobileHome ? 6 : 20,
               padding: isMobileHome ? '3px 4px' : '5px 6px',
               boxShadow: '0 4px 24px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.06)',
               display: 'flex',
@@ -1088,9 +1091,9 @@ export default function Home() {
             }}
           >
             {([
-              { key: 'send' as View, label: '↗ Send' },
-              { key: 'swap' as View, label: '↗ Swap' },
-              { key: 'command' as View, label: '↗ Command Center' },
+              { key: 'send' as View, label: 'Send' },
+              { key: 'swap' as View, label: 'Swap' },
+              { key: 'command' as View, label: 'Command Center' },
             ]).map((v) => (
               <motion.button
                 key={v.key}
@@ -1129,7 +1132,7 @@ export default function Home() {
                 <span style={{ position: 'relative', zIndex: 1 }}>
                   <span className="tab-label-full">{v.label}</span>
                   <span className="tab-label-short">
-                    {v.key === 'send' ? '↗ Send' : v.key === 'swap' ? '↗ Swap' : '↗ CMD'}
+                    {v.key === 'send' ? 'SEND' : v.key === 'swap' ? 'SWAP' : 'CMD'}
                   </span>
                 </span>
                 {/* Notification badge for Command Center */}
@@ -1191,127 +1194,7 @@ export default function Home() {
 
       </main>
 
-      {/* ═══════════════════════════════════════════════════════════
-          FOOTER
-         ═══════════════════════════════════════════════════════════ */}
-      <footer style={{
-        position: 'relative', zIndex: 1,
-        borderTop: `1px solid ${C.border}`,
-        padding: '48px 24px 24px',
-        maxWidth: 960, margin: '0 auto',
-      }}>
-        {/* 4-column grid */}
-        <div className="footer-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 32, marginBottom: 36 }}>
-          {/* Product */}
-          <div>
-            <div style={{ fontFamily: C.D, fontSize: 11, fontWeight: 700, color: C.text, textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 14 }}>
-              Product
-            </div>
-            {['Send', 'Swap', 'Auto-Forward', 'Dashboard'].map(item => (
-              <div key={item} style={{ fontFamily: C.M, fontSize: 11, color: C.dim, marginBottom: 8, cursor: 'default' }}>{item}</div>
-            ))}
-          </div>
-
-          {/* Security */}
-          <div>
-            <div style={{ fontFamily: C.D, fontSize: 11, fontWeight: 700, color: C.text, textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 14 }}>
-              Security
-            </div>
-            {[
-              { label: 'Architecture', action: () => setActiveOverlay('security') },
-              { label: 'Compliance', action: () => setActiveOverlay('compliance') },
-              { label: 'Audit Trail', action: undefined },
-              { label: '🔑 Anti-Phishing', action: () => setShowAntiPhishing(true) },
-            ].map(item => (
-              <div
-                key={item.label}
-                onClick={item.action}
-                style={{
-                  fontFamily: C.M, fontSize: 11, color: C.dim, marginBottom: 8,
-                  cursor: item.action ? 'pointer' : 'default',
-                  transition: 'color 0.15s',
-                }}
-                onMouseEnter={e => { if (item.action) e.currentTarget.style.color = C.sub }}
-                onMouseLeave={e => e.currentTarget.style.color = C.dim}
-              >
-                {item.label}
-              </div>
-            ))}
-          </div>
-
-          {/* Legal */}
-          <div>
-            <div style={{ fontFamily: C.D, fontSize: 11, fontWeight: 700, color: C.text, textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 14 }}>
-              Legal
-            </div>
-            {['Terms of Service', 'Privacy Policy'].map(item => (
-              <a key={item} href="#" style={{ display: 'block', fontFamily: C.M, fontSize: 11, color: C.dim, marginBottom: 8, textDecoration: 'none', transition: 'color 0.15s' }}
-                onMouseEnter={e => e.currentTarget.style.color = C.sub}
-                onMouseLeave={e => e.currentTarget.style.color = C.dim}
-              >
-                {item}
-              </a>
-            ))}
-          </div>
-
-          {/* Connect */}
-          <div>
-            <div style={{ fontFamily: C.D, fontSize: 11, fontWeight: 700, color: C.text, textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 14 }}>
-              Connect
-            </div>
-            <a href="https://github.com/Emicatte/feerouter-dapp" target="_blank" rel="noopener noreferrer"
-              style={{ display: 'flex', alignItems: 'center', gap: 6, fontFamily: C.M, fontSize: 11, color: C.dim, marginBottom: 8, textDecoration: 'none', transition: 'color 0.15s' }}
-              onMouseEnter={e => e.currentTarget.style.color = C.sub}
-              onMouseLeave={e => e.currentTarget.style.color = C.dim}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-              GitHub
-            </a>
-            {['Twitter', 'Discord'].map(item => (
-              <a key={item} href="#" style={{ display: 'block', fontFamily: C.M, fontSize: 11, color: C.dim, marginBottom: 8, textDecoration: 'none', transition: 'color 0.15s' }}
-                onMouseEnter={e => e.currentTarget.style.color = C.sub}
-                onMouseLeave={e => e.currentTarget.style.color = C.dim}
-              >
-                {item}
-              </a>
-            ))}
-          </div>
-        </div>
-
-        {/* Compliance badge strip */}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, justifyContent: 'center', marginBottom: 20 }}>
-          {['MiCA', 'DAC8', 'EIP-712', 'Base L2'].map(badge => (
-            <span key={badge} style={{
-              padding: '4px 10px', borderRadius: 6,
-              background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`,
-              fontFamily: C.M, fontSize: 9, color: C.dim,
-            }}>
-              {badge}
-            </span>
-          ))}
-        </div>
-
-        {/* Bottom bar */}
-        <div style={{
-          borderTop: `1px solid ${C.border}`, paddingTop: 16,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexWrap: 'wrap' as const, gap: 6,
-          fontFamily: C.M, fontSize: 9, color: 'rgba(255,255,255,0.2)', letterSpacing: '0.02em',
-        }}>
-          <span>Built on Base L2</span>
-          <span style={{ opacity: 0.4 }}>·</span>
-          <span>&copy; 2026 RSends</span>
-          <span style={{ opacity: 0.4 }}>·</span>
-          <span>Contract: 0xB217...691D</span>
-          <a
-            href="https://basescan.org/address/0xB2174c6B1359434B9d8004Ca5740bcDDF4C8691D"
-            target="_blank" rel="noopener noreferrer"
-            style={{ color: C.green, textDecoration: 'none', fontSize: 9 }}
-          >
-            Verified
-          </a>
-        </div>
-      </footer>
+      
 
       {/* Anti-Phishing Setup Modal */}
       <AntiPhishingSetup
