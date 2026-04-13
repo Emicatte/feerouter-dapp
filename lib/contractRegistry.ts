@@ -183,6 +183,23 @@ function ethFeeRouter(): `0x${string}` {
   ) as `0x${string}`
 }
 
+// ── Nuove chain — literal access per Next.js inlining ─────────────────────
+function optimismFeeRouter(): `0x${string}` {
+  return (process.env.NEXT_PUBLIC_FEE_ROUTER_V4_OPTIMISM ?? '0x0000000000000000000000000000000000000000') as `0x${string}`
+}
+function arbitrumFeeRouter(): `0x${string}` {
+  return (process.env.NEXT_PUBLIC_FEE_ROUTER_V4_ARBITRUM ?? '0x0000000000000000000000000000000000000000') as `0x${string}`
+}
+function polygonFeeRouter(): `0x${string}` {
+  return (process.env.NEXT_PUBLIC_FEE_ROUTER_V4_POLYGON ?? '0x0000000000000000000000000000000000000000') as `0x${string}`
+}
+function bnbFeeRouter(): `0x${string}` {
+  return (process.env.NEXT_PUBLIC_FEE_ROUTER_V4_BNB ?? '0x0000000000000000000000000000000000000000') as `0x${string}`
+}
+function avalancheFeeRouter(): `0x${string}` {
+  return (process.env.NEXT_PUBLIC_FEE_ROUTER_V4_AVALANCHE ?? '0x0000000000000000000000000000000000000000') as `0x${string}`
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 const REGISTRY: { [chainId: number]: NetworkRegistry } = {
 
@@ -229,6 +246,252 @@ const REGISTRY: { [chainId: number]: NetworkRegistry } = {
     tokens:        ETH_MAINNET_TOKENS,
   },
 
+  // ── Arbitrum ──────────────────────────────────────────────────────────────
+  42161: {
+    chainId:       42161,
+    chainName:     'Arbitrum One',
+    isL2:          true,
+    feeRouter:     arbitrumFeeRouter(),
+    permit2:       PERMIT2,
+    weth:          '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1' as `0x${string}`,
+    swapRouter:    SWAP_ROUTER,
+    rpcUrl:        'https://arb1.arbitrum.io/rpc',
+    blockExplorer: 'https://arbiscan.io',
+    tokens: {
+      ETH: {
+        address: '0x0000000000000000000000000000000000000000' as `0x${string}`,
+        decimals: 18, symbol: 'ETH', name: 'Ether',
+        logoURI: LOGOS.ETH, gasless: false, isEurc: false, isNative: true,
+        poolFeeToWETH: 0,
+      },
+      USDC: {
+        address: '0xaf88d065e77c8cC2239327C5EDb3A432268e5831' as `0x${string}`,
+        decimals: 6, symbol: 'USDC', name: 'USD Coin',
+        logoURI: LOGOS.USDC, gasless: false, isEurc: false, isNative: false,
+        poolFeeToWETH: POOL_FEE.LOW,
+      },
+      USDT: {
+        address: '0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9' as `0x${string}`,
+        decimals: 6, symbol: 'USDT', name: 'Tether USD',
+        logoURI: LOGOS.USDT, gasless: false, isEurc: false, isNative: false,
+        poolFeeToWETH: POOL_FEE.LOW,
+      },
+    },
+  },
+
+  // ── Optimism ──────────────────────────────────────────────────────────────
+  10: {
+    chainId:       10,
+    chainName:     'Optimism',
+    isL2:          true,
+    feeRouter:     optimismFeeRouter(),
+    permit2:       PERMIT2,
+    weth:          '0x4200000000000000000000000000000000000006' as `0x${string}`,
+    swapRouter:    '0xE592427A0AEce92De3Edee1F18E0157C05861564' as `0x${string}`,
+    rpcUrl:        'https://mainnet.optimism.io',
+    blockExplorer: 'https://optimistic.etherscan.io',
+    tokens: {
+      ETH: {
+        address: '0x0000000000000000000000000000000000000000' as `0x${string}`,
+        decimals: 18, symbol: 'ETH', name: 'Ether',
+        logoURI: LOGOS.ETH, gasless: false, isEurc: false, isNative: true,
+        poolFeeToWETH: 0,
+      },
+      USDC: {
+        address: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85' as `0x${string}`,
+        decimals: 6, symbol: 'USDC', name: 'USD Coin',
+        logoURI: LOGOS.USDC, gasless: false, isEurc: false, isNative: false,
+        poolFeeToWETH: POOL_FEE.LOW,
+      },
+      USDT: {
+        address: '0x94b008aA00579c1307B0EF2c499aD98a8ce58e58' as `0x${string}`,
+        decimals: 6, symbol: 'USDT', name: 'Tether USD',
+        logoURI: LOGOS.USDT, gasless: false, isEurc: false, isNative: false,
+        poolFeeToWETH: POOL_FEE.LOW,
+      },
+    },
+  },
+
+  // ── BNB Chain ─────────────────────────────────────────────────────────────
+  56: {
+    chainId:       56,
+    chainName:     'BNB Chain',
+    isL2:          false,
+    feeRouter:     bnbFeeRouter(),
+    permit2:       PERMIT2,
+    weth:          '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c' as `0x${string}`,
+    swapRouter:    '0xB971eF87ede563556b2ED4b1C0b0019111Dd85d2' as `0x${string}`,
+    rpcUrl:        'https://bsc-dataseed.binance.org',
+    blockExplorer: 'https://bscscan.com',
+    tokens: {
+      BNB: {
+        address: '0x0000000000000000000000000000000000000000' as `0x${string}`,
+        decimals: 18, symbol: 'BNB', name: 'BNB',
+        logoURI: LOGOS.ETH, gasless: false, isEurc: false, isNative: true,
+        poolFeeToWETH: 0,
+      },
+      USDC: {
+        address: '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d' as `0x${string}`,
+        decimals: 18, symbol: 'USDC', name: 'USD Coin',
+        logoURI: LOGOS.USDC, gasless: false, isEurc: false, isNative: false,
+        poolFeeToWETH: POOL_FEE.LOW,
+      },
+      USDT: {
+        address: '0x55d398326f99059fF775485246999027B3197955' as `0x${string}`,
+        decimals: 18, symbol: 'USDT', name: 'Tether USD',
+        logoURI: LOGOS.USDT, gasless: false, isEurc: false, isNative: false,
+        poolFeeToWETH: POOL_FEE.LOW,
+      },
+    },
+  },
+
+  // ── Polygon ───────────────────────────────────────────────────────────────
+  137: {
+    chainId:       137,
+    chainName:     'Polygon',
+    isL2:          true,
+    feeRouter:     polygonFeeRouter(),
+    permit2:       PERMIT2,
+    weth:          '0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270' as `0x${string}`,
+    swapRouter:    SWAP_ROUTER,
+    rpcUrl:        'https://polygon-rpc.com',
+    blockExplorer: 'https://polygonscan.com',
+    tokens: {
+      POL: {
+        address: '0x0000000000000000000000000000000000000000' as `0x${string}`,
+        decimals: 18, symbol: 'POL', name: 'POL',
+        logoURI: LOGOS.ETH, gasless: false, isEurc: false, isNative: true,
+        poolFeeToWETH: 0,
+      },
+      USDC: {
+        address: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' as `0x${string}`,
+        decimals: 6, symbol: 'USDC', name: 'USD Coin',
+        logoURI: LOGOS.USDC, gasless: false, isEurc: false, isNative: false,
+        poolFeeToWETH: POOL_FEE.LOW,
+      },
+      USDT: {
+        address: '0xc2132D05D31c914a87C6611C10748AEb04B58e8F' as `0x${string}`,
+        decimals: 6, symbol: 'USDT', name: 'Tether USD',
+        logoURI: LOGOS.USDT, gasless: false, isEurc: false, isNative: false,
+        poolFeeToWETH: POOL_FEE.LOW,
+      },
+    },
+  },
+
+  // ── Avalanche ─────────────────────────────────────────────────────────────
+  43114: {
+    chainId:       43114,
+    chainName:     'Avalanche',
+    isL2:          false,
+    feeRouter:     avalancheFeeRouter(),
+    permit2:       PERMIT2,
+    weth:          '0xB31f66AA3C1e785363F0875A1B74E27b85FD66c7' as `0x${string}`,
+    swapRouter:    '0xbB00FF08d01d300023C629e8ffFfCB65a5A578cE' as `0x${string}`,
+    rpcUrl:        'https://api.avax.network/ext/bc/C/rpc',
+    blockExplorer: 'https://snowtrace.io',
+    tokens: {
+      AVAX: {
+        address: '0x0000000000000000000000000000000000000000' as `0x${string}`,
+        decimals: 18, symbol: 'AVAX', name: 'Avalanche',
+        logoURI: LOGOS.ETH, gasless: false, isEurc: false, isNative: true,
+        poolFeeToWETH: 0,
+      },
+      USDC: {
+        address: '0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E' as `0x${string}`,
+        decimals: 6, symbol: 'USDC', name: 'USD Coin',
+        logoURI: LOGOS.USDC, gasless: false, isEurc: false, isNative: false,
+        poolFeeToWETH: POOL_FEE.LOW,
+      },
+      USDT: {
+        address: '0x9702230A8Ea53601f5cD2dc00fDBc13d4dF4A8c7' as `0x${string}`,
+        decimals: 6, symbol: 'USDT', name: 'Tether USD',
+        logoURI: LOGOS.USDT, gasless: false, isEurc: false, isNative: false,
+        poolFeeToWETH: POOL_FEE.LOW,
+      },
+    },
+  },
+
+  // ── ZKsync Era ────────────────────────────────────────────────────────────
+  324: {
+    chainId:       324,
+    chainName:     'ZKsync Era',
+    isL2:          true,
+    feeRouter:     '0x0000000000000000000000000000000000000000' as `0x${string}`,
+    permit2:       PERMIT2,
+    weth:          '0x5AEa5775959fBC2557Cc8789bC1bf90A239D9a91' as `0x${string}`,
+    swapRouter:    '0x99c56385dB8B93f67A212e6473437b93117E77C3' as `0x${string}`,
+    rpcUrl:        'https://mainnet.era.zksync.io',
+    blockExplorer: 'https://explorer.zksync.io',
+    tokens: {
+      ETH: {
+        address: '0x0000000000000000000000000000000000000000' as `0x${string}`,
+        decimals: 18, symbol: 'ETH', name: 'Ether',
+        logoURI: LOGOS.ETH, gasless: false, isEurc: false, isNative: true,
+        poolFeeToWETH: 0,
+      },
+      USDC: {
+        address: '0x1d17CBcF0D6D143135aE902365D2E5e2A16538D4' as `0x${string}`,
+        decimals: 6, symbol: 'USDC', name: 'USD Coin',
+        logoURI: LOGOS.USDC, gasless: false, isEurc: false, isNative: false,
+        poolFeeToWETH: POOL_FEE.LOW,
+      },
+    },
+  },
+
+  // ── Celo ──────────────────────────────────────────────────────────────────
+  42220: {
+    chainId:       42220,
+    chainName:     'Celo',
+    isL2:          false,
+    feeRouter:     '0x0000000000000000000000000000000000000000' as `0x${string}`,
+    permit2:       PERMIT2,
+    weth:          '0x471EcE3750Da237f93B8E339c536989b8978a438' as `0x${string}`,
+    swapRouter:    '0x5615CDAb10dc425a742d643d949a7F474C01abc4' as `0x${string}`,
+    rpcUrl:        'https://forno.celo.org',
+    blockExplorer: 'https://celoscan.io',
+    tokens: {
+      CELO: {
+        address: '0x0000000000000000000000000000000000000000' as `0x${string}`,
+        decimals: 18, symbol: 'CELO', name: 'Celo',
+        logoURI: LOGOS.ETH, gasless: false, isEurc: false, isNative: true,
+        poolFeeToWETH: 0,
+      },
+      USDC: {
+        address: '0xcebA9300f2b948710d2653dD7B07f33A8B32118C' as `0x${string}`,
+        decimals: 6, symbol: 'USDC', name: 'USD Coin',
+        logoURI: LOGOS.USDC, gasless: false, isEurc: false, isNative: false,
+        poolFeeToWETH: POOL_FEE.LOW,
+      },
+    },
+  },
+
+  // ── Blast ─────────────────────────────────────────────────────────────────
+  81457: {
+    chainId:       81457,
+    chainName:     'Blast',
+    isL2:          true,
+    feeRouter:     '0x0000000000000000000000000000000000000000' as `0x${string}`,
+    permit2:       PERMIT2,
+    weth:          '0x4300000000000000000000000000000000000004' as `0x${string}`,
+    swapRouter:    '0x549FEB8c9bd4c12Ad2AB27022dA12492aC452B66' as `0x${string}`,
+    rpcUrl:        'https://rpc.blast.io',
+    blockExplorer: 'https://blastscan.io',
+    tokens: {
+      ETH: {
+        address: '0x0000000000000000000000000000000000000000' as `0x${string}`,
+        decimals: 18, symbol: 'ETH', name: 'Ether',
+        logoURI: LOGOS.ETH, gasless: false, isEurc: false, isNative: true,
+        poolFeeToWETH: 0,
+      },
+      USDB: {
+        address: '0x4300000000000000000000000000000000000003' as `0x${string}`,
+        decimals: 18, symbol: 'USDB', name: 'USDB',
+        logoURI: LOGOS.USDC, gasless: false, isEurc: false, isNative: false,
+        poolFeeToWETH: POOL_FEE.LOW,
+      },
+    },
+  },
+
   // ── Ethereum Sepolia ──────────────────────────────────────────────────────
   11155111: {
     chainId:       11155111,
@@ -251,17 +514,57 @@ const REGISTRY: { [chainId: number]: NetworkRegistry } = {
   },
 }
 
+// ── Tron Registry (separato perché non è EVM) ────────────────────────────
+export const TRON_REGISTRY = {
+  mainnet: {
+    chainId: 'tron-mainnet' as const,
+    chainName: 'TRON',
+    feeRouter: 'T_INDIRIZZO_DAL_DEPLOY', // ← metti indirizzo reale dopo deploy
+    swapRouter: 'TKzxdSv2FZKQrEqkKVgp5DcwEXBEKMg2Ax', // SunSwap V2
+    wtrx: 'TNUC9Qb1rRpS5CbWLmNMxXBjyFoydXjWFR',
+    blockExplorer: 'https://tronscan.org',
+    tokens: {
+      TRX:  { address: null, decimals: 6, symbol: 'TRX',  name: 'TRON',       isNative: true  },
+      USDT: { address: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t', decimals: 6,  symbol: 'USDT', name: 'Tether USD', isNative: false },
+      USDC: { address: 'TEkxiTehnzSmSe2XqrBj4w32RUN966rdz8', decimals: 6,  symbol: 'USDC', name: 'USD Coin',   isNative: false },
+      USDD: { address: 'TPYmHEhy5n8TCEfYGqW2rPxsghSfzghPDn', decimals: 18, symbol: 'USDD', name: 'USDD',       isNative: false },
+    },
+  },
+  shasta: {
+    chainId: 'tron-shasta' as const,
+    chainName: 'TRON Shasta',
+    feeRouter: '', // testnet address dopo deploy
+    swapRouter: '',
+    wtrx: '',
+    blockExplorer: 'https://shasta.tronscan.org',
+    tokens: {
+      TRX: { address: null, decimals: 6, symbol: 'TRX', name: 'TRON (Shasta)', isNative: true },
+    },
+  },
+} as const
+
+export function getTronRegistry(network: 'mainnet' | 'shasta' = 'mainnet') {
+  return TRON_REGISTRY[network]
+}
+
+export function isTronFeeRouterAvailable(network: 'mainnet' | 'shasta' = 'mainnet'): boolean {
+  return !!TRON_REGISTRY[network].feeRouter
+}
+
 // ── FeeRouter deployment map ──────────────────────────────────────────────
 /**
  * Chain su cui FeeRouterV4 è deployato e verificato.
  * Quando deployerai su altre chain, aggiungi qui l'indirizzo.
  */
 const FEE_ROUTER_DEPLOYMENTS: Partial<Record<number, `0x${string}`>> = {
-  8453:  baseFeeRouter(),   // Base Mainnet
-  84532: sepoliaFeeRouter(), // Base Sepolia
-  // Quando deployi su altre chain, aggiungi qui:
-  // 1:     '0x...', // Ethereum Mainnet
-  // 42161: '0x...', // Arbitrum
+  8453:  baseFeeRouter(),        // Base Mainnet
+  84532: sepoliaFeeRouter(),     // Base Sepolia
+  1:     ethFeeRouter(),         // Ethereum Mainnet
+  10:    optimismFeeRouter(),    // Optimism
+  42161: arbitrumFeeRouter(),    // Arbitrum
+  137:   polygonFeeRouter(),     // Polygon
+  56:    bnbFeeRouter(),         // BNB Chain
+  43114: avalancheFeeRouter(),   // Avalanche
 }
 
 export function getFeeRouterAddress(chainId: number): `0x${string}` | null {
@@ -307,4 +610,15 @@ export const EUR_RATES: { [symbol: string]: number } = {
   cbBTC: 88000,
   WBTC:  88000,
   DEGEN: 0.003,
+  BNB:   600,
+  POL:   0.45,
+  AVAX:  35,
+  CELO:  0.75,
+  OP:    2.5,
+  USDB:  1.0,
+  ARB:   1.1,
+  BTCB:  88000,
+  cUSD:  0.92,
+  TRX:   0.12,
+  USDD:  0.92,
 }

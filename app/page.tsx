@@ -594,19 +594,7 @@ function Navbar({
             background: 'none', border: 'none', cursor: 'pointer',
           }}
         >
-          {/* Logo: lightning splitting into two flows */}
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-            <rect width="28" height="28" rx="7" fill="url(#lg)" />
-            <path d="M15.5 5L10 15h4l-1.5 8L19 13h-4l1.5-8z" fill="white" fillOpacity="0.95" />
-            <path d="M12.5 15l-3 6" stroke="white" strokeOpacity="0.5" strokeWidth="1.2" strokeLinecap="round" />
-            <path d="M14 15l3.5 5.5" stroke="white" strokeOpacity="0.5" strokeWidth="1.2" strokeLinecap="round" />
-            <defs>
-              <linearGradient id="lg" x1="0" y1="0" x2="28" y2="28">
-                <stop stopColor="#3B82F6" />
-                <stop offset="1" stopColor="#8B5CF6" />
-              </linearGradient>
-            </defs>
-          </svg>
+          <img src="/favicon.svg" alt="RSends" width={28} height={28} style={{ borderRadius: 7 }} />
           <span style={{ fontFamily: C.D, fontSize: 16, fontWeight: 800, color: C.text, letterSpacing: '-0.03em' }}>
             RSends
           </span>
@@ -984,21 +972,11 @@ export default function Home() {
     }
   }, [view, sweepEvents.length])
 
-  useEffect(() => {
-    try {
-      if (!sessionStorage.getItem('RSends_seen')) {
-        setShowIntro(true); sessionStorage.setItem('RSends_seen', '1')
-      } else { setReady(true) }
-    } catch { setReady(true) }
-  }, [])
-
-  const handleIntroDone = useCallback(() => { setShowIntro(false); setReady(true) }, [])
+  useEffect(() => { setReady(true) }, [])
 
   return (
     <>
       <ToastContainer />
-      {showIntro && <ParticleIntro onDone={handleIntroDone} />}
-
       {/* Background */}
       <div className="rp-bg" aria-hidden="true">
         <div className="rp-bg__base" />

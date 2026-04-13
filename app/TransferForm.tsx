@@ -1142,12 +1142,6 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
       <div style={noCard ? {} : C.card} className={noCard ? '' : 'bf-blur-32s'}>
         <div style={{ padding: isMobile ? '12px' : '6px 8px 6px' }}>
 
-          {/* Gas warning L1 — only when needed */}
-          {!isL2 && isConnected && (
-            <div style={{ margin:'0 0 6px', padding:'7px 11px', borderRadius:10, background:`${T.amber}08`, border:`1px solid ${T.amber}20`, fontFamily:T.D, fontSize:11, color:T.amber, display:'flex', alignItems:'center', gap:6 }}>
-              ⚠ <span>Gas L1 elevato — considera Base.</span>
-            </div>
-          )}
 
           {/* ── SELL ─────────────────────────────────────────────── */}
           <div className="rp-anim-1">

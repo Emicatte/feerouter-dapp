@@ -135,9 +135,7 @@ function ChainGuardProvider({ children }: { children: React.ReactNode }) {
   ]
   const isCorrectChain = supported.includes(chainId)
   const isL2           = chainId === CHAIN.BASE || chainId === CHAIN.BASE_SEPOLIA
-  const gasWarning     = !isL2 && isCorrectChain
-    ? 'Gas su Ethereum L1 è più costoso. Usa Base per transazioni minori.'
-    : null
+  const gasWarning     = null
 
   return (
     <ChainGuardContext.Provider value={{

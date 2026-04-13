@@ -10,27 +10,37 @@ import { randomBytes }         from 'crypto'
 const ORACLE_PRIVATE_KEY = process.env.ORACLE_PRIVATE_KEY as Hex | undefined
 
 function routerForChain(chainId: number): `0x${string}` {
-  const e = (k: string) => process.env[k]
+  const ZERO = '0x0000000000000000000000000000000000000000' as `0x${string}`
   switch (chainId) {
     case 8453:
-      return (
-        e('NEXT_PUBLIC_FEE_ROUTER_V4_BASE') ??
-        '0x0000000000000000000000000000000000000000'
-      ) as `0x${string}`
+      return (process.env.NEXT_PUBLIC_FEE_ROUTER_V4_BASE ?? ZERO) as `0x${string}`
     case 84532:
-      return (
-        e('NEXT_PUBLIC_FEE_ROUTER_V4_BASE_SEPOLIA') ??
-        '0x0000000000000000000000000000000000000000'
-      ) as `0x${string}`
+      return (process.env.NEXT_PUBLIC_FEE_ROUTER_V4_BASE_SEPOLIA ?? ZERO) as `0x${string}`
     case 1:
-      return (
-        e('NEXT_PUBLIC_FEE_ROUTER_V4_ETH') ??
-        '0x0000000000000000000000000000000000000000'
-      ) as `0x${string}`
+      return (process.env.NEXT_PUBLIC_FEE_ROUTER_V4_ETH ?? ZERO) as `0x${string}`
+    case 10:
+      return (process.env.NEXT_PUBLIC_FEE_ROUTER_V4_OPTIMISM ?? ZERO) as `0x${string}`
+    case 42161:
+      return (process.env.NEXT_PUBLIC_FEE_ROUTER_V4_ARBITRUM ?? ZERO) as `0x${string}`
+    case 137:
+      return (process.env.NEXT_PUBLIC_FEE_ROUTER_V4_POLYGON ?? ZERO) as `0x${string}`
+    case 56:
+      return (process.env.NEXT_PUBLIC_FEE_ROUTER_V4_BNB ?? ZERO) as `0x${string}`
+    case 43114:
+      return (process.env.NEXT_PUBLIC_FEE_ROUTER_V4_AVALANCHE ?? ZERO) as `0x${string}`
+    case 728126428:
+      return (process.env.TRON_FEE_ROUTER_MAINNET ?? ZERO) as `0x${string}`
     default:
-      return '0x0000000000000000000000000000000000000000'
+      return ZERO
   }
 }
+
+const CHAIN_NAMES: Record<number, string> = {
+  1: 'ETHEREUM', 10: 'OPTIMISM', 56: 'BNB', 137: 'POLYGON',
+  8453: 'BASE', 42161: 'ARBITRUM', 43114: 'AVALANCHE', 84532: 'BASE_SEPOLIA',
+  728126428: 'TRON',
+}
+function chainName(id: number): string { return CHAIN_NAMES[id] ?? `CHAIN_${id}` }
 
 // ── EIP-712 per chain ──────────────────────────────────────────────────────
 // Sepolia: contratto deployato con domain V3 (name="FeeRouterV3", version="3")
@@ -71,6 +81,9 @@ function getDomainConfig(chainId: number) {
 const EUR_RATES: Record<string, number> = {
   ETH: 2200, USDC: 0.92, USDT: 0.92, EURC: 1.0,
   CBBTC: 88000, WBTC: 88000, DEGEN: 0.003,
+  BNB: 600, POL: 0.45, AVAX: 35, CELO: 0.75,
+  OP: 2.5, USDB: 1.0, ARB: 1.1, BTCB: 88000, CUSD: 0.92,
+  TRX: 0.12, USDD: 0.92,
 }
 
 const BLACKLIST = new Set([
@@ -212,7 +225,7 @@ export async function POST(req: NextRequest) {
       eurValue:        Math.round(eurValue * 100) / 100,
       isEurc:          symUpper === 'EURC',
       isSwap:          tokenInN !== tokenOutN,
-      sourceChain:     Number(chainId) === 8453 ? 'BASE' : Number(chainId) === 1 ? 'ETHEREUM' : 'BASE_SEPOLIA',
+      sourceChain:     chainName(Number(chainId)),
       gasless:         Number(chainId) !== 1,
       _debug: {
         contractAddr,
@@ -243,9 +256,15 @@ export async function GET() {
     : null
 
   const routers = {
-    8453:  routerForChain(8453),
-    84532: routerForChain(84532),
-    1:     routerForChain(1),
+    8453:      routerForChain(8453),
+    84532:     routerForChain(84532),
+    1:         routerForChain(1),
+    10:        routerForChain(10),
+    42161:     routerForChain(42161),
+    137:       routerForChain(137),
+    56:        routerForChain(56),
+    43114:     routerForChain(43114),
+    728126428: routerForChain(728126428),
   }
 
   const { keccak256: k256, encodeAbiParameters, parseAbiParameters } = await import('viem')
@@ -273,9 +292,15 @@ export async function GET() {
     signerAddress: account?.address ?? 'NOT_CONFIGURED',
     routers,
     domainConfig: {
-      84532: { name: 'FeeRouterV3', version: '3', typehash: 'V3' },
-      8453:  { name: 'FeeRouterV4', version: '4', typehash: 'V4' },
-      1:     { name: 'FeeRouterV4', version: '4', typehash: 'V4' },
+      84532:     { name: 'FeeRouterV3', version: '3', typehash: 'V3' },
+      8453:      { name: 'FeeRouterV4', version: '4', typehash: 'V4' },
+      1:         { name: 'FeeRouterV4', version: '4', typehash: 'V4' },
+      10:        { name: 'FeeRouterV4', version: '4', typehash: 'V4' },
+      42161:     { name: 'FeeRouterV4', version: '4', typehash: 'V4' },
+      137:       { name: 'FeeRouterV4', version: '4', typehash: 'V4' },
+      56:        { name: 'FeeRouterV4', version: '4', typehash: 'V4' },
+      43114:     { name: 'FeeRouterV4', version: '4', typehash: 'V4' },
+      728126428: { name: 'FeeRouterV4', version: '4', typehash: 'V4' },
     },
     domainSeparatorHash: {
       84532: routers[84532] !== ZERO ? computeDomainHash('FeeRouterV3', '3', 84532, routers[84532]) : 'N/A',
@@ -285,6 +310,12 @@ export async function GET() {
       NEXT_PUBLIC_FEE_ROUTER_V4_BASE_SEPOLIA: process.env.NEXT_PUBLIC_FEE_ROUTER_V4_BASE_SEPOLIA ? '✅' : '❌',
       NEXT_PUBLIC_FEE_ROUTER_V4_BASE:         process.env.NEXT_PUBLIC_FEE_ROUTER_V4_BASE         ? '✅' : '❌',
       NEXT_PUBLIC_FEE_ROUTER_V4_ETH:          process.env.NEXT_PUBLIC_FEE_ROUTER_V4_ETH          ? '✅' : '❌',
+      NEXT_PUBLIC_FEE_ROUTER_V4_OPTIMISM:     process.env.NEXT_PUBLIC_FEE_ROUTER_V4_OPTIMISM     ? '✅' : '❌',
+      NEXT_PUBLIC_FEE_ROUTER_V4_ARBITRUM:     process.env.NEXT_PUBLIC_FEE_ROUTER_V4_ARBITRUM     ? '✅' : '❌',
+      NEXT_PUBLIC_FEE_ROUTER_V4_POLYGON:      process.env.NEXT_PUBLIC_FEE_ROUTER_V4_POLYGON      ? '✅' : '❌',
+      NEXT_PUBLIC_FEE_ROUTER_V4_BNB:          process.env.NEXT_PUBLIC_FEE_ROUTER_V4_BNB          ? '✅' : '❌',
+      NEXT_PUBLIC_FEE_ROUTER_V4_AVALANCHE:    process.env.NEXT_PUBLIC_FEE_ROUTER_V4_AVALANCHE    ? '✅' : '❌',
+      TRON_FEE_ROUTER_MAINNET:                process.env.TRON_FEE_ROUTER_MAINNET                ? '✅' : '❌',
       ORACLE_PRIVATE_KEY:                     process.env.ORACLE_PRIVATE_KEY                     ? '✅' : '❌',
     },
   })
