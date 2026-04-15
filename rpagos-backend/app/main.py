@@ -272,6 +272,8 @@ from app.api.health_routes import health_router
 app.include_router(health_router)
 from app.api.signing_routes import signing_router
 app.include_router(signing_router)
+from app.api.aml_routes import aml_router
+app.include_router(aml_router)
 
 
 # ── Health checks ────────────────────────────────────────

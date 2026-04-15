@@ -1,0 +1,122 @@
+{
+  "source": "OFAC_SDN",
+  "updated": "2026-04-15",
+  "description": "OFAC Specially Designated Nationals — Digital Currency Addresses. Source: https://sanctionssearch.ofac.treas.gov/",
+  "addresses": [
+    {
+      "address": "0x8589427373d6d84e98730d7795d8f6f8731fda16",
+      "name": "Tornado Cash: Proxy",
+      "program": "CYBER2"
+    },
+    {
+      "address": "0xd90e2f925da726b50c4ed8d0fb90ad053324f31b",
+      "name": "Tornado Cash: Router",
+      "program": "CYBER2"
+    },
+    {
+      "address": "0xd96f2b1cf787cf7e7f2fe874e2b540fb32995cb8",
+      "name": "Tornado Cash: Vault",
+      "program": "CYBER2"
+    },
+    {
+      "address": "0x4736dcf1b7a3d580672cce6e7c65cd5cc9cfbf68",
+      "name": "Tornado Cash: Mining",
+      "program": "CYBER2"
+    },
+    {
+      "address": "0x722122df12d4e14e13ac3b6895a86e84145b6967",
+      "name": "Tornado Cash: 0.1 ETH Pool",
+      "program": "CYBER2"
+    },
+    {
+      "address": "0xdd4c48c0b24039969fc16d1cdf626eab821d3384",
+      "name": "Tornado Cash: 1 ETH Pool",
+      "program": "CYBER2"
+    },
+    {
+      "address": "0xd4b88df4d29f5cedd6857912842cff3b20c8cfa3",
+      "name": "Tornado Cash: 10 ETH Pool",
+      "program": "CYBER2"
+    },
+    {
+      "address": "0x910cbd523d972eb0a6f4cae4618ad62622b39dbf",
+      "name": "Tornado Cash: 100 ETH Pool",
+      "program": "CYBER2"
+    },
+    {
+      "address": "0xa160cdab225685da1d56aa342ad8841c3b53f291",
+      "name": "Tornado Cash: 100 ETH Pool (2)",
+      "program": "CYBER2"
+    },
+    {
+      "address": "0x12d66f87a04a9e220743712ce6d9bb1b5616b8fc",
+      "name": "Tornado Cash: 0.1 ETH Pool (2)",
+      "program": "CYBER2"
+    },
+    {
+      "address": "0x47ce0c6ed5b0ce3d3a51fdb1c52dc66a7c3c2936",
+      "name": "Tornado Cash: 1 ETH Pool (2)",
+      "program": "CYBER2"
+    },
+    {
+      "address": "0x23773e65ed146a459791799d01336db287f25334",
+      "name": "Tornado Cash: 10 ETH Pool (2)",
+      "program": "CYBER2"
+    },
+    {
+      "address": "0xfd8610d20aa15b7b2e3be39b396a1bc3516c7144",
+      "name": "Tornado Cash: 100 DAI Pool",
+      "program": "CYBER2"
+    },
+    {
+      "address": "0xf60dd140cff0706bae9cd734ac3683f5e7ca7381",
+      "name": "Tornado Cash: 1000 DAI Pool",
+      "program": "CYBER2"
+    },
+    {
+      "address": "0x22aaa7720ddd5388a3c0a3333430953c68f1849b",
+      "name": "Tornado Cash: 10000 DAI Pool",
+      "program": "CYBER2"
+    },
+    {
+      "address": "0xba214c1c1928a32bffe790263e38b4af9bfcd659",
+      "name": "Tornado Cash: 100000 DAI Pool",
+      "program": "CYBER2"
+    },
+    {
+      "address": "0xd691f27f38b395864ea86cfc7253969b409c362d",
+      "name": "Tornado Cash: 100 USDC Pool",
+      "program": "CYBER2"
+    },
+    {
+      "address": "0x169ad27a7a1d3ef92b0161bbb28a43c85205d0aa",
+      "name": "Tornado Cash: 1000 USDC Pool",
+      "program": "CYBER2"
+    },
+    {
+      "address": "0x0836222f2b2b24a3f36f98668ed8f0b38d1a872f",
+      "name": "Tornado Cash: 100 USDT Pool",
+      "program": "CYBER2"
+    },
+    {
+      "address": "0x178169b423a011fff22b9e3f3abea13414ddd0f1",
+      "name": "Tornado Cash: Governance",
+      "program": "CYBER2"
+    },
+    {
+      "address": "0x098b716b8aaf21512996dc57eb0615e2383e2f96",
+      "name": "Lazarus Group",
+      "program": "DPRK"
+    },
+    {
+      "address": "0xa0e1c89ef1a489c9c7de96311ed5ce5d32c20e4b",
+      "name": "Lazarus Group (2)",
+      "program": "DPRK"
+    },
+    {
+      "address": "0xb6f5ec1a0a9cd1526536d3f0426c429529471f40",
+      "name": "Blender.io",
+      "program": "CYBER2"
+    }
+  ]
+}

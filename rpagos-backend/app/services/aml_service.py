@@ -1,51 +1,165 @@
 """
-RSend AML Service — Anti-Money Laundering wallet screening.
+RSend AML Service — Anti-Money Laundering checks (3 livelli).
 
-Checks:
-1. Blacklist locale (indirizzi noti malevoli/sanzionati)
-2. Pattern sospetti (volume, frequenza, hop)
-3. Alert automatici su trigger
+1. ADDRESS SCREENING (pre-transazione)
+   - OFAC SDN List (US sanctions)
+   - EU Consolidated Sanctions List
+   - Database locale (sanctions_list + blacklisted_wallets)
+   - Hardcoded Tornado Cash addresses
 
-Fonti blacklist:
-- OFAC SDN List (US Treasury)
-- EU Sanctions List
-- Chainalysis / TRM Labs API (futuro)
+2. TRANSACTION MONITORING (post-transazione)
+   - Single tx > €1,000 → flag per review
+   - Daily cumulative per wallet > €5,000 → flag
+   - Monthly cumulative per wallet > €15,000 → KYC required (DAC8)
+   - > 10 tx/hour → velocity alert
+   - Structuring detection (many tx just below threshold)
 
-Per ora: blacklist locale + API stub per provider esterni.
+3. REPORTING
+   - Creates AMLAlert records for compliance officers
+   - Integrates with DAC8 service for regulatory reporting
+
+Backward-compatible: screen_transaction() and is_blacklisted() keep
+the same signature for existing callers in sweep_service.py.
 """
+
 import logging
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+from enum import Enum
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, func
+
 from app.db.session import async_session
-from app.models.aml_models import BlacklistedWallet
+from app.models.aml_models import (
+    BlacklistedWallet,
+    SanctionEntry,
+    AMLAlert,
+    AMLConfig,
+    AlertType,
+    RiskLevel,
+    AlertStatus,
+)
 
 logger = logging.getLogger("aml")
 
 
-# Well-known sanctioned addresses (Tornado Cash, etc.)
-# Fonte: OFAC Special Designated Nationals (SDN) List
-HARDCODED_BLACKLIST = {
-    "0x8589427373d6d84e98730d7795d8f6f8731fda16",  # Tornado Cash
-    "0xd90e2f925da726b50c4ed8d0fb90ad053324f31b",  # Tornado Cash
-    "0xd96f2b1cf787cf7e7f2fe874e2b540fb32995cb8",  # Tornado Cash
-    "0x4736dcf1b7a3d580672cce6e7c65cd5cc9cfbf68",  # Tornado Cash
-    # Aggiungi altri da OFAC SDN list
+# ═══════════════════════════════════════════════════════════════
+#  Well-known sanctioned addresses (always checked, no DB needed)
+# ═══════════════════════════════════════════════════════════════
+
+HARDCODED_BLACKLIST: dict[str, str] = {
+    # Tornado Cash (OFAC SDN — CYBER2 program)
+    "0x8589427373d6d84e98730d7795d8f6f8731fda16": "Tornado Cash: Proxy",
+    "0xd90e2f925da726b50c4ed8d0fb90ad053324f31b": "Tornado Cash: Router",
+    "0xd96f2b1cf787cf7e7f2fe874e2b540fb32995cb8": "Tornado Cash: Vault",
+    "0x4736dcf1b7a3d580672cce6e7c65cd5cc9cfbf68": "Tornado Cash: Mining",
+    "0x722122df12d4e14e13ac3b6895a86e84145b6967": "Tornado Cash: 0.1 ETH",
+    "0xdd4c48c0b24039969fc16d1cdf626eab821d3384": "Tornado Cash: 1 ETH",
+    "0xd4b88df4d29f5cedd6857912842cff3b20c8cfa3": "Tornado Cash: 10 ETH",
+    "0x910cbd523d972eb0a6f4cae4618ad62622b39dbf": "Tornado Cash: 100 ETH",
+    "0xa160cdab225685da1d56aa342ad8841c3b53f291": "Tornado Cash: 100 ETH (2)",
+    "0x12d66f87a04a9e220743712ce6d9bb1b5616b8fc": "Tornado Cash: 0.1 ETH (2)",
+    "0x47ce0c6ed5b0ce3d3a51fdb1c52dc66a7c3c2936": "Tornado Cash: 1 ETH (2)",
+    "0x23773e65ed146a459791799d01336db287f25334": "Tornado Cash: 10 ETH (2)",
+    # Lazarus Group (DPRK)
+    "0x098b716b8aaf21512996dc57eb0615e2383e2f96": "Lazarus Group",
+    "0xa0e1c89ef1a489c9c7de96311ed5ce5d32c20e4b": "Lazarus Group (2)",
+    # Blender.io (OFAC SDN)
+    "0xb6f5ec1a0a9cd1526536d3f0426c429529471f40": "Blender.io",
 }
 
 
+# ═══════════════════════════════════════════════════════════════
+#  AML Check Result (returned by all check functions)
+# ═══════════════════════════════════════════════════════════════
+
+@dataclass
+class AMLCheckResult:
+    approved: bool
+    risk_level: str              # "low", "medium", "high", "blocked"
+    alerts: list[str] = field(default_factory=list)
+    details: str = ""
+    requires_kyc: bool = False
+    requires_manual_review: bool = False
+    blocked: bool = False        # backward-compat with screen_transaction()
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Default thresholds (overridden by AMLConfig in DB)
+# ═══════════════════════════════════════════════════════════════
+
+_DEFAULT_THRESHOLD_SINGLE_EUR = 1000.0
+_DEFAULT_THRESHOLD_DAILY_EUR = 5000.0
+_DEFAULT_THRESHOLD_MONTHLY_EUR = 15000.0
+_DEFAULT_VELOCITY_LIMIT = 10
+
+
+async def _get_thresholds() -> dict:
+    """Load AML thresholds from DB, fallback to defaults."""
+    try:
+        async with async_session() as db:
+            result = await db.execute(select(AMLConfig).where(AMLConfig.id == 1))
+            cfg = result.scalar_one_or_none()
+            if cfg:
+                return {
+                    "single": cfg.threshold_single_eur,
+                    "daily": cfg.threshold_daily_eur,
+                    "monthly": cfg.threshold_monthly_eur,
+                    "velocity": cfg.velocity_limit_per_hour,
+                    "structuring_window_hours": cfg.structuring_window_hours,
+                    "structuring_min_count": cfg.structuring_min_count,
+                    "structuring_threshold_pct": cfg.structuring_threshold_pct,
+                }
+    except Exception as e:
+        logger.warning("AML config load failed (using defaults): %s", e)
+
+    return {
+        "single": _DEFAULT_THRESHOLD_SINGLE_EUR,
+        "daily": _DEFAULT_THRESHOLD_DAILY_EUR,
+        "monthly": _DEFAULT_THRESHOLD_MONTHLY_EUR,
+        "velocity": _DEFAULT_VELOCITY_LIMIT,
+        "structuring_window_hours": 24,
+        "structuring_min_count": 5,
+        "structuring_threshold_pct": 0.9,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
+#  1. ADDRESS SCREENING
+# ═══════════════════════════════════════════════════════════════
+
 async def is_blacklisted(address: str) -> tuple[bool, Optional[str]]:
-    """
-    Check if an address is blacklisted.
+    """Check if an address is blacklisted/sanctioned.
+
     Returns (is_blocked, reason).
+    Backward-compatible with existing callers.
     """
     addr_lower = address.lower()
 
-    # Check hardcoded list
+    # Hardcoded list (always available, even without DB)
     if addr_lower in HARDCODED_BLACKLIST:
-        return True, "OFAC sanctioned address (Tornado Cash)"
+        return True, f"OFAC sanctioned: {HARDCODED_BLACKLIST[addr_lower]}"
 
-    # Check database
+    # Check sanctions_list table
+    try:
+        async with async_session() as db:
+            result = await db.execute(
+                select(SanctionEntry).where(
+                    SanctionEntry.address == addr_lower,
+                    SanctionEntry.is_active == True,  # noqa: E712
+                ).limit(1)
+            )
+            entry = result.scalar_one_or_none()
+            if entry:
+                return True, (
+                    f"Sanctioned: {entry.name or 'Unknown'} "
+                    f"(source: {entry.source}, program: {entry.program or 'N/A'})"
+                )
+    except Exception as e:
+        logger.warning("Sanctions DB check failed (continuing with legacy): %s", e)
+
+    # Legacy blacklisted_wallets table
     try:
         async with async_session() as db:
             result = await db.execute(
@@ -63,43 +177,421 @@ async def is_blacklisted(address: str) -> tuple[bool, Optional[str]]:
     return False, None
 
 
+async def screen_addresses(sender: str, recipient: str) -> AMLCheckResult:
+    """Screen both sender and recipient against sanctions lists."""
+    for addr, role in [(sender, "Sender"), (recipient, "Recipient")]:
+        blocked, reason = await is_blacklisted(addr)
+        if blocked:
+            return AMLCheckResult(
+                approved=False,
+                risk_level="blocked",
+                alerts=[f"{role} sanctioned: {reason}"],
+                details=f"{role} {addr[:10]}... matches sanctions/blacklist",
+                blocked=True,
+            )
+    return AMLCheckResult(approved=True, risk_level="low")
+
+
+# ═══════════════════════════════════════════════════════════════
+#  2. TRANSACTION MONITORING
+# ═══════════════════════════════════════════════════════════════
+
+async def _get_daily_total_eur(sender: str) -> float:
+    """Get daily EUR total from Redis (fast) with DB fallback."""
+    sender_lower = sender.lower()
+    today = datetime.now(timezone.utc).strftime("%Y%m%d")
+    redis_key = f"aml:daily:{sender_lower}:{today}"
+
+    try:
+        from app.services.cache_service import get_redis
+        r = await get_redis()
+        if r:
+            cached = await r.get(redis_key)
+            if cached is not None:
+                return float(cached)
+    except Exception:
+        pass
+
+    # Fallback: query AMLAlert table for today's amounts
+    try:
+        start_of_day = datetime.now(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        async with async_session() as db:
+            result = await db.execute(
+                select(func.coalesce(func.sum(AMLAlert.amount_eur), 0.0)).where(
+                    AMLAlert.sender == sender_lower,
+                    AMLAlert.created_at >= start_of_day,
+                )
+            )
+            return float(result.scalar_one())
+    except Exception:
+        return 0.0
+
+
+async def _update_daily_total(sender: str, add_eur: float) -> float:
+    """Atomically increment daily EUR total in Redis. Returns new total."""
+    sender_lower = sender.lower()
+    today = datetime.now(timezone.utc).strftime("%Y%m%d")
+    redis_key = f"aml:daily:{sender_lower}:{today}"
+
+    try:
+        from app.services.cache_service import get_redis
+        r = await get_redis()
+        if r:
+            # Use INCRBYFLOAT for atomicity
+            new_total = await r.incrbyfloat(redis_key, add_eur)
+            await r.expire(redis_key, 86400)
+            return float(new_total)
+    except Exception:
+        pass
+    return add_eur
+
+
+async def _get_monthly_total_eur(sender: str) -> float:
+    """Get 30-day rolling EUR total from Postgres."""
+    sender_lower = sender.lower()
+    since = datetime.now(timezone.utc) - timedelta(days=30)
+
+    try:
+        async with async_session() as db:
+            result = await db.execute(
+                select(func.coalesce(func.sum(AMLAlert.amount_eur), 0.0)).where(
+                    AMLAlert.sender == sender_lower,
+                    AMLAlert.created_at >= since,
+                )
+            )
+            return float(result.scalar_one())
+    except Exception as e:
+        logger.warning("Monthly total query failed: %s", e)
+        return 0.0
+
+
+async def _get_velocity_count(sender: str) -> int:
+    """Get hourly transaction count from Redis."""
+    sender_lower = sender.lower()
+    redis_key = f"aml:velocity:{sender_lower}"
+
+    try:
+        from app.services.cache_service import get_redis
+        r = await get_redis()
+        if r:
+            count = await r.incr(redis_key)
+            if count == 1:
+                await r.expire(redis_key, 3600)  # 1 hour window
+            return int(count)
+    except Exception:
+        pass
+    return 1
+
+
+async def _check_structuring(
+    sender: str,
+    amount_eur: float,
+    threshold_single: float,
+    cfg: dict,
+) -> bool:
+    """Detect structuring: many transactions just below the single threshold.
+
+    Returns True if structuring pattern detected.
+    """
+    sender_lower = sender.lower()
+    window = timedelta(hours=cfg["structuring_window_hours"])
+    since = datetime.now(timezone.utc) - window
+    near_threshold = threshold_single * cfg["structuring_threshold_pct"]
+
+    # Only trigger if current amount is suspiciously close to threshold
+    if amount_eur < near_threshold:
+        return False
+
+    try:
+        async with async_session() as db:
+            result = await db.execute(
+                select(func.count()).select_from(AMLAlert).where(
+                    AMLAlert.sender == sender_lower,
+                    AMLAlert.created_at >= since,
+                    AMLAlert.amount_eur >= near_threshold,
+                    AMLAlert.amount_eur < threshold_single,
+                )
+            )
+            count = result.scalar_one()
+            return count >= cfg["structuring_min_count"]
+    except Exception:
+        return False
+
+
+async def monitor_transaction(
+    sender: str,
+    recipient: str,
+    amount_eur: float,
+    *,
+    chain_id: int = 0,
+    tx_hash: Optional[str] = None,
+    token_symbol: str = "ETH",
+) -> AMLCheckResult:
+    """Post-transaction monitoring: thresholds, velocity, structuring.
+
+    Does NOT block transactions (approved is always True unless sanctioned).
+    Creates AMLAlert records for compliance review.
+    """
+    alerts: list[str] = []
+    risk = "low"
+    requires_kyc = False
+    requires_review = False
+
+    cfg = await _get_thresholds()
+
+    # ── Single transaction threshold ─────────────────────
+    if amount_eur > cfg["single"]:
+        alerts.append(AlertType.threshold_single.value)
+        risk = "medium"
+        requires_review = True
+
+    # ── Daily cumulative ─────────────────────────────────
+    daily_total = await _update_daily_total(sender, amount_eur)
+    if daily_total > cfg["daily"]:
+        alerts.append(AlertType.threshold_daily.value)
+        risk = "high"
+        requires_review = True
+
+    # ── Monthly cumulative (DAC8: >€15K → KYC required) ──
+    monthly_total = await _get_monthly_total_eur(sender) + amount_eur
+    if monthly_total > cfg["monthly"]:
+        alerts.append(AlertType.threshold_monthly.value)
+        risk = "high"
+        requires_kyc = True
+        requires_review = True
+
+    # ── Velocity check ───────────────────────────────────
+    velocity = await _get_velocity_count(sender)
+    if velocity > cfg["velocity"]:
+        alerts.append(AlertType.velocity.value)
+        risk = "high"
+        requires_review = True
+
+    # ── Structuring detection ────────────────────────────
+    if await _check_structuring(sender, amount_eur, cfg["single"], cfg):
+        alerts.append(AlertType.structuring.value)
+        risk = "high"
+        requires_review = True
+
+    # ── Persist alerts to DB ─────────────────────────────
+    if alerts:
+        details = (
+            f"Daily: €{daily_total:.0f}, Monthly: €{monthly_total:.0f}, "
+            f"Velocity: {velocity}/h"
+        )
+        for alert_type_str in alerts:
+            await _create_alert(
+                sender=sender,
+                recipient=recipient,
+                chain_id=chain_id,
+                tx_hash=tx_hash,
+                amount_eur=amount_eur,
+                token_symbol=token_symbol,
+                alert_type=AlertType(alert_type_str),
+                risk_level=RiskLevel(risk),
+                details=details,
+                requires_kyc=requires_kyc,
+            )
+
+    return AMLCheckResult(
+        approved=True,  # monitoring never blocks, only flags
+        risk_level=risk,
+        alerts=alerts,
+        details=(
+            f"Daily: €{daily_total:.0f}, Monthly: €{monthly_total:.0f}, "
+            f"Velocity: {velocity}/h"
+        ),
+        requires_kyc=requires_kyc,
+        requires_manual_review=requires_review,
+    )
+
+
+async def _create_alert(
+    *,
+    sender: str,
+    recipient: str,
+    chain_id: int,
+    tx_hash: Optional[str],
+    amount_eur: float,
+    token_symbol: str,
+    alert_type: AlertType,
+    risk_level: RiskLevel,
+    details: str,
+    requires_kyc: bool,
+) -> Optional[int]:
+    """Create an AML alert record in the database."""
+    try:
+        async with async_session() as db:
+            alert = AMLAlert(
+                sender=sender.lower(),
+                recipient=recipient.lower(),
+                chain_id=chain_id,
+                tx_hash=tx_hash,
+                amount_eur=amount_eur,
+                token_symbol=token_symbol,
+                alert_type=alert_type,
+                risk_level=risk_level,
+                details=details,
+                requires_kyc=requires_kyc,
+                status=AlertStatus.pending,
+            )
+            db.add(alert)
+            await db.commit()
+            await db.refresh(alert)
+            logger.info(
+                "AML alert #%d: %s (%s) sender=%s amount=€%.0f",
+                alert.id, alert_type.value, risk_level.value,
+                sender[:10], amount_eur,
+                extra={"service": "aml"},
+            )
+            return alert.id
+    except Exception as e:
+        logger.error("Failed to create AML alert: %s", e, extra={"service": "aml"})
+        return None
+
+
+# ═══════════════════════════════════════════════════════════════
+#  3. FULL CHECK (screening + monitoring combined)
+# ═══════════════════════════════════════════════════════════════
+
+async def full_aml_check(
+    sender: str,
+    recipient: str,
+    amount_eur: float,
+    *,
+    chain_id: int = 0,
+    tx_hash: Optional[str] = None,
+    token_symbol: str = "ETH",
+) -> AMLCheckResult:
+    """Complete AML check: address screening + transaction monitoring.
+
+    Called by the oracle signing endpoint.
+    If address screening blocks → transaction is REJECTED.
+    If monitoring flags → transaction proceeds with alerts for review.
+    """
+    # Phase 1: Address screening (can block)
+    screening = await screen_addresses(sender, recipient)
+    if not screening.approved:
+        # Create a sanctions_hit alert
+        await _create_alert(
+            sender=sender,
+            recipient=recipient,
+            chain_id=chain_id,
+            tx_hash=tx_hash,
+            amount_eur=amount_eur,
+            token_symbol=token_symbol,
+            alert_type=AlertType.sanctions_hit,
+            risk_level=RiskLevel.blocked,
+            details=screening.details,
+            requires_kyc=False,
+        )
+        return screening
+
+    # Phase 2: Transaction monitoring (flags but doesn't block)
+    monitoring = await monitor_transaction(
+        sender, recipient, amount_eur,
+        chain_id=chain_id, tx_hash=tx_hash, token_symbol=token_symbol,
+    )
+
+    return monitoring
+
+
+# ═══════════════════════════════════════════════════════════════
+#  BACKWARD-COMPATIBLE API
+#  (used by sweep_service.py process_incoming_tx)
+# ═══════════════════════════════════════════════════════════════
+
 async def screen_transaction(
     from_addr: str,
     to_addr: str,
     amount_wei: str,
     token: str = "ETH",
 ) -> dict:
-    """
-    Screen a transaction against AML rules.
-    Returns screening result with pass/fail and reasons.
-    """
-    results = {"passed": True, "flags": [], "blocked": False}
+    """Screen a transaction against AML rules.
 
-    # Check sender
-    blocked, reason = await is_blacklisted(from_addr)
-    if blocked:
-        results["passed"] = False
-        results["blocked"] = True
-        results["flags"].append(f"Sender blacklisted: {reason}")
-        logger.warning("AML BLOCK: sender %s is blacklisted: %s", from_addr[:10], reason)
+    Returns dict with backward-compatible keys: passed, flags, blocked.
+    """
+    results: dict = {"passed": True, "flags": [], "blocked": False}
 
-    # Check recipient
-    blocked, reason = await is_blacklisted(to_addr)
-    if blocked:
-        results["passed"] = False
-        results["blocked"] = True
-        results["flags"].append(f"Recipient blacklisted: {reason}")
-        logger.warning("AML BLOCK: recipient %s is blacklisted: %s", to_addr[:10], reason)
+    # Address screening
+    for addr, role in [(from_addr, "Sender"), (to_addr, "Recipient")]:
+        blocked, reason = await is_blacklisted(addr)
+        if blocked:
+            results["passed"] = False
+            results["blocked"] = True
+            results["flags"].append(f"{role} blacklisted: {reason}")
+            logger.warning(
+                "AML BLOCK: %s %s is blacklisted: %s",
+                role.lower(), addr[:10], reason,
+            )
 
     # Volume check (high-value alert, non-blocking)
     try:
         amount_int = int(amount_wei)
         if amount_int > 10 * 10**18:  # > 10 ETH
-            results["flags"].append(f"High value transaction: {amount_int / 10**18:.4f} ETH")
+            results["flags"].append(
+                f"High value transaction: {amount_int / 10**18:.4f} ETH"
+            )
     except (ValueError, TypeError):
         pass
 
     return results
+
+
+# ═══════════════════════════════════════════════════════════════
+#  SANCTIONS LIST MANAGEMENT
+# ═══════════════════════════════════════════════════════════════
+
+async def load_sanctions_from_json(data: dict) -> int:
+    """Load sanctions entries from JSON (OFAC format).
+
+    Expected format:
+    {
+        "source": "OFAC_SDN",
+        "addresses": [
+            {"address": "0x...", "name": "...", "program": "..."},
+        ]
+    }
+
+    Returns number of entries added.
+    """
+    source = data.get("source", "unknown")
+    entries = data.get("addresses", [])
+    added = 0
+
+    async with async_session() as db:
+        for entry in entries:
+            addr = entry.get("address", "").lower()
+            if not addr or len(addr) != 42:
+                continue
+
+            # Check if already exists
+            existing = await db.execute(
+                select(SanctionEntry.id).where(
+                    SanctionEntry.address == addr,
+                    SanctionEntry.source == source,
+                ).limit(1)
+            )
+            if existing.scalar_one_or_none() is not None:
+                continue
+
+            db.add(SanctionEntry(
+                address=addr,
+                name=entry.get("name"),
+                program=entry.get("program"),
+                source=source,
+                source_id=entry.get("id"),
+                is_active=True,
+            ))
+            added += 1
+
+        if added > 0:
+            await db.commit()
+
+    logger.info("Loaded %d sanctions entries from %s", added, source)
+    return added
 
 
 async def add_to_blacklist(
@@ -108,15 +600,26 @@ async def add_to_blacklist(
     source: str = "manual",
     added_by: Optional[str] = None,
 ):
-    """Add an address to the blacklist."""
+    """Add an address to the blacklist (legacy + new sanctions table)."""
+    addr_lower = address.lower()
+
+    # Add to legacy table
     async with async_session() as db:
         entry = BlacklistedWallet(
-            address=address.lower(),
+            address=addr_lower,
             reason=reason,
             source=source,
             added_by=added_by,
         )
         db.add(entry)
+
+        # Also add to sanctions_list for consistency
+        db.add(SanctionEntry(
+            address=addr_lower,
+            name=reason,
+            source=source,
+            is_active=True,
+        ))
         await db.commit()
 
     logger.warning("AML: Address %s added to blacklist: %s", address[:10], reason)
@@ -124,11 +627,18 @@ async def add_to_blacklist(
 
 async def remove_from_blacklist(address: str):
     """Soft-remove an address from the blacklist."""
+    from sqlalchemy import update
+
+    addr_lower = address.lower()
     async with async_session() as db:
-        from sqlalchemy import update
         await db.execute(
             update(BlacklistedWallet)
-            .where(BlacklistedWallet.address == address.lower())
+            .where(BlacklistedWallet.address == addr_lower)
+            .values(is_active=False)
+        )
+        await db.execute(
+            update(SanctionEntry)
+            .where(SanctionEntry.address == addr_lower)
             .values(is_active=False)
         )
         await db.commit()

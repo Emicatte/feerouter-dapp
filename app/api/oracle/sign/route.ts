@@ -189,7 +189,48 @@ export async function POST(req: NextRequest) {
     if (eurValue > 50_000) riskScore = 35
     else if (eurValue > 10_000) riskScore = 20
     else if (eurValue > 5_000)  riskScore = 10
-    const riskLevel = riskScore >= 80 ? 'BLOCKED' : riskScore >= 60 ? 'HIGH' : riskScore >= 30 ? 'MEDIUM' : 'LOW'
+    let riskLevel = riskScore >= 80 ? 'BLOCKED' : riskScore >= 60 ? 'HIGH' : riskScore >= 30 ? 'MEDIUM' : 'LOW'
+
+    // ── Backend AML check (screening + monitoring) ────────
+    try {
+      const amlResp = await fetch(`${BACKEND_URL}/api/v1/aml/check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          sender: senderN,
+          recipient: recipientN,
+          amount_eur: eurValue,
+          chain_id: Number(chainId),
+          token_symbol: symUpper,
+        }),
+        signal: AbortSignal.timeout(3000),
+      })
+      if (amlResp.ok) {
+        const aml = await amlResp.json()
+        if (!aml.approved) {
+          console.warn('[oracle/sign] AML BLOCKED:', aml.details)
+          return NextResponse.json({
+            approved: false, oracleSignature: '0x',
+            oracleNonce: ('0x' + '0'.repeat(64)) as Hex,
+            oracleDeadline: 0, paymentRef: '0x', fiscalRef: '0x',
+            riskScore: 100, riskLevel: 'BLOCKED', jurisdiction: 'BLOCKED',
+            dac8Reportable: false,
+            rejectionReason: `AML: ${aml.details}`,
+          }, { status: 403 })
+        }
+        // Upgrade risk level if AML says higher
+        if (aml.risk_level === 'high' && riskScore < 60) {
+          riskScore = 60
+          riskLevel = 'HIGH'
+        } else if (aml.risk_level === 'medium' && riskScore < 30) {
+          riskScore = 30
+          riskLevel = 'MEDIUM'
+        }
+      }
+    } catch (amlErr) {
+      // AML service unreachable — log but don't block (local blacklist already checked)
+      console.warn('[oracle/sign] AML service unreachable:', amlErr)
+    }
 
     let amountWei: bigint
     try { amountWei = BigInt(amountInWei) }
