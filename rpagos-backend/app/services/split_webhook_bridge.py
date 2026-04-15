@@ -63,7 +63,11 @@ logger = logging.getLogger("rsend.split_bridge")
 # ═══════════════════════════════════════════════════════════
 
 def _load_private_key() -> Optional[str]:
-    """Legge la sweep_private_key dalle settings, con validazione formato."""
+    """Legge la sweep_private_key dalle settings, con validazione formato.
+
+    .. deprecated::
+        Prefer ``get_signer()`` from ``key_manager``. Kept for backward-compat.
+    """
     try:
         pk = get_settings().sweep_private_key
     except Exception:
@@ -79,36 +83,56 @@ def _load_private_key() -> Optional[str]:
 
 class _RpcSigner:
     """
-    Firma e invia TX usando eth_account + rpc_manager.
+    Firma e invia TX tramite ``key_manager.AbstractSigner`` + rpc_manager.
 
     Interfaccia conforme a quanto atteso da
     `app.services.split_executor.SplitExecutor`:
       - `async send_native(to: str, value: int) -> str`
       - `async send_erc20(token_address: str, to: str, amount: int) -> str`
 
-    Nota: questa è un'implementazione iniziale single-key. In produzione
-    andrà sostituita con KMSSigner/HSM wiring (vedi TODO in
-    split_executor.py).
+    Supporta sia LocalSigner (dev) che KMSSigner (prod)
+    in base a ``SIGNER_MODE``.
     """
 
-    def __init__(self, private_key: str, chain_id: int):
-        # Import locali per evitare dipendenza eager all'import del modulo
-        from eth_account import Account
+    def __init__(self, chain_id: int, *, private_key: Optional[str] = None):
         from app.services.rpc_manager import get_rpc_manager
 
-        self._account = Account.from_key(private_key)
+        if private_key:
+            # Backward-compat: accept explicit key (e.g. deposit child keys)
+            from app.services.key_manager import LocalSigner
+            self._signer = LocalSigner(private_key=private_key)
+        else:
+            from app.services.key_manager import get_signer
+            self._signer = get_signer()
+
         self._rpc = get_rpc_manager(chain_id)
         self._chain_id = chain_id
+        self._cached_address: Optional[str] = None
 
     @property
     def address(self) -> str:
-        return self._account.address
+        if self._cached_address:
+            return self._cached_address
+        # Synchronous fallback for property — use _ensure_address() in async context
+        import asyncio
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # Can't block; return placeholder — callers should use _ensure_address()
+            raise RuntimeError("Use 'await signer._ensure_address()' in async context")
+        self._cached_address = loop.run_until_complete(self._signer.get_address())
+        return self._cached_address
+
+    async def _ensure_address(self) -> str:
+        if not self._cached_address:
+            self._cached_address = await self._signer.get_address()
+        return self._cached_address
 
     async def _next_nonce(self) -> int:
         """Legge il nonce 'pending' del master wallet."""
+        addr = await self._ensure_address()
         raw = await self._rpc.consensus_call(
             "eth_getTransactionCount",
-            [self._account.address, "pending"],
+            [addr, "pending"],
         )
         return int(raw, 16)
 
@@ -136,8 +160,8 @@ class _RpcSigner:
             **fee_params,
         }
 
-        signed = self._account.sign_transaction(tx)
-        raw_hex = "0x" + signed.raw_transaction.hex()
+        raw_tx = await self._signer.sign_transaction(tx)
+        raw_hex = "0x" + raw_tx.hex()
         result = await self._rpc.send_raw_transaction(raw_hex)
         tx_hash = result if isinstance(result, str) else ""
 
@@ -149,8 +173,9 @@ class _RpcSigner:
 
     async def send_native(self, to: str, value: int) -> str:
         value_int = int(value)
+        addr = await self._ensure_address()
         est_params = {
-            "from": self._account.address,
+            "from": addr,
             "to": to,
             "value": hex(value_int),
         }
@@ -168,8 +193,9 @@ class _RpcSigner:
         amount_padded = hex(int(amount))[2:].rjust(64, "0")
         data = "0x" + method_id + to_padded + amount_padded
 
+        addr = await self._ensure_address()
         est_params = {
-            "from": self._account.address,
+            "from": addr,
             "to": token_address,
             "data": data,
         }
@@ -316,20 +342,23 @@ async def maybe_execute_split(
                 "duplicate": True,
             }
 
-        # ── Private key / signer ────────────────────────────
-        pk = _load_private_key()
-        if not pk:
+        # ── Signer (via key_manager — supports local + KMS) ──
+        from app.services.key_manager import get_signer, SignerError
+
+        try:
+            _km_signer = get_signer()
+        except SignerError as e:
             logger.error(
-                "[split_bridge] sweep_private_key not configured — cannot execute "
-                "split for contract #%d",
-                contract.id,
+                "[split_bridge] Signer not available — cannot execute "
+                "split for contract #%d: %s",
+                contract.id, e,
             )
             return {
                 "handled": False,
                 "contract_id": contract.id,
                 "execution_id": None,
                 "status": "no_signer",
-                "error": "sweep_private_key not configured",
+                "error": f"Signer not configured: {e}",
             }
 
         # ── Recipients list (solo attivi) ───────────────────
@@ -384,7 +413,7 @@ async def maybe_execute_split(
         plan.client_id = contract.client_id
 
         # ── Execute ─────────────────────────────────────────
-        signer = _RpcSigner(private_key=pk, chain_id=chain_id)
+        signer = _RpcSigner(chain_id=chain_id)
         executor = SplitExecutor(
             signer=signer,
             rpc_client=signer._rpc,

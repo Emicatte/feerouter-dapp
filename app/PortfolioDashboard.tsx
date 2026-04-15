@@ -30,6 +30,7 @@ import {
 import { getRegistry } from '../lib/contractRegistry'
 import dynamic from 'next/dynamic'
 import { useMultiTokenBalances, type TokenBalance } from './hooks/useMultiTokenBalances'
+import { useNonEvmPortfolio, type NonEvmPortfolio } from './hooks/useNonEvmPortfolio'
 
 const SwapModule = dynamic(() => import('./SwapModule'), { ssr: false })
 const AutoForward = dynamic(() => import('./AutoForward'), { ssr: false })
@@ -557,25 +558,377 @@ const staggerContainer = {
 }
 
 // ═══════════════════════════════════════════════════════════
+//  NON-EVM OVERVIEW — Full portfolio (mirrors EVM layout)
+// ═══════════════════════════════════════════════════════════
+function NonEvmOverview({ address, family, nevm, portfolio, switchTab, onClose }: {
+  address: string
+  family: 'tron' | 'solana'
+  nevm: { name: string; color: string; icon: string; url: string }
+  portfolio: NonEvmPortfolio
+  switchTab: (t: Tab) => void
+  onClose: () => void
+}) {
+  const { balances, totalUsd, loading, error, refresh } = portfolio
+
+  if (loading && balances.length === 0) return <OverviewSkeleton />
+
+  if (error && balances.length === 0) return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '48px 20px', gap: 16 }}>
+      <div style={{
+        width: 48, height: 48, borderRadius: '50%',
+        background: `${C.red}12`, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: 22, color: C.red,
+      }}>!</div>
+      <div style={{ fontFamily: C.D, fontSize: 14, color: C.sub, textAlign: 'center', maxWidth: 320 }}>{error}</div>
+      <button onClick={refresh} style={{
+        padding: '10px 24px', borderRadius: 14,
+        background: C.surface, border: `1px solid ${C.border}`,
+        color: C.text, fontFamily: C.D, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+      }}>Retry</button>
+    </div>
+  )
+
+  const donutData = balances
+    .filter(b => (b.usdValue ?? 0) > 0)
+    .sort((a, b) => (b.usdValue ?? 0) - (a.usdValue ?? 0))
+    .slice(0, 5)
+    .map(b => ({ name: b.token.symbol, value: b.usdValue ?? 0, color: TK[b.token.symbol] ?? C.dim }))
+
+  const tokensWithBalance = balances.filter(b => Number(b.formattedBalance) > 0)
+
+  return (
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 24, marginBottom: 32 }}>
+        {/* Left column */}
+        <div>
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontFamily: C.D, fontSize: 36, fontWeight: 600, color: C.text, letterSpacing: '-0.03em' }}>
+              <AnimatedUsd value={totalUsd} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+              <div style={{
+                width: 20, height: 20, borderRadius: '50%',
+                background: `${nevm.color}20`, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 10, fontWeight: 700, color: nevm.color,
+              }}>{nevm.icon}</div>
+              <span style={{ fontFamily: C.D, fontSize: 13, color: C.sub }}>{nevm.name} Portfolio</span>
+            </div>
+          </div>
+
+          {/* Token preview list */}
+          <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '4px 0' }}>
+            {tokensWithBalance.length === 0 ? (
+              <div style={{ padding: '24px 16px', textAlign: 'center', fontFamily: C.D, fontSize: 13, color: C.dim }}>
+                No tokens with balance
+              </div>
+            ) : tokensWithBalance.map((b, i) => (
+              <div key={b.token.symbol} style={{
+                display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px',
+                borderBottom: i < tokensWithBalance.length - 1 ? `1px solid ${C.border}` : 'none',
+              }}>
+                <TIcon symbol={b.token.symbol} size={32} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontFamily: C.D, fontSize: 14, fontWeight: 600, color: C.text }}>{b.token.name}</div>
+                  <div style={{ fontFamily: C.M, fontSize: 11, color: C.dim, marginTop: 1 }}>{b.token.symbol}</div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontFamily: C.M, fontSize: 13, fontWeight: 600, color: C.text }}>
+                    {fb(Number(b.formattedBalance), b.token.symbol)}
+                  </div>
+                  <div style={{ fontFamily: C.M, fontSize: 11, color: C.sub }}>{$(b.usdValue ?? 0)}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Right column */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            {[
+              { label: 'Send', icon: '↗', color: C.pink, action: () => onClose() },
+              { label: 'Receive', icon: '↙', color: C.green, action: undefined },
+              { label: 'Swap', icon: '⇅', color: C.blue, action: () => switchTab('swap') },
+              { label: 'Explorer', icon: '↗', color: nevm.color, action: () => window.open(`${nevm.url}${address}`, '_blank') },
+            ].map(a => (
+              <button key={a.label} onClick={a.action} style={{
+                padding: '20px 16px', borderRadius: 16,
+                background: C.surface, border: `1px solid ${C.border}`,
+                cursor: 'pointer', display: 'flex', flexDirection: 'column',
+                alignItems: 'flex-start', gap: 8, transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = C.card}
+              onMouseLeave={e => e.currentTarget.style.background = C.surface}
+              >
+                <span style={{ fontSize: 18, color: a.color }}>{a.icon}</span>
+                <span style={{ fontFamily: C.D, fontSize: 13, fontWeight: 600, color: a.color }}>{a.label}</span>
+              </button>
+            ))}
+          </div>
+
+          <div style={{
+            background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16,
+            padding: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12,
+          }}>
+            <div>
+              <div style={{ fontFamily: C.D, fontSize: 11, color: C.dim, marginBottom: 4 }}>Tokens</div>
+              <div style={{ fontFamily: C.D, fontSize: 20, fontWeight: 700, color: C.text }}>{tokensWithBalance.length}</div>
+            </div>
+            <div>
+              <div style={{ fontFamily: C.D, fontSize: 11, color: C.dim, marginBottom: 4 }}>Total value</div>
+              <div style={{ fontFamily: C.D, fontSize: 20, fontWeight: 700, color: C.text }}>{$(totalUsd)}</div>
+            </div>
+          </div>
+
+          {donutData.length > 0 && (
+            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: '12px 16px' }}>
+              <div style={{ fontFamily: C.D, fontSize: 11, color: C.dim, marginBottom: 8 }}>Distribution</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 80, height: 80, flexShrink: 0 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={donutData} dataKey="value" innerRadius={22} outerRadius={36} paddingAngle={2} strokeWidth={0} animationDuration={600}>
+                        {donutData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                      </Pie>
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
+                  {donutData.map(d => (
+                    <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ width: 6, height: 6, borderRadius: 2, background: d.color, flexShrink: 0 }} />
+                      <span style={{ fontFamily: C.M, fontSize: 10, color: C.sub, flex: 1 }}>{d.name}</span>
+                      <span style={{ fontFamily: C.M, fontSize: 10, color: C.dim }}>
+                        {totalUsd > 0 ? ((d.value / totalUsd) * 100).toFixed(0) : 0}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Trust signals */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        <div style={{
+          background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16,
+          padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 12,
+        }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 10,
+            background: `${nevm.color}12`, border: `1px solid ${nevm.color}20`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 16, fontWeight: 700, color: nevm.color, flexShrink: 0,
+          }}>{nevm.icon}</div>
+          <div>
+            <div style={{ fontFamily: C.D, fontSize: 12, fontWeight: 600, color: nevm.color }}>{nevm.name} Network</div>
+            <div style={{ fontFamily: C.M, fontSize: 10, color: C.dim, marginTop: 2 }}>Non-custodial wallet</div>
+          </div>
+        </div>
+        <a href={`${nevm.url}${address}`} target="_blank" rel="noopener noreferrer" style={{
+          background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16,
+          padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none',
+        }}>
+          <div style={{
+            width: 36, height: 36, borderRadius: 10,
+            background: 'rgba(76,130,251,0.08)', border: '1px solid rgba(76,130,251,0.15)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 14, color: C.blue, flexShrink: 0,
+          }}>↗</div>
+          <div>
+            <div style={{ fontFamily: C.D, fontSize: 12, fontWeight: 600, color: C.blue }}>
+              View on {family === 'tron' ? 'TronScan' : 'Solscan'}
+            </div>
+            <div style={{ fontFamily: C.M, fontSize: 10, color: C.dim, marginTop: 2 }}>Full transaction history</div>
+          </div>
+        </a>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
+//  NON-EVM TOKENS TAB
+// ═══════════════════════════════════════════════════════════
+function NonEvmTokens({ portfolio, nevm }: {
+  portfolio: NonEvmPortfolio
+  nevm: { name: string; color: string; icon: string; url: string }
+}) {
+  const { balances, totalUsd, loading, error, refresh } = portfolio
+  const [zeroExp, setZeroExp] = useState(false)
+
+  if (loading && balances.length === 0) return <TokensSkeleton />
+  if (error && balances.length === 0) return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '48px 20px', gap: 16 }}>
+      <div style={{ fontFamily: C.D, fontSize: 14, color: C.sub, textAlign: 'center' }}>{error}</div>
+      <button onClick={refresh} style={{
+        padding: '10px 24px', borderRadius: 14, background: C.surface,
+        border: `1px solid ${C.border}`, color: C.text, fontFamily: C.D, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+      }}>Retry</button>
+    </div>
+  )
+
+  const active = balances.filter(b => Number(b.formattedBalance) > 0).sort((a, b) => (b.usdValue ?? 0) - (a.usdValue ?? 0))
+  const zero = balances.filter(b => Number(b.formattedBalance) === 0)
+
+  if (active.length === 0 && zero.length === 0) return (
+    <EmptyState icon="◇" title="No tokens found" subtitle={`Connect a wallet on ${nevm.name} to see your token balances.`} />
+  )
+
+  return (
+    <div>
+      {totalUsd > 0 && (
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '0 4px 16px', borderBottom: `1px solid ${C.border}` }}>
+          <span style={{ fontFamily: C.D, fontSize: 28, fontWeight: 600, color: C.text, letterSpacing: '-0.02em' }}>{$(totalUsd)}</span>
+          <span style={{ fontFamily: C.M, fontSize: 11, color: C.dim }}>Total portfolio</span>
+        </div>
+      )}
+      <div style={{ display: 'flex', padding: '8px 4px 12px', borderBottom: `1px solid ${C.border}` }}>
+        <span style={{ flex: 1, fontFamily: C.D, fontSize: 12, color: C.dim, fontWeight: 500 }}>Token</span>
+        <span style={{ width: 56, textAlign: 'center', fontFamily: C.D, fontSize: 12, color: C.dim, fontWeight: 500 }}>7d</span>
+        <span style={{ width: 120, textAlign: 'right', fontFamily: C.D, fontSize: 12, color: C.dim, fontWeight: 500 }}>Balance</span>
+        <span style={{ width: 100, textAlign: 'right', fontFamily: C.D, fontSize: 12, color: C.dim, fontWeight: 500 }}>USD Value</span>
+      </div>
+      <motion.div variants={staggerContainer} initial="hidden" animate="show">
+        {active.map((b, i) => (
+          <motion.div key={b.token.symbol} variants={{ hidden: { opacity: 0, y: 6 }, show: { opacity: 1, y: 0 } }} style={{
+            display: 'flex', alignItems: 'center', padding: '14px 4px',
+            borderBottom: (i < active.length - 1 || zero.length > 0) ? `1px solid ${C.border}` : 'none',
+            transition: 'background 0.1s',
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <TIcon symbol={b.token.symbol} size={36} />
+              <div>
+                <div style={{ fontFamily: C.D, fontSize: 14, fontWeight: 600, color: C.text }}>{b.token.name}</div>
+                <div style={{ fontFamily: C.M, fontSize: 11, color: C.dim, marginTop: 1 }}>{b.token.symbol}</div>
+              </div>
+            </div>
+            <div style={{ width: 56, display: 'flex', justifyContent: 'center', alignItems: 'center' }}><Sparkline symbol={b.token.symbol} /></div>
+            <div style={{ width: 120, textAlign: 'right', fontFamily: C.M, fontSize: 13, fontWeight: 600, color: C.text }}>{fb(Number(b.formattedBalance), b.token.symbol)}</div>
+            <div style={{ width: 100, textAlign: 'right', fontFamily: C.M, fontSize: 13, fontWeight: 600, color: C.text }}>{$(b.usdValue ?? 0)}</div>
+          </motion.div>
+        ))}
+      </motion.div>
+      {zero.length > 0 && (
+        <div>
+          <button onClick={() => setZeroExp(z => !z)} style={{
+            width: '100%', display: 'flex', alignItems: 'center', gap: 6,
+            padding: '12px 4px', background: 'transparent', border: 'none', cursor: 'pointer',
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          >
+            <span style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.dim, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>
+              {zeroExp ? '▾' : '▸'} {zero.length} token{zero.length > 1 ? 's' : ''} with zero balance
+            </span>
+          </button>
+          {zeroExp && zero.map((b, i) => (
+            <div key={`${b.token.symbol}-zero`} style={{
+              display: 'flex', alignItems: 'center', padding: '10px 4px',
+              borderBottom: i < zero.length - 1 ? `1px solid ${C.border}` : 'none', opacity: 0.4,
+            }}>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12 }}>
+                <TIcon symbol={b.token.symbol} size={32} />
+                <div>
+                  <div style={{ fontFamily: C.D, fontSize: 13, fontWeight: 500, color: C.dim }}>{b.token.name}</div>
+                  <div style={{ fontFamily: C.M, fontSize: 10, color: C.dim, marginTop: 1 }}>{b.token.symbol}</div>
+                </div>
+              </div>
+              <div style={{ width: 120, textAlign: 'right', fontFamily: C.M, fontSize: 12, color: C.dim }}>0</div>
+              <div style={{ width: 100, textAlign: 'right', fontFamily: C.M, fontSize: 12, color: C.dim }}>$0.00</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
+//  NON-EVM ACTIVITY TAB
+// ═══════════════════════════════════════════════════════════
+function NonEvmActivity({ address, family, nevm }: {
+  address: string
+  family: 'tron' | 'solana'
+  nevm: { name: string; color: string; icon: string; url: string }
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '48px 20px', gap: 20 }}>
+      <svg width={64} height={64} viewBox="0 0 64 64" fill="none" style={{ opacity: 0.4 }}>
+        <circle cx={32} cy={32} r={30} stroke={C.dim} strokeWidth={1.5} strokeDasharray="6 4" />
+        <text x={32} y={36} textAnchor="middle" fill={C.dim} fontSize={22}>↕</text>
+      </svg>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontFamily: C.D, fontSize: 15, fontWeight: 600, color: C.sub, marginBottom: 6 }}>Transaction History</div>
+        <div style={{ fontFamily: C.M, fontSize: 12, color: C.dim, lineHeight: 1.5, maxWidth: 340 }}>
+          View your full {nevm.name} transaction history on the explorer.
+        </div>
+      </div>
+      <a href={`${nevm.url}${address}`} target="_blank" rel="noopener noreferrer" style={{
+        display: 'inline-flex', alignItems: 'center', gap: 8,
+        padding: '12px 24px', borderRadius: 14,
+        background: `${nevm.color}10`, border: `1px solid ${nevm.color}25`,
+        color: nevm.color, fontFamily: C.D, fontSize: 13, fontWeight: 700,
+        textDecoration: 'none', cursor: 'pointer',
+      }}>
+        ↗ View on {family === 'tron' ? 'TronScan' : 'Solscan'}
+      </a>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
 //  MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════
-interface Props { open: boolean; onClose: () => void; initialTab?: Tab }
+/** Override per wallet non-EVM */
+export interface OverrideWallet {
+  family: 'tron' | 'solana'
+  address: string
+}
 
-export default function PortfolioDashboard({ open, onClose, initialTab }: Props) {
-  const { address, isConnected } = useAccount()
-  const chainId = useChainId()
-  const { data, loading, refresh } = usePortfolio(address, chainId)
+interface Props { open: boolean; onClose: () => void; initialTab?: Tab; overrideWallet?: OverrideWallet }
+
+const NON_EVM_EXPLORER: Record<string, { name: string; color: string; icon: string; url: string }> = {
+  tron:   { name: 'TRON',   color: '#FF0000', icon: '◆', url: 'https://tronscan.org/#/address/' },
+  solana: { name: 'Solana', color: '#9945FF', icon: '◎', url: 'https://solscan.io/account/' },
+}
+
+export default function PortfolioDashboard({ open, onClose, initialTab, overrideWallet }: Props) {
+  const { address: evmAddress, isConnected: evmConnected } = useAccount()
+  const evmChainId = useChainId()
+
+  // Resolve active wallet source
+  const isNonEvm = !!overrideWallet
+  const address = isNonEvm ? overrideWallet!.address : evmAddress
+  const isConnected = isNonEvm ? true : evmConnected
+  const chainId = isNonEvm ? 0 : evmChainId
+
+  const { data, loading, refresh } = usePortfolio(isNonEvm ? undefined : address, chainId)
   const [tab, setTab] = useState<Tab>(initialTab ?? 'overview')
   const [tabLoading, setTabLoading] = useState(false)
   const [range, setRange] = useState<Range>('1D')
   const [copied, setCopied] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
-  const reg = getRegistry(chainId)
+  const reg = isNonEvm ? null : getRegistry(chainId)
   const ld = loading && !data
 
-  // ── On-chain multi-token balances + EUR values ──────────────────────
-  const { balances: onChainBalances, totalEur, isLoading: balancesLoading } = useMultiTokenBalances(chainId, address as `0x${string}` | undefined)
+  // ── On-chain multi-token balances + EUR values (EVM only) ──────────
+  const { balances: onChainBalances, totalEur, isLoading: balancesLoading } = useMultiTokenBalances(
+    isNonEvm ? 0 : chainId,
+    isNonEvm ? undefined : (address as `0x${string}` | undefined),
+  )
   const [zeroExpanded, setZeroExpanded] = useState(false)
+
+  // ── Non-EVM portfolio via chain adapters ──────────────────
+  const nonEvmPortfolio = useNonEvmPortfolio(
+    overrideWallet?.family ?? 'evm',
+    isNonEvm ? overrideWallet?.address ?? null : null,
+  )
 
   // Split: tokens with balance > 0 sorted by EUR desc, then zeros
   const { activeBalances, zeroBalances } = useMemo(() => {
@@ -642,12 +995,15 @@ export default function PortfolioDashboard({ open, onClose, initialTab }: Props)
     })
   }, [address])
 
+  const nevm = isNonEvm ? NON_EVM_EXPLORER[overrideWallet!.family] : null
+
   // Refresh handler with animation (improvement #8)
   const handleRefresh = useCallback(() => {
     setRefreshing(true)
-    refresh()
+    if (isNonEvm) nonEvmPortfolio.refresh()
+    else refresh()
     setTimeout(() => setRefreshing(false), 1200)
-  }, [refresh])
+  }, [refresh, isNonEvm, nonEvmPortfolio])
 
   if (!isConnected || !address) return null
 
@@ -706,10 +1062,25 @@ export default function PortfolioDashboard({ open, onClose, initialTab }: Props)
                   style={{ display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', position: 'relative' }}
                   onClick={copyAddress}
                 >
-                  <Ident addr={address} size={40} />
+                  {nevm ? (
+                    <div style={{
+                      width: 40, height: 40, borderRadius: '50%',
+                      background: `${nevm.color}20`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 20, fontWeight: 700, color: nevm.color,
+                      border: `1.5px solid ${nevm.color}30`, flexShrink: 0,
+                    }}>{nevm.icon}</div>
+                  ) : (
+                    <Ident addr={address} size={40} />
+                  )}
                   <span style={{ fontFamily: C.D, fontSize: 18, fontWeight: 600, color: C.text }}>
                     {ta(address, 6, 4)}
                   </span>
+                  {nevm && (
+                    <span style={{ fontFamily: C.D, fontSize: 11, color: nevm.color, fontWeight: 600 }}>
+                      {nevm.name}
+                    </span>
+                  )}
                   {copied && (
                     <motion.span
                       initial={{ opacity: 0, y: 4 }}
@@ -770,8 +1141,9 @@ export default function PortfolioDashboard({ open, onClose, initialTab }: Props)
               <div style={{ display: 'flex', gap: 0, borderBottom: `1px solid ${C.border}`, position: 'relative' }}>
                 {TABS.map(([k, l]) => {
                   // Tab count badges (improvement #10)
-                  const count = k === 'tokens' ? (data?.assets?.length ?? 0)
-                    : k === 'activity' ? (data?.activity?.length ?? 0)
+                  const count = k === 'tokens'
+                    ? (isNonEvm ? nonEvmPortfolio.balances.length : (data?.assets?.length ?? 0))
+                    : k === 'activity' ? (isNonEvm ? 0 : (data?.activity?.length ?? 0))
                     : 0
 
                   return (
@@ -842,7 +1214,13 @@ export default function PortfolioDashboard({ open, onClose, initialTab }: Props)
           {tabLoading && tab === 'forward' && <ForwardSkeleton />}
 
           {/* ═══ OVERVIEW ══════════════════════════════════ */}
-          {!tabLoading && tab === 'overview' && (
+          {!tabLoading && tab === 'overview' && isNonEvm && nevm && (
+            <NonEvmOverview
+              address={address!} family={overrideWallet!.family} nevm={nevm}
+              portfolio={nonEvmPortfolio} switchTab={switchTab} onClose={onClose}
+            />
+          )}
+          {!tabLoading && tab === 'overview' && !isNonEvm && (
             <div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 24, marginBottom: 32 }}>
                 {/* ── Left column ── */}
@@ -1127,7 +1505,10 @@ export default function PortfolioDashboard({ open, onClose, initialTab }: Props)
           )}
 
           {/* ═══ TOKENS ════════════════════════════════════ */}
-          {!tabLoading && tab === 'tokens' && (
+          {!tabLoading && tab === 'tokens' && isNonEvm && nevm && (
+            <NonEvmTokens portfolio={nonEvmPortfolio} nevm={nevm} />
+          )}
+          {!tabLoading && tab === 'tokens' && !isNonEvm && (
             (ld || balancesLoading) ? (
               <TokensSkeleton />
             ) : (activeBalances.length === 0 && zeroBalances.length === 0) ? (
@@ -1244,7 +1625,10 @@ export default function PortfolioDashboard({ open, onClose, initialTab }: Props)
           )}
 
           {/* ═══ ACTIVITY ══════════════════════════════════ */}
-          {!tabLoading && tab === 'activity' && (
+          {!tabLoading && tab === 'activity' && isNonEvm && nevm && (
+            <NonEvmActivity address={address!} family={overrideWallet!.family} nevm={nevm} />
+          )}
+          {!tabLoading && tab === 'activity' && !isNonEvm && (
             ld ? (
               <ActivitySkeleton />
             ) : (!data?.activity?.length) ? (

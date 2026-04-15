@@ -8,6 +8,49 @@ import { randomBytes }         from 'crypto'
 
 // ── Config ─────────────────────────────────────────────────────────────────
 const ORACLE_PRIVATE_KEY = process.env.ORACLE_PRIVATE_KEY as Hex | undefined
+const BACKEND_URL = process.env.RPAGOS_BACKEND_URL || 'http://localhost:8000'
+
+// ── Signing Guard — pre-flight check via backend ───────────────────────────
+async function signingGuardCheck(params: {
+  wallet: string; recipient: string; tokenIn: string;
+  amountInWei: string; nonce: string; deadline: number;
+  chainId: number; ipAddress: string | null; contractAddress: string;
+}): Promise<{ allowed: boolean; reason?: string }> {
+  try {
+    const resp = await fetch(`${BACKEND_URL}/api/internal/signing/check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        wallet: params.wallet,
+        recipient: params.recipient,
+        token_in: params.tokenIn,
+        amount_in_wei: params.amountInWei,
+        nonce: params.nonce,
+        deadline: params.deadline,
+        chain_id: params.chainId,
+        ip_address: params.ipAddress,
+        contract_address: params.contractAddress,
+      }),
+      signal: AbortSignal.timeout(3000), // 3s timeout
+    })
+    if (!resp.ok) return { allowed: false, reason: `guard_http_${resp.status}` }
+    return await resp.json()
+  } catch (err) {
+    // Fail-closed: if backend guard is unreachable, block the signature
+    console.error('[oracle/sign] Signing guard unreachable:', err)
+    return { allowed: false, reason: 'guard_unavailable (fail-closed)' }
+  }
+}
+
+// ── Audit log — fire-and-forget to backend ────────────────────────────────
+function auditLog(params: Record<string, unknown>): void {
+  fetch(`${BACKEND_URL}/api/internal/signing/audit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+    signal: AbortSignal.timeout(5000),
+  }).catch(err => console.error('[oracle/sign] Audit log failed:', err))
+}
 
 function routerForChain(chainId: number): `0x${string}` {
   const ZERO = '0x0000000000000000000000000000000000000000' as `0x${string}`
@@ -153,7 +196,7 @@ export async function POST(req: NextRequest) {
     catch { return NextResponse.json({ error: `amountInWei non valido: ${amountInWei}` }, { status: 400 }) }
 
     const nonce    = ('0x' + randomBytes(32).toString('hex')) as Hex
-    const deadline = BigInt(Math.floor(Date.now() / 1000) + 1200)
+    const deadline = BigInt(Math.floor(Date.now() / 1000) + 600) // 10 min (was 20 min)
 
     const paymentRef = keccak256(toHex(`PAY-${Date.now()}-${randomBytes(4).toString('hex')}`))
     const fiscalRef  = keccak256(toHex(`FISCAL-${symUpper}-${Date.now()}`))
@@ -166,6 +209,53 @@ export async function POST(req: NextRequest) {
         rejectionReason: `Contratto FeeRouter non configurato su chainId=${chainId}.`,
         _debug: { chainId, contractAddr },
       }, { status: 503 })
+    }
+
+    // ── Signing Guard: rate limit + nonce + parameter validation ──
+    const clientIp = req.headers.get('x-real-ip')
+      || req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+      || null
+
+    const guard = await signingGuardCheck({
+      wallet: senderN,
+      recipient: recipientN,
+      tokenIn: tokenInN,
+      amountInWei: amountInWei,
+      nonce,
+      deadline: Number(deadline),
+      chainId: Number(chainId),
+      ipAddress: clientIp,
+      contractAddress: contractAddr,
+    })
+
+    if (!guard.allowed) {
+      const account = ORACLE_PRIVATE_KEY ? privateKeyToAccount(ORACLE_PRIVATE_KEY) : null
+      // Audit denied attempt
+      auditLog({
+        signer_address: account?.address ?? 'NOT_CONFIGURED',
+        chain_id: Number(chainId),
+        sender: senderN,
+        recipient: recipientN,
+        token_in: tokenInN,
+        amount_in_wei: amountInWei,
+        nonce,
+        deadline: Number(deadline),
+        approved: false,
+        denial_reason: guard.reason,
+        risk_score: riskScore,
+        risk_level: riskLevel,
+        ip_address: clientIp,
+        user_agent: req.headers.get('user-agent'),
+      })
+
+      console.warn(`[oracle/sign] BLOCKED: ${guard.reason}`)
+      return NextResponse.json({
+        approved: false, oracleSignature: '0x',
+        oracleNonce: nonce, oracleDeadline: Number(deadline),
+        paymentRef: '0x', fiscalRef: '0x',
+        riskScore, riskLevel: 'BLOCKED',
+        rejectionReason: `Signing guard: ${guard.reason}`,
+      }, { status: 429 })
     }
 
     const account = privateKeyToAccount(ORACLE_PRIVATE_KEY)
@@ -210,6 +300,23 @@ export async function POST(req: NextRequest) {
     }
 
     console.log('[oracle/sign] ✅ self-verifica OK —', recovered)
+
+    // ── Audit log: record approved signature ───────────
+    auditLog({
+      signer_address: account.address,
+      chain_id: Number(chainId),
+      sender: senderN,
+      recipient: recipientN,
+      token_in: tokenInN,
+      amount_in_wei: amountInWei,
+      nonce,
+      deadline: Number(deadline),
+      approved: true,
+      risk_score: riskScore,
+      risk_level: riskLevel,
+      ip_address: clientIp,
+      user_agent: req.headers.get('user-agent'),
+    })
 
     return NextResponse.json({
       approved: true,

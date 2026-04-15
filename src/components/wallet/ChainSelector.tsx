@@ -15,21 +15,7 @@ import {
 } from '../../config/chains';
 import type { SupportedChainId } from '../../types/chain';
 import type { EVMChain } from '../../types/chain';
-
-/** Chain-specific Tailwind bg colors for the indicator dot */
-const CHAIN_DOT_COLORS: Record<number, string> = {
-  1: 'bg-blue-500',
-  10: 'bg-red-500',
-  56: 'bg-yellow-500',
-  137: 'bg-purple-500',
-  324: 'bg-indigo-400',
-  8453: 'bg-blue-600',
-  42161: 'bg-sky-500',
-  42220: 'bg-emerald-500',
-  43114: 'bg-red-600',
-  81457: 'bg-yellow-300',
-  84532: 'bg-blue-400',
-};
+import { ChainLogo } from '../ChainLogo';
 
 /** ChainSelector props */
 export interface ChainSelectorProps {
@@ -235,8 +221,6 @@ export function ChainSelector({
 
   /** Current chain display */
   const currentChain = allChains.find((c) => c.id === currentChainId);
-  const dotColor =
-    CHAIN_DOT_COLORS[currentChainId] ?? 'bg-gray-500';
 
   return (
     <div ref={containerRef} className={`relative ${className ?? ''}`}>
@@ -261,7 +245,7 @@ export function ChainSelector({
         ) : isWrongNetwork ? (
           <WarningIcon />
         ) : (
-          <span className={`inline-block h-3 w-3 rounded-full ${dotColor}`} />
+          <ChainLogo chainId={currentChainId} size={16} />
         )}
         <span className="hidden sm:inline">
           {isWrongNetwork
@@ -314,7 +298,6 @@ export function ChainSelector({
             filteredChains.map((chain, index) => {
               const isActive = chain.id === currentChainId;
               const isHighlighted = index === highlightIndex;
-              const color = CHAIN_DOT_COLORS[chain.id] ?? 'bg-gray-500';
 
               return (
                 <button
@@ -336,9 +319,7 @@ export function ChainSelector({
                       : 'hover:bg-gray-800',
                   ].join(' ')}
                 >
-                  <span
-                    className={`inline-block h-3 w-3 flex-shrink-0 rounded-full ${color}`}
-                  />
+                  <ChainLogo chainId={chain.id} size={20} />
                   <span className="flex-1 text-left">
                     {chain.name}
                     {chain.testnet && (

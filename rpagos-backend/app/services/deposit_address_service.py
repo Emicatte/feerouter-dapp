@@ -273,28 +273,36 @@ async def sweep_deposit(
         # Invia gas dal hot wallet
         gas_to_send = gas_needed - native_balance + (gas_price * 5_000)  # margine extra
 
-        hot_wallet_key = settings.sweep_private_key
-        if not hot_wallet_key:
-            raise ValueError("SWEEP_PRIVATE_KEY non configurato — impossibile inviare gas per lo sweep")
+        # ── Gas funding via key_manager (supports local + KMS) ──
+        from app.services.key_manager import get_signer, SignerError
+        import asyncio
 
-        hot_account: LocalAccount = Account.from_key(hot_wallet_key)
+        try:
+            km_signer = get_signer()
+        except SignerError:
+            raise ValueError("Signer not configured — impossibile inviare gas per lo sweep")
+
+        # get_address() is async; we're in sync context here
+        loop = asyncio.get_event_loop()
+        hot_wallet_addr = loop.run_until_complete(km_signer.get_address())
+
         gas_fund_tx = {
-            "from": hot_account.address,
+            "from": hot_wallet_addr,
             "to": deposit_addr,
             "value": gas_to_send,
             "gas": 21_000,
             "gasPrice": gas_price,
-            "nonce": w3.eth.get_transaction_count(hot_account.address),
+            "nonce": w3.eth.get_transaction_count(hot_wallet_addr),
             "chainId": w3.eth.chain_id,
         }
 
-        signed_gas_tx = hot_account.sign_transaction(gas_fund_tx)
-        gas_tx_hash = w3.eth.send_raw_transaction(signed_gas_tx.raw_transaction)
+        raw_signed = loop.run_until_complete(km_signer.sign_transaction(gas_fund_tx))
+        gas_tx_hash = w3.eth.send_raw_transaction(raw_signed)
         w3.eth.wait_for_transaction_receipt(gas_tx_hash, timeout=120)
 
         logger.info(
             "Gas funded: hot_wallet=%s -> deposit=%s amount=%s wei tx=%s",
-            hot_account.address, deposit_addr, gas_to_send, gas_tx_hash.hex(),
+            hot_wallet_addr, deposit_addr, gas_to_send, gas_tx_hash.hex(),
         )
 
     # ── Build sweep TX ───────────────────────────────────────

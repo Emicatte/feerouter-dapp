@@ -210,7 +210,7 @@ export default function SecurityOverlay() {
           <span style={{ fontFamily: C.D, fontSize: 12, fontWeight: 700, color: C.green }}>All Systems Operational</span>
         </div>
         <a
-          href="https://basescan.org/address/0xB2174c6B1359434B9d8004Ca5740bcDDF4C8691D"
+          href="https://basescan.org/address/0x81d78BDD917D5A43a9E424B905407495b8f2c0f4"
           target="_blank"
           rel="noopener noreferrer"
           style={{ fontFamily: C.M, fontSize: 10, color: C.sub, textDecoration: 'none' }}

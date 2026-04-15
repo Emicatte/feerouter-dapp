@@ -56,6 +56,12 @@ async def lifespan(app: FastAPI):
             environment="production" if not settings.debug else "development",
         )
 
+    # ── OpenTelemetry tracing ───────────────────────
+    from app.observability import setup_telemetry
+    otel_enabled = setup_telemetry(app, engine)
+    if otel_enabled:
+        logger.info("OpenTelemetry tracing active")
+
     # ── Init DB ──────────────────────────────────────
     await init_db()
 
@@ -201,6 +207,10 @@ app.add_middleware(
 )
 
 
+# ── Correlation ID Middleware ──────────────────────────
+from app.middleware.correlation import CorrelationMiddleware
+app.add_middleware(CorrelationMiddleware)
+
 # ── Request Context Middleware ──────────────────────────
 from app.middleware.request_context import RequestContextMiddleware
 app.add_middleware(RequestContextMiddleware)
@@ -258,6 +268,10 @@ from app.api.merchant_routes import merchant_router
 app.include_router(merchant_router)
 from app.api.split_routes import split_router
 app.include_router(split_router)
+from app.api.health_routes import health_router
+app.include_router(health_router)
+from app.api.signing_routes import signing_router
+app.include_router(signing_router)
 
 
 # ── Health checks ────────────────────────────────────────
@@ -491,9 +505,9 @@ async def health_config():
     }
 
 
-@app.get("/health/deep")
-async def health_deep():
-    """Deep health check: risultati dell'ultima riconciliazione (per monitoring dashboard)."""
+@app.get("/health/reconciliation")
+async def health_reconciliation():
+    """Risultati dell'ultima riconciliazione (per monitoring dashboard)."""
     report = get_last_report()
     if report is None:
         return {

@@ -93,6 +93,23 @@ class CircuitOpenError(Exception):
         )
 
 
+class SweepBlockedError(Exception):
+    """Raised when a financial operation is blocked due to critical dependency failure.
+
+    Fail-closed: sweep, transfer, and execution operations MUST NOT proceed
+    when Redis or Postgres are unavailable, as this could lead to duplicate
+    executions or data inconsistency.
+    """
+
+    def __init__(self, dependency: str, reason: str = ""):
+        self.dependency = dependency
+        self.reason = reason
+        super().__init__(
+            f"Financial operation BLOCKED: {dependency} unavailable"
+            + (f" — {reason}" if reason else "")
+        )
+
+
 # ═══════════════════════════════════════════════════════════════
 #  Redis Lua Scripts (atomic state transitions)
 # ═══════════════════════════════════════════════════════════════
@@ -401,6 +418,18 @@ class CircuitBreaker:
             "Circuit breaker '%s' FORCE OPENED: %s (was %s)",
             self.name, reason or "manual", old_state,
         )
+
+        # Fire critical alert (best-effort, non-blocking)
+        try:
+            from app.services.alert_service import critical_alert
+            import asyncio
+            asyncio.ensure_future(critical_alert(
+                f"Circuit breaker '{self.name}' OPENED\n"
+                f"Reason: {reason or 'manual'}\n"
+                f"Previous state: {old_state}"
+            ))
+        except Exception:
+            pass
 
     async def force_close(self) -> None:
         """Manually close the circuit breaker and reset counters."""
@@ -715,3 +744,106 @@ def circuit_breaker(
         return wrapper
 
     return decorator
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Dependency Guard — Fail-Closed for Financial Operations
+#
+#  Policy:
+#    Financial ops (sweep, transfer, execution):
+#      → Redis down  → BLOCK (no fallback — cannot guarantee idempotency)
+#      → Postgres down → BLOCK (no data persistence)
+#      → RPC down (per-chain) → BLOCK that chain only
+#
+#    Read ops (balance, portfolio, status):
+#      → graceful degradation with cached data (existing behavior)
+# ═══════════════════════════════════════════════════════════════
+
+class DependencyGuard:
+    """Pre-flight check for critical dependencies before financial operations.
+
+    Usage::
+
+        guard = DependencyGuard()
+
+        # Before any sweep/transfer/execution:
+        await guard.require_redis()          # raises SweepBlockedError if down
+        await guard.require_postgres()       # raises SweepBlockedError if down
+        await guard.require_rpc(chain_id=8453)  # raises SweepBlockedError if down
+        await guard.require_all(chain_id=8453)  # checks all three
+    """
+
+    async def require_redis(self) -> None:
+        """Fail-closed: raises SweepBlockedError if Redis is unreachable."""
+        try:
+            from app.services.cache_service import get_redis
+            r = await get_redis()
+            if r is None:
+                raise SweepBlockedError("redis", "not configured")
+            await asyncio.wait_for(r.ping(), timeout=2.0)
+        except SweepBlockedError:
+            raise
+        except asyncio.TimeoutError:
+            raise SweepBlockedError("redis", "ping timeout (>2s)")
+        except Exception as e:
+            raise SweepBlockedError("redis", str(e)[:200])
+
+    async def require_postgres(self) -> None:
+        """Fail-closed: raises SweepBlockedError if Postgres is unreachable."""
+        try:
+            from app.db.session import engine
+            from sqlalchemy import text
+            async with engine.connect() as conn:
+                await asyncio.wait_for(
+                    conn.execute(text("SELECT 1")),
+                    timeout=3.0,
+                )
+        except SweepBlockedError:
+            raise
+        except asyncio.TimeoutError:
+            raise SweepBlockedError("postgres", "query timeout (>3s)")
+        except Exception as e:
+            raise SweepBlockedError("postgres", str(e)[:200])
+
+    async def require_rpc(self, chain_id: int = 8453) -> None:
+        """Fail-closed: raises SweepBlockedError if RPC for chain is unreachable.
+
+        Uses a per-chain circuit breaker. If the CB is OPEN for this chain,
+        the operation is blocked immediately without attempting an RPC call.
+        """
+        cb_name = f"rpc_{chain_id}"
+        cb = get_circuit_breaker(cb_name)
+        if cb is not None and cb.state == CBState.OPEN:
+            raise SweepBlockedError(
+                f"rpc (chain {chain_id})",
+                f"circuit breaker '{cb_name}' is OPEN",
+            )
+
+        try:
+            from app.services.rpc_manager import get_rpc_manager
+            rpc = get_rpc_manager(chain_id)
+            await asyncio.wait_for(
+                rpc.call("eth_blockNumber", []),
+                timeout=5.0,
+            )
+        except SweepBlockedError:
+            raise
+        except asyncio.TimeoutError:
+            raise SweepBlockedError(
+                f"rpc (chain {chain_id})", "eth_blockNumber timeout (>5s)"
+            )
+        except Exception as e:
+            raise SweepBlockedError(f"rpc (chain {chain_id})", str(e)[:200])
+
+    async def require_all(self, chain_id: int = 8453) -> None:
+        """Check all critical dependencies for a financial operation.
+
+        Raises SweepBlockedError on the first failure.
+        """
+        await self.require_postgres()
+        await self.require_redis()
+        await self.require_rpc(chain_id)
+
+
+# Singleton instance
+dependency_guard = DependencyGuard()

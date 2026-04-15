@@ -13,7 +13,8 @@ const PortfolioDashboard = dynamic(() => import('./PortfolioDashboard'), { ssr: 
 
 // ── Identicon ──────────────────────────────────────────────────────────────
 function addressToColors(address: string): [string, string, string] {
-  const h = address.toLowerCase().slice(2)
+  // Skip 0x prefix for EVM, or use full string for non-EVM (Tron/Solana)
+  const h = address.startsWith('0x') ? address.toLowerCase().slice(2) : address.toLowerCase()
   const h1 = parseInt(h.slice(0,6), 16) % 360
   const h2 = (h1 + 120 + (parseInt(h.slice(6,10), 16) % 120)) % 360
   const h3 = (h2 + 90 + (parseInt(h.slice(10,14), 16) % 90)) % 360
@@ -44,12 +45,30 @@ interface RecentTx {
   status: string; recipient: string; tx_timestamp: string
 }
 
+// ── Non-EVM wallet prop ───────────────────────────────────────────────────
+export interface NonEvmWalletProps {
+  family: 'tron' | 'solana'
+  address: string
+  disconnect: () => void
+}
+
+const NON_EVM_META: Record<string, { name: string; color: string; icon: string; explorer: string }> = {
+  tron:   { name: 'TRON',   color: '#FF0000', icon: '◆', explorer: 'https://tronscan.org/#/address/' },
+  solana: { name: 'Solana', color: '#9945FF', icon: '◎', explorer: 'https://solscan.io/account/' },
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
-export default function AccountHeader() {
-  const { address, isConnected } = useAccount()
-  const { disconnect }           = useDisconnect()
-  const chainId                  = useChainId()
-  const { data: balance }        = useBalance({ address })
+export default function AccountHeader({ nonEvmWallet }: { nonEvmWallet?: NonEvmWalletProps } = {}) {
+  const { address: evmAddress, isConnected: evmConnected } = useAccount()
+  const { disconnect: evmDisconnect }  = useDisconnect()
+  const chainId                        = useChainId()
+  const { data: balance }              = useBalance({ address: evmAddress })
+
+  // Resolve active wallet source
+  const isNonEvm = !!nonEvmWallet
+  const address = isNonEvm ? nonEvmWallet!.address : evmAddress
+  const isConnected = isNonEvm ? true : evmConnected
+  const disconnect = isNonEvm ? nonEvmWallet!.disconnect : evmDisconnect
 
   const [open, setOpen]                 = useState(false)
   const [portfolioOpen, setPortfolioOpen] = useState(false)
@@ -86,16 +105,16 @@ export default function AccountHeader() {
     return () => document.removeEventListener('keydown', h)
   }, [open])
 
-  // Fetch recent txs
+  // Fetch recent txs (EVM only)
   useEffect(() => {
-    if (!open || !address) return
+    if (isNonEvm || !open || !address) return
     let c = false
     fetch(`${BACKEND_URL}/api/v1/tx/recent?wallet=${address}&limit=3`)
       .then(r => r.ok ? r.json() : Promise.reject(r))
       .then(d => { if (!c) setRecentTxs(d.records ?? []) })
       .catch(() => { if (!c) setRecentTxs([]) })
     return () => { c = true }
-  }, [open, address])
+  }, [isNonEvm, open, address])
 
   // Global event listeners (from page.tsx buttons)
   useEffect(() => {
@@ -148,7 +167,17 @@ export default function AccountHeader() {
         onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'rgba(255,255,255,0.07)' }}
         onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
       >
-        <Identicon address={address} size={26} />
+        {isNonEvm ? (
+          <div style={{
+            width: 26, height: 26, borderRadius: '50%',
+            background: `${NON_EVM_META[nonEvmWallet!.family].color}20`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontSize: 14, fontWeight: 700, color: NON_EVM_META[nonEvmWallet!.family].color,
+            border: `1px solid ${NON_EVM_META[nonEvmWallet!.family].color}30`,
+          }}>{NON_EVM_META[nonEvmWallet!.family].icon}</div>
+        ) : (
+          <Identicon address={address} size={26} />
+        )}
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 500, color: '#e2e2f0' }}>
           {tr(address)}
         </span>
@@ -171,18 +200,32 @@ export default function AccountHeader() {
             {/* Identity */}
             <div style={{ padding: '18px 18px 14px', borderBottom: '1px solid rgba(255,255,255,0.07)', background: '#111120' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                <Identicon address={address} size={40} />
+                {isNonEvm ? (
+                  <div style={{
+                    width: 40, height: 40, borderRadius: '50%',
+                    background: `${NON_EVM_META[nonEvmWallet!.family].color}20`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 20, fontWeight: 700, color: NON_EVM_META[nonEvmWallet!.family].color,
+                    border: `1.5px solid ${NON_EVM_META[nonEvmWallet!.family].color}30`,
+                  }}>{NON_EVM_META[nonEvmWallet!.family].icon}</div>
+                ) : (
+                  <Identicon address={address} size={40} />
+                )}
                 <div>
                   <div style={{ fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 500, color: '#e2e2f0' }}>{tr(address, 8, 6)}</div>
-                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: '#4a4a6a', marginTop: 2 }}>{reg?.chainName ?? 'Base'}</div>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: '#4a4a6a', marginTop: 2 }}>
+                    {isNonEvm ? NON_EVM_META[nonEvmWallet!.family].name : (reg?.chainName ?? 'Base')}
+                  </div>
                 </div>
               </div>
 
-              {/* Balance */}
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 14 }}>
-                <span style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, color: '#e2e2f0', letterSpacing: '-0.03em' }}>{balFmt}</span>
-                <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 600, color: '#4a4a6a' }}>{balSym}</span>
-              </div>
+              {/* Balance — EVM only */}
+              {!isNonEvm && (
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 14 }}>
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, color: '#e2e2f0', letterSpacing: '-0.03em' }}>{balFmt}</span>
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 600, color: '#4a4a6a' }}>{balSym}</span>
+                </div>
+              )}
 
               {/* View Portfolio — HERO BUTTON */}
               <button onClick={() => { setOpen(false); setPortfolioTab('overview'); setPortfolioOpen(true) }} style={{
@@ -224,7 +267,9 @@ export default function AccountHeader() {
                   fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 600, cursor: 'pointer',
                 }}>{copied ? '✓ Copiato' : '⎘ Copia'}</button>
 
-                <a href={`${reg?.blockExplorer ?? 'https://basescan.org'}/address/${address}`}
+                <a href={isNonEvm
+                    ? `${NON_EVM_META[nonEvmWallet!.family].explorer}${address}`
+                    : `${reg?.blockExplorer ?? 'https://basescan.org'}/address/${address}`}
                   target="_blank" rel="noopener noreferrer" style={{
                   flex: 1, padding: '8px 0', borderRadius: 10,
                   background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
@@ -240,52 +285,59 @@ export default function AccountHeader() {
               </div>
             </div>
 
-            {/* Recent Activity */}
-            <div style={{ padding: '14px 18px 16px', background: '#111120' }}>
-              <div style={{
-                fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, color: '#4a4a6a',
-                textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 10,
-              }}>Attività Recente</div>
-              {recentTxs.length === 0 ? (
-                <div style={{ padding: '12px 0', textAlign: 'center' as const }}>
-                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 12, color: '#4a4a6a' }}>Nessuna attività</div>
-                </div>
-              ) : recentTxs.slice(0, 3).map((tx: RecentTx, i: number) => (
-                <a key={tx.tx_hash || i}
-                  href={`${reg?.blockExplorer ?? 'https://basescan.org'}/tx/${tx.tx_hash}`}
-                  target="_blank" rel="noopener noreferrer"
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '8px 8px', borderRadius: 10,
-                    textDecoration: 'none', transition: 'background 0.12s',
-                  }}
-                  onMouseEnter={e => (e.currentTarget).style.background = 'rgba(255,255,255,0.04)'}
-                  onMouseLeave={e => (e.currentTarget).style.background = 'transparent'}
-                >
-                  <div style={{
-                    width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-                    background: tx.status === 'completed' ? '#00ffa3' : '#ffb800',
-                    boxShadow: `0 0 6px ${tx.status === 'completed' ? '#00ffa3' : '#ffb800'}50`,
-                  }} />
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 600, color: '#e2e2f0' }}>
-                      {tx.gross_amount?.toFixed(6)} {tx.currency}
-                    </div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#4a4a6a', marginTop: 1 }}>
-                      → {tr(tx.recipient || '', 6, 4)}
-                    </div>
+            {/* Recent Activity — EVM only */}
+            {!isNonEvm && (
+              <div style={{ padding: '14px 18px 16px', background: '#111120' }}>
+                <div style={{
+                  fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, color: '#4a4a6a',
+                  textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 10,
+                }}>Attività Recente</div>
+                {recentTxs.length === 0 ? (
+                  <div style={{ padding: '12px 0', textAlign: 'center' as const }}>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 12, color: '#4a4a6a' }}>Nessuna attività</div>
                   </div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#4a4a6a' }}>↗</div>
-                </a>
-              ))}
-            </div>
+                ) : recentTxs.slice(0, 3).map((tx: RecentTx, i: number) => (
+                  <a key={tx.tx_hash || i}
+                    href={`${reg?.blockExplorer ?? 'https://basescan.org'}/tx/${tx.tx_hash}`}
+                    target="_blank" rel="noopener noreferrer"
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '8px 8px', borderRadius: 10,
+                      textDecoration: 'none', transition: 'background 0.12s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget).style.background = 'rgba(255,255,255,0.04)'}
+                    onMouseLeave={e => (e.currentTarget).style.background = 'transparent'}
+                  >
+                    <div style={{
+                      width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                      background: tx.status === 'completed' ? '#00ffa3' : '#ffb800',
+                      boxShadow: `0 0 6px ${tx.status === 'completed' ? '#00ffa3' : '#ffb800'}50`,
+                    }} />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 600, color: '#e2e2f0' }}>
+                        {tx.gross_amount?.toFixed(6)} {tx.currency}
+                      </div>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#4a4a6a', marginTop: 1 }}>
+                        → {tr(tx.recipient || '', 6, 4)}
+                      </div>
+                    </div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#4a4a6a' }}>↗</div>
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
         </>,
         document.body
       )}
 
       {/* Portfolio Dashboard Overlay */}
-      <PortfolioDashboard open={portfolioOpen} onClose={() => setPortfolioOpen(false)} initialTab={portfolioTab} />
+      <PortfolioDashboard
+        open={portfolioOpen}
+        onClose={() => setPortfolioOpen(false)}
+        initialTab={portfolioTab}
+        overrideWallet={nonEvmWallet ? { family: nonEvmWallet.family, address: nonEvmWallet.address } : undefined}
+      />
     </>
   )
 }

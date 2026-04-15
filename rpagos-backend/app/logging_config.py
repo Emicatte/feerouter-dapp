@@ -18,14 +18,16 @@ import sys
 from pythonjsonlogger import json as jsonlogger
 
 from app.middleware.request_context import get_request_id
+from app.middleware.correlation import get_correlation_id
 
 
 class RequestContextFilter(logging.Filter):
-    """Aggiunge request_id a ogni log record dalla context variable."""
+    """Aggiunge request_id e correlation_id a ogni log record."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         req_id = get_request_id()
         record.request_id = str(req_id) if req_id else None  # type: ignore[attr-defined]
+        record.correlation_id = get_correlation_id() or None  # type: ignore[attr-defined]
         return True
 
 
@@ -37,9 +39,9 @@ def setup_logging(*, debug: bool = False) -> None:
     """
     level = logging.DEBUG if debug else logging.INFO
 
-    # Formatter JSON strutturato
+    # Formatter JSON strutturato (con correlation_id)
     formatter = jsonlogger.JsonFormatter(
-        fmt="%(asctime)s %(levelname)s %(name)s %(message)s %(request_id)s",
+        fmt="%(asctime)s %(levelname)s %(name)s %(message)s %(request_id)s %(correlation_id)s",
         rename_fields={
             "asctime": "timestamp",
             "levelname": "level",

@@ -9,9 +9,10 @@ Frontend (Next.js 14)          Backend (FastAPI)              Smart Contracts (S
 ----------------------         ----------------------         -------------------------
 CommandCenter.tsx              execution_engine.py            FeeRouterV4.sol
 TransferForm.tsx               strategy_engine.py             RSendBatchDistributor.sol
-PortfolioDashboard.tsx         sweep_service.py               RSendForwarder.sol
-SwapModule.tsx                 distribution_service.py
-SweepFeed.tsx (WebSocket)      ledger_service.py
+CrossChainForm.tsx             sweep_service.py               RSendForwarder.sol
+PortfolioDashboard.tsx         distribution_service.py        RSendCCIPSender.sol
+SwapModule.tsx                 ledger_service.py              RSendCCIPReceiver.sol
+SweepFeed.tsx (WebSocket)
                                reconciliation_service.py
 Chain Adapters
 ├── evm-adapter.ts             Middleware
@@ -32,9 +33,10 @@ Hooks                          ├── api_auth.py
 ## Features
 
 ### Multi-Chain Support
-- **EVM** — Base, Ethereum, Arbitrum (Wagmi v2 + Viem)
+- **EVM** — Base, Ethereum, Arbitrum, Optimism, Polygon, BNB, Avalanche (Wagmi v2 + Viem)
 - **Solana** — Mainnet, Devnet (@solana/web3.js)
 - **Tron** — Mainnet, Shasta (TronWeb)
+- **Cross-chain** — Chainlink CCIP bridge between all supported EVM chains
 - Universal wallet abstraction via `useUniversalWallet` hook
 - Chain family switching with `ChainFamilySwitch` component
 
@@ -49,7 +51,7 @@ Hooks                          ├── api_auth.py
 - Sequential pipeline: **detect -> bridge -> swap -> split -> send -> notify**
 - Plan preview (dry-run) before execution
 - Fail-safe: funds stay at last successful position on failure
-- Bridge integrations planned: LayerZero, Across, Wormhole
+- Bridge: Chainlink CCIP (live), LayerZero, Across, Wormhole (planned)
 
 ### Strategy DSL (Conditional Automation)
 - IF/THEN rules layered on top of forwarding rules
@@ -72,6 +74,18 @@ Hooks                          ├── api_auth.py
 - **FeeRouterV4** — Fee-splitting router with 0.5% protocol fee, multi-recipient support
 - **RSendBatchDistributor** — Gas-optimized batch distribution (ETH + ERC-20)
 - **RSendForwarder** — Deterministic forwarding contracts per user
+- **RSendCCIPSender** — Cross-chain token bridge + swap via Chainlink CCIP and Uniswap V3
+- **RSendCCIPReceiver** — CCIP message receiver with idempotency and allowlisted senders
+
+### Cross-Chain Bridge (Chainlink CCIP)
+- **Bridge mode**: Send same token cross-chain (e.g., USDC Base → USDC Arbitrum)
+- **Swap & Bridge mode**: Atomic swap + bridge in 1 TX (e.g., ETH Base → USDC Arbitrum)
+- Uniswap V3 on-chain swap before CCIP bridge
+- 0.5% RSend fee on bridged amount
+- CCIP fee paid in native ETH by the user (excess refunded)
+- Supported chains: Base, Ethereum, Arbitrum, Optimism, Polygon, BNB, Avalanche
+- Anti-MEV: `minAmountOut` slippage protection required on all swaps
+- AML compliance check before every cross-chain transfer
 
 ### Compliance & Security
 - AML screening (OFAC, Chainalysis integration)
@@ -148,6 +162,7 @@ fee-router-dapp/
 ├── app/                          # Next.js pages + components
 │   ├── CommandCenter.tsx         # Main control panel (6 tabs)
 │   ├── TransferForm.tsx          # Token transfer (gold standard pattern)
+│   ├── CrossChainForm.tsx        # CCIP bridge + swap & bridge UI
 │   ├── PortfolioDashboard.tsx    # Portfolio analytics
 │   ├── SwapModule.tsx            # Token swap UI
 │   ├── SweepFeed.tsx             # Real-time sweep WebSocket feed
@@ -175,14 +190,20 @@ fee-router-dapp/
 │   ├── useComplianceEngine.ts    # Client-side compliance
 │   ├── useSweepWebSocket.ts      # WebSocket sweep feed
 │   ├── contractRegistry.ts       # Deployed contract addresses
+│   ├── ccipRegistry.ts           # CCIP chain configs + selectors
+│   ├── ccipMonitor.ts            # CCIP event processing
 │   └── feeRouterAbi.ts           # Contract ABI
 ├── contracts/                    # Foundry project
 │   ├── src/
-│   │   ├── FeeRouterV4.sol       # Fee routing + splitting
-│   │   ├── RSendBatchDistributor.sol  # Batch distribution
-│   │   └── RSendForwarder.sol    # Per-user forwarder
+│   │   ├── FeeRouterV4.sol           # Fee routing + splitting
+│   │   ├── RSendBatchDistributor.sol # Batch distribution
+│   │   ├── RSendForwarder.sol        # Per-user forwarder
+│   │   ├── RSendCCIPSender.sol       # CCIP cross-chain sender + swap
+│   │   └── RSendCCIPReceiver.sol     # CCIP cross-chain receiver
 │   ├── test/                     # Forge tests
 │   ├── script/                   # Deploy scripts
+│   │   ├── DeployCCIP.s.sol      # CCIP sender + receiver deploy
+│   │   └── ...
 │   └── foundry.toml
 ├── rpagos-backend/               # Python backend
 │   ├── app/
@@ -370,14 +391,18 @@ docker-compose up -d  # PostgreSQL + Redis + Celery
 
 ## Networks
 
-| Chain | ID | Status |
-|---|---|---|
-| Base Mainnet | 8453 | Production |
-| Base Sepolia | 84532 | Testnet |
-| Ethereum | 1 | Supported |
-| Arbitrum | 42161 | Supported |
-| Solana Mainnet | mainnet-beta | Supported |
-| Tron Mainnet | tron-mainnet | Supported |
+| Chain | ID | Status | CCIP Bridge |
+|---|---|---|---|
+| Base Mainnet | 8453 | Production | Yes |
+| Base Sepolia | 84532 | Testnet | - |
+| Ethereum | 1 | Supported | Yes |
+| Arbitrum | 42161 | Supported | Yes |
+| Optimism | 10 | Supported | Yes |
+| Polygon | 137 | Supported | Yes |
+| BNB Chain | 56 | Supported | Yes |
+| Avalanche | 43114 | Supported | Yes |
+| Solana Mainnet | mainnet-beta | Supported | - |
+| Tron Mainnet | tron-mainnet | Supported | - |
 
 ## Environment Variables
 

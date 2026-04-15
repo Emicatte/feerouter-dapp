@@ -28,7 +28,7 @@ const GRAD: React.CSSProperties = {
 
 const EASE: [number, number, number, number] = [0.4, 0, 0.2, 1]
 
-const CONTRACT = '0xB2174c6B1359434B9d8004Ca5740bcDDF4C8691D'
+const CONTRACT = '0x81d78BDD917D5A43a9E424B905407495b8f2c0f4'
 
 // ── Syntax highlighting (inline, simple) ──
 function Code({ children, lang }: { children: string; lang?: string }) {

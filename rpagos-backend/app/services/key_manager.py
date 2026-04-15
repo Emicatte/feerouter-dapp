@@ -42,6 +42,7 @@ class AbstractSigner(abc.ABC):
 
     Every signer must be able to:
       - sign_transaction(tx_dict) → raw signed TX bytes
+      - sign_hash(msg_hash) → (v, r, s) for EIP-712 / arbitrary hash signing
       - get_address() → checksummed Ethereum address
     """
 
@@ -55,6 +56,18 @@ class AbstractSigner(abc.ABC):
 
         Returns:
             Raw signed transaction bytes ready for ``eth_sendRawTransaction``.
+        """
+        ...
+
+    @abc.abstractmethod
+    async def sign_hash(self, msg_hash: bytes) -> tuple[int, int, int]:
+        """Sign a 32-byte hash (e.g. EIP-712 digest).
+
+        Args:
+            msg_hash: 32-byte hash to sign.
+
+        Returns:
+            (v, r, s) signature components.
         """
         ...
 
@@ -103,6 +116,13 @@ class LocalSigner(AbstractSigner):
 
         signed = self._account.sign_transaction(tx_dict)
         return signed.raw_transaction
+
+    async def sign_hash(self, msg_hash: bytes) -> tuple[int, int, int]:
+        """Sign a 32-byte hash via local key (e.g. EIP-712)."""
+        from eth_account.messages import encode_defunct, _hash_eip191_message
+
+        signed = self._account.unsafe_sign_hash(msg_hash)
+        return signed.v, signed.r, signed.s
 
     async def get_address(self) -> str:
         return self._account.address
@@ -189,6 +209,18 @@ class KMSSigner(AbstractSigner):
 
         logger.info("KMS address derived: %s", address)
         return address
+
+    # ── Hash signing (EIP-712 etc.) ─────────────────────────
+
+    async def sign_hash(self, msg_hash: bytes) -> tuple[int, int, int]:
+        """Sign a 32-byte hash via KMS.
+
+        Returns:
+            (v, r, s) with v = 27 or 28 (non-EIP-155).
+        """
+        r, s = await asyncio.to_thread(self._kms_sign_hash, msg_hash)
+        v_raw = await asyncio.to_thread(self._recover_v, msg_hash, r, s)
+        return v_raw + 27, r, s
 
     # ── Transaction signing ───────────────────────────────
 
@@ -292,6 +324,59 @@ class KMSSigner(AbstractSigner):
 
 
 # ═══════════════════════════════════════════════════════════════
+#  VaultSigner (HashiCorp Vault — self-hosted HSM alternative)
+# ═══════════════════════════════════════════════════════════════
+
+class VaultSigner(AbstractSigner):
+    """Signs via HashiCorp Vault Transit secrets engine.
+
+    Requirements:
+      - ``hvac`` installed (``pip install hvac``)
+      - Vault Transit engine mounted at ``transit/``
+      - Key type: ``ecdsa-p256`` (secp256k1 not natively supported;
+        use the Vault plugin or store the key in Vault KV and sign locally)
+
+    Environment:
+      - ``VAULT_ADDR``: Vault server URL
+      - ``VAULT_TOKEN``: authentication token
+      - ``VAULT_KEY_NAME``: transit key name (default: ``rsend-signer``)
+
+    Status: STUB — raises NotImplementedError. Implement when Vault
+    is deployed. The interface is ready for drop-in replacement.
+    """
+
+    def __init__(self):
+        import os
+
+        self._addr = os.getenv("VAULT_ADDR", "")
+        self._token = os.getenv("VAULT_TOKEN", "")
+        self._key_name = os.getenv("VAULT_KEY_NAME", "rsend-signer")
+
+        if not self._addr or not self._token:
+            raise SignerError(
+                "VAULT_ADDR and VAULT_TOKEN must be set for Vault signer"
+            )
+
+        logger.info("VaultSigner initialised: addr=%s key=%s", self._addr, self._key_name)
+
+    async def sign_transaction(self, tx_dict: dict) -> bytes:
+        raise NotImplementedError(
+            "VaultSigner.sign_transaction() not yet implemented — "
+            "see key_manager.py for integration guide"
+        )
+
+    async def sign_hash(self, msg_hash: bytes) -> tuple[int, int, int]:
+        raise NotImplementedError(
+            "VaultSigner.sign_hash() not yet implemented"
+        )
+
+    async def get_address(self) -> str:
+        raise NotImplementedError(
+            "VaultSigner.get_address() not yet implemented"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════
 #  Factory
 # ═══════════════════════════════════════════════════════════════
 
@@ -302,7 +387,8 @@ def get_signer(mode: Optional[str] = None) -> AbstractSigner:
     """Get or create the configured signer (singleton).
 
     Args:
-        mode: ``"local"`` or ``"kms"``. Defaults to ``SIGNER_MODE`` env var.
+        mode: ``"local"``, ``"kms"``, or ``"vault"``.
+              Defaults to ``SIGNER_MODE`` env var.
 
     Returns:
         An ``AbstractSigner`` instance.
@@ -317,7 +403,10 @@ def get_signer(mode: Optional[str] = None) -> AbstractSigner:
 
     if mode == "kms":
         _signer = KMSSigner()
+    elif mode == "vault":
+        _signer = VaultSigner()
     else:
         _signer = LocalSigner()
 
+    logger.info("Signer backend: %s (%s)", mode, type(_signer).__name__)
     return _signer

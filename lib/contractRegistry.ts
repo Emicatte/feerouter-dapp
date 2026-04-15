@@ -81,7 +81,7 @@ const BASE_TOKENS: Record<string, TokenConfig> = {
     poolFeeToWETH: POOL_FEE.LOW,
   },
   USDT: {
-    address:  '0xfde4C96256153236aF98292015bA958c14714C22',
+    address:  '0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2',
     decimals: 6, symbol: 'USDT', name: 'Tether USD',
     logoURI: LOGOS.USDT, gasless: true, isEurc: false, isNative: false,
     poolFeeToWETH: POOL_FEE.LOW,

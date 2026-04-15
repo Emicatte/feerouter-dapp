@@ -67,13 +67,45 @@ class ExecutionEngine:
         self._running_plans: dict[str, asyncio.Task] = {}
 
     async def execute_plan(self, plan: ExecutionPlan) -> ExecutionPlan:
-        """Execute all steps in a plan sequentially."""
+        """Execute all steps in a plan sequentially.
+
+        Fail-closed: verifies critical dependencies (Postgres, Redis)
+        before starting any financial operation. Per-chain RPC is checked
+        before steps that interact with a specific chain.
+        """
+        # ── Fail-closed dependency check ────────────────
+        try:
+            from app.services.circuit_breaker import dependency_guard, SweepBlockedError
+            await dependency_guard.require_postgres()
+            await dependency_guard.require_redis()
+        except Exception as e:
+            plan.status = StepStatus.FAILED
+            logger.error("[Engine] Plan %s BLOCKED: %s", plan.id, e)
+            return plan
+
         plan.status = StepStatus.EXECUTING
         logger.info(f"[Engine] Starting plan {plan.id} with {len(plan.steps)} steps")
 
         for i, step in enumerate(plan.steps):
             try:
                 logger.info(f"[Engine] Step {i+1}/{len(plan.steps)}: {step.type}")
+
+                # Per-chain RPC guard for steps that interact with a chain
+                if step.chain_id and step.type in (
+                    StepType.BRIDGE, StepType.SWAP, StepType.SEND,
+                ):
+                    try:
+                        from app.services.circuit_breaker import dependency_guard
+                        chain_int = int(step.chain_id) if step.chain_id.isdigit() else 0
+                        if chain_int > 0:
+                            await dependency_guard.require_rpc(chain_id=chain_int)
+                    except Exception as rpc_err:
+                        step.status = StepStatus.FAILED
+                        step.error = f"RPC blocked: {rpc_err}"
+                        plan.status = StepStatus.FAILED
+                        logger.error("[Engine] Step %d BLOCKED (RPC): %s", i + 1, rpc_err)
+                        return plan
+
                 step.status = StepStatus.EXECUTING
 
                 if step.type == StepType.DETECT:

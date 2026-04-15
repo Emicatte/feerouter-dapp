@@ -36,6 +36,8 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import INET, JSONB
 from sqlalchemy.orm import relationship
 
+from sqlalchemy.sql import func as sa_func
+
 from app.models.db_models import Base
 
 
@@ -254,8 +256,49 @@ class LedgerAuditLog(Base):
         nullable=False,
     )
 
+    hmac_signature = Column(String(64), nullable=True)
+
     __table_args__ = (
         Index("idx_audit_log_entity", "entity_type", "entity_id"),
         Index("idx_audit_log_created", "created_at"),
         Index("idx_audit_log_seq", "sequence_number"),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+#  DailySnapshot — immutable daily reconciliation snapshots
+# ═══════════════════════════════════════════════════════════════
+
+class DailySnapshot(Base):
+    """Immutable daily snapshot of on-chain vs ledger balances.
+
+    One row per (date, chain_id) pair. Status:
+      - 'ok': discrepancy within threshold
+      - 'mismatch': discrepancy > threshold but < critical
+      - 'critical': discrepancy triggered circuit breaker
+    """
+    __tablename__ = "daily_snapshots"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    date = Column(sa.Date, nullable=False)
+    chain_id = Column(Integer, nullable=False)
+    treasury_address = Column(String(42), nullable=False)
+    on_chain_balance = Column(Numeric(28, 18), nullable=False)
+    ledger_balance = Column(Numeric(28, 18), nullable=False)
+    diff = Column(Numeric(28, 18), nullable=False)
+    diff_pct = Column(Numeric(10, 6), nullable=False)
+    status = Column(String(16), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        server_default=sa_func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('ok','mismatch','critical')",
+            name="ck_snapshot_status",
+        ),
+        Index("ix_daily_snapshot_date_chain", "date", "chain_id", unique=True),
     )

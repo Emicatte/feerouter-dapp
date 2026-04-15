@@ -49,7 +49,7 @@ else:
         pool_size=20,            # connessioni permanenti
         max_overflow=30,         # connessioni extra sotto carico (totale max: 50)
         pool_timeout=30,         # secondi attesa per una connessione libera
-        pool_recycle=3600,       # ricicla connessioni ogni ora (evita timeout PostgreSQL)
+        pool_recycle=1800,       # ricicla connessioni ogni 30min (evita timeout PostgreSQL)
         pool_pre_ping=True,      # verifica connessione prima di usarla
     )
 

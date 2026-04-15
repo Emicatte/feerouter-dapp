@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 # key_type: "api_key" = per merchant API key, "ip" = per IP
 ENDPOINT_LIMITS: list[tuple[str, str, int, int, str]] = [
     # method, path_prefix,                          max,  window, key_type
-    ("POST", "/api/v1/merchant/payment-intent",      30,    60,  "api_key"),
+    ("POST", "/api/v1/merchant/payment-intent",     100,    60,  "api_key"),
     ("POST", "/api/v1/merchant/webhook/register",     5,  3600,  "api_key"),
     ("POST", "/api/v1/merchant/webhook/test",        10,    60,  "api_key"),
     ("POST", "/api/v1/merchant/payment-intent/",     10,    60,  "api_key"),  # cancel, resolve

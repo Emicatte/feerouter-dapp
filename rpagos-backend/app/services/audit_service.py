@@ -16,6 +16,8 @@ Event types:
 """
 
 import hashlib
+import hmac
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Optional
@@ -24,6 +26,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import get_settings
 from app.models.ledger_models import LedgerAuditLog
 from app.middleware.request_context import get_request_id, get_client_ip, get_user_agent
 
@@ -44,6 +47,33 @@ EVENT_TYPES = frozenset({
 
 
 GENESIS_HASH = "0" * 64
+
+
+def _compute_hmac_signature(
+    chain_hash: str,
+    sequence_number: int,
+    event_type: str,
+    entity_id: str,
+    created_at: str,
+    changes: Optional[dict],
+) -> str:
+    """Compute HMAC-SHA256 signature for tamper-proof audit record.
+
+    Uses HMAC_SECRET from settings. Returns empty string if secret is
+    not configured (dev mode).
+    """
+    secret = get_settings().hmac_secret
+    if not secret or secret == "change-me-in-production":
+        return ""
+
+    payload = (
+        f"{chain_hash}|{sequence_number}|{event_type}"
+        f"|{entity_id}|{created_at}"
+        f"|{json.dumps(changes, sort_keys=True, default=str) if changes else ''}"
+    )
+    return hmac.new(
+        secret.encode(), payload.encode(), hashlib.sha256,
+    ).hexdigest()
 
 
 def _compute_chain_hash(
@@ -140,6 +170,11 @@ async def log_event(
         actor_id, now.isoformat(),
     )
 
+    hmac_sig = _compute_hmac_signature(
+        chain_hash, seq, event_type, str(entity_id),
+        now.isoformat(), changes,
+    )
+
     entry = LedgerAuditLog(
         sequence_number=seq,
         event_type=event_type,
@@ -153,6 +188,7 @@ async def log_event(
         request_id=request_id,
         previous_hash=prev_hash,
         chain_hash=chain_hash,
+        hmac_signature=hmac_sig or None,
         created_at=now,
     )
     # metadata va nel campo metadata_ (Python) → metadata (DB)

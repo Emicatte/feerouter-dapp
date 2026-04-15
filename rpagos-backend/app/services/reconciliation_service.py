@@ -13,9 +13,10 @@ CC-06 additions (CRITICAL FOR MILLIONS):
   - All reconciliation results saved to DB via audit trail
 """
 
+import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date as date_type
 from decimal import Decimal
 from typing import Optional
 from uuid import UUID
@@ -25,7 +26,7 @@ from sqlalchemy import func, select, case, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.models.ledger_models import Account, LedgerEntry, Transaction
+from app.models.ledger_models import Account, DailySnapshot, LedgerEntry, Transaction
 from app.services.audit_service import log_event
 
 logger = logging.getLogger(__name__)
@@ -897,3 +898,247 @@ async def generate_daily_report(
     )
 
     return report
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Reconcile & Enforce — circuit breaker on treasury mismatch
+# ═══════════════════════════════════════════════════════════════
+
+def _parse_treasury_addresses() -> dict[int, str]:
+    """Parse TREASURY_ADDRESSES_JSON from settings into {chain_id: address}."""
+    raw = get_settings().treasury_addresses_json
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+        return {int(k): v for k, v in parsed.items()}
+    except (json.JSONDecodeError, ValueError) as e:
+        logger.error("Failed to parse TREASURY_ADDRESSES_JSON: %s", e)
+        return {}
+
+
+async def reconcile_and_enforce(
+    session: AsyncSession,
+) -> list[dict]:
+    """Compare on-chain treasury balances with ledger balances.
+
+    If mismatch > RECONCILIATION_THRESHOLD_PCT → open circuit breaker
+    to block new operations and fire critical alert.
+
+    Returns:
+        List of per-chain result dicts.
+    """
+    settings = get_settings()
+    treasury_map = _parse_treasury_addresses()
+
+    if not treasury_map:
+        logger.info("reconcile_and_enforce: no treasury addresses configured, skipping")
+        return []
+
+    threshold_pct = Decimal(str(settings.reconciliation_threshold_pct))
+    results: list[dict] = []
+
+    for chain_id, treasury_address in treasury_map.items():
+        try:
+            on_chain_wei = await _get_onchain_balance(
+                treasury_address, chain_id, settings.alchemy_api_key,
+            )
+        except Exception as exc:
+            logger.error(
+                "reconcile_and_enforce: RPC failed for chain %d (%s): %s",
+                chain_id, treasury_address, exc,
+            )
+            continue
+
+        on_chain_eth = Decimal(on_chain_wei) / Decimal(10**18)
+
+        # Get ledger balance for this treasury address
+        ledger_balance = Decimal("0")
+        acct_result = await session.execute(
+            select(Account).where(
+                Account.address == treasury_address,
+                Account.is_active == True,  # noqa: E712
+            )
+        )
+        acct = acct_result.scalar_one_or_none()
+        if acct:
+            from app.services.ledger_service import get_balance
+            ledger_balance = await get_balance(session, acct.id, acct.currency)
+
+        diff = abs(on_chain_eth - ledger_balance)
+        denominator = max(on_chain_eth, Decimal("1"))
+        diff_pct = (diff / denominator) * Decimal("100")
+
+        entry = {
+            "chain_id": chain_id,
+            "treasury_address": treasury_address,
+            "on_chain_balance": on_chain_eth,
+            "ledger_balance": ledger_balance,
+            "diff": diff,
+            "diff_pct": diff_pct,
+            "alert": diff_pct > threshold_pct,
+        }
+        results.append(entry)
+
+        if diff_pct > threshold_pct:
+            logger.critical(
+                "RECONCILIATION MISMATCH: chain=%d treasury=%s "
+                "on_chain=%.6f ledger=%.6f diff_pct=%.4f%%",
+                chain_id, treasury_address,
+                float(on_chain_eth), float(ledger_balance), float(diff_pct),
+            )
+
+            # Open circuit breaker to block new operations
+            try:
+                from app.services.circuit_breaker import CircuitBreaker, get_circuit_breaker
+
+                cb = get_circuit_breaker("sweep_operations")
+                if cb is None:
+                    cb = CircuitBreaker("sweep_operations")
+                await cb.force_open(
+                    reason=f"Reconciliation mismatch {float(diff_pct):.2f}% on chain {chain_id}"
+                )
+            except Exception as cb_exc:
+                logger.error("Failed to open circuit breaker: %s", cb_exc)
+
+            # Send critical alert (webhook + Telegram fallback)
+            try:
+                from app.services.alert_service import critical_alert
+                await critical_alert(
+                    f"TREASURY MISMATCH\n"
+                    f"Chain: {chain_id}\n"
+                    f"On-chain: {on_chain_eth:.6f} ETH\n"
+                    f"Ledger: {ledger_balance:.6f} ETH\n"
+                    f"Diff: {float(diff_pct):.4f}%\n"
+                    f"Sweep operations BLOCKED"
+                )
+            except Exception:
+                pass
+
+            # Audit trail
+            await log_event(
+                session,
+                "ANOMALY_DETECTED",
+                "treasury",
+                treasury_address,
+                actor_type="system",
+                actor_id="reconcile_and_enforce",
+                changes={
+                    "check": "treasury_reconciliation",
+                    "chain_id": chain_id,
+                    "on_chain_balance": str(on_chain_eth),
+                    "ledger_balance": str(ledger_balance),
+                    "diff_pct": str(diff_pct),
+                    "action": "circuit_breaker_opened",
+                },
+            )
+        else:
+            logger.info(
+                "Treasury reconciliation OK: chain=%d diff=%.6f (%.4f%%)",
+                chain_id, float(diff), float(diff_pct),
+            )
+
+    return results
+
+
+# ═══════════════════════════════════════════════════════════════
+#  save_daily_snapshot — immutable daily balance record
+# ═══════════════════════════════════════════════════════════════
+
+async def save_daily_snapshot(
+    session: AsyncSession,
+    snapshot_date: Optional[date_type] = None,
+) -> list[DailySnapshot]:
+    """Save an immutable daily snapshot for each configured treasury.
+
+    Compares on-chain vs ledger balance and persists to daily_snapshots.
+    Skips chains that already have a snapshot for the given date.
+
+    Args:
+        session: AsyncSession
+        snapshot_date: Date to snapshot (default: today UTC).
+
+    Returns:
+        List of DailySnapshot records created.
+    """
+    settings = get_settings()
+    treasury_map = _parse_treasury_addresses()
+
+    if not treasury_map:
+        logger.info("save_daily_snapshot: no treasury addresses configured")
+        return []
+
+    if snapshot_date is None:
+        snapshot_date = datetime.now(timezone.utc).date()
+
+    threshold_pct = Decimal(str(settings.reconciliation_threshold_pct))
+    snapshots: list[DailySnapshot] = []
+
+    for chain_id, treasury_address in treasury_map.items():
+        # Skip if already exists for this date + chain
+        existing = await session.execute(
+            select(DailySnapshot.id).where(
+                DailySnapshot.date == snapshot_date,
+                DailySnapshot.chain_id == chain_id,
+            ).limit(1)
+        )
+        if existing.scalar_one_or_none() is not None:
+            logger.debug("Snapshot already exists for %s chain %d", snapshot_date, chain_id)
+            continue
+
+        try:
+            on_chain_wei = await _get_onchain_balance(
+                treasury_address, chain_id, settings.alchemy_api_key,
+            )
+        except Exception as exc:
+            logger.error("save_daily_snapshot: RPC failed chain %d: %s", chain_id, exc)
+            continue
+
+        on_chain_eth = Decimal(on_chain_wei) / Decimal(10**18)
+
+        # Ledger balance
+        ledger_balance = Decimal("0")
+        acct_result = await session.execute(
+            select(Account).where(
+                Account.address == treasury_address,
+                Account.is_active == True,  # noqa: E712
+            )
+        )
+        acct = acct_result.scalar_one_or_none()
+        if acct:
+            from app.services.ledger_service import get_balance
+            ledger_balance = await get_balance(session, acct.id, acct.currency)
+
+        diff = abs(on_chain_eth - ledger_balance)
+        denominator = max(on_chain_eth, Decimal("1"))
+        diff_pct_val = (diff / denominator) * Decimal("100")
+
+        if diff_pct_val > threshold_pct * Decimal("5"):
+            status = "critical"
+        elif diff_pct_val > threshold_pct:
+            status = "mismatch"
+        else:
+            status = "ok"
+
+        snapshot = DailySnapshot(
+            date=snapshot_date,
+            chain_id=chain_id,
+            treasury_address=treasury_address,
+            on_chain_balance=on_chain_eth,
+            ledger_balance=ledger_balance,
+            diff=diff,
+            diff_pct=diff_pct_val,
+            status=status,
+        )
+        session.add(snapshot)
+        snapshots.append(snapshot)
+
+        logger.info(
+            "Daily snapshot saved: date=%s chain=%d status=%s diff=%.6f (%.4f%%)",
+            snapshot_date, chain_id, status, float(diff), float(diff_pct_val),
+        )
+
+    if snapshots:
+        await session.flush()
+
+    return snapshots

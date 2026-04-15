@@ -16,8 +16,9 @@ Settings:
   prefetch_multiplier=1   — no prefetch; one task at a time per worker
 """
 
-from celery import Celery
+from celery import Celery, signals
 from celery.schedules import crontab
+from kombu import Exchange, Queue
 
 from app.config import get_settings
 
@@ -32,6 +33,27 @@ celery = Celery(
 # ═══════════════════════════════════════════════════════════════
 #  Core Settings
 # ═══════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════
+#  Queue Definitions (with Dead Letter Queue)
+# ═══════════════════════════════════════════════════════════════
+
+_default_exchange = Exchange("default", type="direct")
+_dlq_exchange = Exchange("dlq", type="direct")
+
+celery.conf.task_queues = (
+    # High priority — sweep & confirmation
+    Queue("sweep", _default_exchange, routing_key="sweep"),
+    Queue("confirm", _default_exchange, routing_key="confirm"),
+    # Medium priority — notifications & webhooks
+    Queue("notify", _default_exchange, routing_key="notify"),
+    # Low priority — analytics & reports
+    Queue("analytics", _default_exchange, routing_key="analytics"),
+    # Default
+    Queue("default", _default_exchange, routing_key="default"),
+    # Dead Letter Queue — tasks that failed after max retries
+    Queue("dlq", _dlq_exchange, routing_key="dlq"),
+)
 
 celery.conf.update(
     # Serialization
@@ -57,6 +79,9 @@ celery.conf.update(
         "socket_timeout": 2,
     },
     broker_connection_timeout=2,  # kombu connection timeout
+
+    # Dead Letter Queue — failed tasks after retries go here
+    task_default_delivery_mode="persistent",
 
     # Task routing
     task_routes={
@@ -93,6 +118,43 @@ celery.conf.update(
 # ═══════════════════════════════════════════════════════════════
 #  Celery Beat Schedule
 # ═══════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════
+#  Correlation ID Propagation
+#
+#  Before a task is published, the current correlation_id is
+#  injected into the message headers. When a worker picks up
+#  the task, the correlation_id is restored into contextvars
+#  so that all logs within the task carry the same ID.
+# ═══════════════════════════════════════════════════════════════
+
+@signals.before_task_publish.connect
+def _inject_correlation_id(headers: dict, **kwargs):
+    """Inject correlation_id into Celery message headers before publishing."""
+    try:
+        from app.middleware.correlation import get_correlation_id
+        cid = get_correlation_id()
+        if cid:
+            headers["correlation_id"] = cid
+    except Exception:
+        pass
+
+
+@signals.task_prerun.connect
+def _restore_correlation_id(task, **kwargs):
+    """Restore correlation_id from task headers into contextvars on the worker."""
+    try:
+        from app.middleware.correlation import set_correlation_id
+        cid = getattr(task.request, "correlation_id", None)
+        if not cid:
+            # Fallback: check headers dict
+            headers = getattr(task.request, "headers", None) or {}
+            cid = headers.get("correlation_id", "")
+        if cid:
+            set_correlation_id(cid)
+    except Exception:
+        pass
+
 
 celery.conf.beat_schedule = {
     "update-gas-oracle": {

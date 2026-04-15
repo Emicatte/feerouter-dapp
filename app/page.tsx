@@ -12,6 +12,7 @@ import dynamic from 'next/dynamic'
 // STATIC IMPORTS
 import TransferForm from './TransferForm'
 import SwapModule from './SwapModule'
+// CrossChainForm logic integrated into TransferForm — no separate tab
 import AccountHeader from './AccountHeader'
 // Overlays — lazy loaded (only when user opens menu)
 const AboutOverlay = dynamic(() => import('./overlays/AboutOverlay'), { ssr: false })
@@ -25,10 +26,15 @@ import { useSweepStats } from '../lib/useSweepStats'
 import AntiPhishingSetup from './AntiPhishingSetup'
 import { TokenRow } from './TokenSelector'
 import { getNativeToken, getTokensForChain, type TokenInfo } from './tokens/tokenRegistry'
+import { ChainLogo } from '../src/components/ChainLogo'
 import { useTokenBalance } from './hooks/useTokenBalance'
 import { useTokenPrices } from './hooks/useTokenPrices'
 import { ChainFamilySwitch } from '../components/shared/ChainFamilySwitch'
 import { useUniversalWallet } from '../hooks/useUniversalWallet'
+import type { ChainFamily } from '../lib/chain-adapters/types'
+import { useWallet as useSolanaWallet } from '@solana/wallet-adapter-react'
+import { useTron } from './providers-tron'
+import type { NonEvmWalletProps } from './AccountHeader'
 import { ErrorBoundary } from '../components/shared/ErrorBoundary'
 import { ToastContainer } from '../components/shared/Toast'
 
@@ -213,20 +219,25 @@ function ParticleIntro({ onDone }: { onDone: () => void }) {
 // ═══════════════════════════════════════════════════════════
 //  NETWORK + GAS WIDGET — fixed top-right, below navbar
 // ═══════════════════════════════════════════════════════════
+const _AK = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY ?? ''
+const _IK = process.env.NEXT_PUBLIC_INFURA_API_KEY ?? ''
+function _alch(sub: string) { return _AK ? `https://${sub}.g.alchemy.com/v2/${_AK}` : '' }
+function _inf(net: string) { return _IK ? `https://${net}.infura.io/v3/${_IK}` : '' }
+
 const CHAINS = [
   // ── Mainnet ──
-  { id: 1,     name: 'Ethereum',      short: 'ETH',       color: '#627EEA', rpc: 'https://eth.llamarpc.com' },
-  { id: 8453,  name: 'Base',          short: 'Base',      color: '#0052FF', rpc: 'https://mainnet.base.org' },
-  { id: 42161, name: 'Arbitrum',      short: 'ARB',       color: '#28A0F0', rpc: 'https://arb1.arbitrum.io/rpc' },
-  { id: 10,    name: 'Optimism',      short: 'OP',        color: '#FF0420', rpc: 'https://mainnet.optimism.io' },
-  { id: 137,   name: 'Polygon',       short: 'POL',       color: '#8247E5', rpc: 'https://polygon-rpc.com' },
-  { id: 56,    name: 'BNB Chain',     short: 'BNB',       color: '#F0B90B', rpc: 'https://bsc-dataseed.binance.org' },
-  { id: 43114, name: 'Avalanche',     short: 'AVAX',      color: '#E84142', rpc: 'https://api.avax.network/ext/bc/C/rpc' },
-  { id: 324,   name: 'ZKsync Era',    short: 'ZK',        color: '#8C8DFC', rpc: 'https://mainnet.era.zksync.io' },
-  { id: 42220, name: 'Celo',          short: 'CELO',      color: '#35D07F', rpc: 'https://forno.celo.org' },
-  { id: 81457, name: 'Blast',         short: 'BLAST',     color: '#FCFC03', rpc: 'https://rpc.blast.io' },
+  { id: 1,     name: 'Ethereum',      short: 'ETH',       color: '#627EEA', rpc: [_alch('eth-mainnet'), _inf('mainnet'), 'https://eth.llamarpc.com'].filter(Boolean) },
+  { id: 8453,  name: 'Base',          short: 'Base',      color: '#0052FF', rpc: [_alch('base-mainnet'), 'https://mainnet.base.org'].filter(Boolean) },
+  { id: 42161, name: 'Arbitrum',      short: 'ARB',       color: '#28A0F0', rpc: [_alch('arb-mainnet'), _inf('arbitrum-mainnet'), 'https://arb1.arbitrum.io/rpc'].filter(Boolean) },
+  { id: 10,    name: 'Optimism',      short: 'OP',        color: '#FF0420', rpc: [_alch('opt-mainnet'), _inf('optimism-mainnet'), 'https://mainnet.optimism.io'].filter(Boolean) },
+  { id: 137,   name: 'Polygon',       short: 'POL',       color: '#8247E5', rpc: [_alch('polygon-mainnet'), _inf('polygon-mainnet'), 'https://polygon-rpc.com'].filter(Boolean) },
+  { id: 56,    name: 'BNB Chain',     short: 'BNB',       color: '#F0B90B', rpc: ['https://bsc-dataseed.binance.org', 'https://bsc-dataseed1.ninicoin.io'] },
+  { id: 43114, name: 'Avalanche',     short: 'AVAX',      color: '#E84142', rpc: [_inf('avalanche-mainnet'), 'https://api.avax.network/ext/bc/C/rpc'].filter(Boolean) },
+  { id: 324,   name: 'ZKsync Era',    short: 'ZK',        color: '#8C8DFC', rpc: [_alch('zksync-mainnet'), 'https://mainnet.era.zksync.io'].filter(Boolean) },
+  { id: 42220, name: 'Celo',          short: 'CELO',      color: '#35D07F', rpc: [_inf('celo-mainnet'), 'https://forno.celo.org'].filter(Boolean) },
+  { id: 81457, name: 'Blast',         short: 'BLAST',     color: '#FCFC03', rpc: [_alch('blast-mainnet'), 'https://rpc.blast.io'].filter(Boolean) },
   // ── Testnet ──
-  { id: 84532, name: 'Base Sepolia',  short: 'Sepolia',   color: '#ffb800', rpc: 'https://sepolia.base.org', testnet: true },
+  { id: 84532, name: 'Base Sepolia',  short: 'Sepolia',   color: '#ffb800', rpc: [_alch('base-sepolia'), 'https://sepolia.base.org'].filter(Boolean), testnet: true },
 ]
 
 function NetworkTokenWidget({
@@ -238,6 +249,7 @@ function NetworkTokenWidget({
   tokenBalanceFmt,
   tokenBalanceEur,
   tokenBalanceLoading,
+  onFamilyChange,
 }: {
   onChainSelect?: (chainId: number) => void
   selectedToken: TokenInfo | null
@@ -247,6 +259,7 @@ function NetworkTokenWidget({
   tokenBalanceFmt: string
   tokenBalanceEur: number | null
   tokenBalanceLoading: boolean
+  onFamilyChange?: (family: ChainFamily) => void
 }) {
   const chainId = useChainId()
   const { switchChain } = useSwitchChain()
@@ -261,16 +274,25 @@ function NetworkTokenWidget({
   const isTestnet = !!(chain as typeof CHAINS[number] & { testnet?: boolean }).testnet
   const chainTokens = getTokensForChain(selectedChainId)
 
-  // Gas polling
+  // Gas polling with RPC fallback
   useEffect(() => {
-    const rpc = chain.rpc
+    const rpcs = chain.rpc
     const f = async () => {
-      try {
-        const r = await fetch(rpc, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_gasPrice', params: [] }) })
-        setGas(parseInt((await r.json()).result, 16) / 1e9)
-      } catch { /* */ }
+      for (const rpc of rpcs) {
+        try {
+          const r = await fetch(rpc, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_gasPrice', params: [] }),
+            signal: AbortSignal.timeout(5000),
+          })
+          if (!r.ok) continue
+          const data = await r.json()
+          if (data.result) { setGas(parseInt(data.result, 16) / 1e9); return }
+        } catch { /* try next RPC */ }
+      }
     }
-    f(); const iv = setInterval(f, 15000); return () => clearInterval(iv)
+    f(); const iv = setInterval(f, 30000); return () => clearInterval(iv)
   }, [chain.rpc])
 
   // Close on outside click
@@ -312,7 +334,10 @@ function NetworkTokenWidget({
       {/* ── Chain family switch: EVM / Solana / Tron ──────── */}
       <ChainFamilySwitch
         active={wallet.activeFamily}
-        onSelect={wallet.setActiveFamily}
+        onSelect={(family) => {
+          wallet.setActiveFamily(family)
+          onFamilyChange?.(family)
+        }}
         connections={wallet.connections}
       />
 
@@ -371,7 +396,7 @@ function NetworkTokenWidget({
             borderRight: '1px solid rgba(255,255,255,0.06)',
           }}
         >
-          <div style={{ width: 7, height: 7, borderRadius: '50%', background: chain.color, boxShadow: `0 0 6px ${chain.color}60` }} />
+          <ChainLogo chainId={chain.id} size={20} />
           <span style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.text }}>{chain.short}</span>
           {isTestnet && (
             <span style={{ fontFamily: C.M, fontSize: 8, fontWeight: 700, color: '#ffb800', background: 'rgba(255,184,0,0.1)', padding: '1px 4px', borderRadius: 3, lineHeight: '1.2' }}>TEST</span>
@@ -379,31 +404,6 @@ function NetworkTokenWidget({
           <span style={{ color: C.dim, fontSize: 7 }}>▾</span>
         </button>
 
-        {/* Token section */}
-        <button
-          onClick={() => setOpenPanel(openPanel === 'token' ? null : 'token')}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: '4px 10px 4px 8px',
-            background: openPanel === 'token' ? 'rgba(255,255,255,0.04)' : 'transparent',
-            border: 'none', cursor: 'pointer', transition: 'background 0.15s',
-            borderRight: '1px solid rgba(255,255,255,0.06)',
-          }}
-        >
-          {selectedToken && (
-            <img
-              src={selectedToken.logoUrl}
-              alt={selectedToken.symbol}
-              width={18} height={18}
-              style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover', border: '1px solid rgba(255,255,255,0.08)' }}
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
-            />
-          )}
-          <span style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.text }}>
-            {selectedToken?.symbol ?? 'Token'}
-          </span>
-          <span style={{ color: C.dim, fontSize: 7 }}>▾</span>
-        </button>
 
         {/* Gas section */}
         <div style={{
@@ -471,7 +471,7 @@ function NetworkTokenWidget({
                   onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
                   onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
                 >
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: c.color, boxShadow: `0 0 6px ${c.color}40` }} />
+                  <ChainLogo chainId={c.id} size={22} />
                   <div style={{ flex: 1 }}>
                     <span style={{ fontFamily: C.D, fontSize: 12, fontWeight: 600, color: active ? C.text : C.sub }}>{c.name}</span>
                     {test && <span style={{ fontFamily: C.M, fontSize: 8, color: '#ffb800', marginLeft: 6 }}>testnet</span>}
@@ -547,6 +547,7 @@ function NetworkTokenWidget({
 // ═══════════════════════════════════════════════════════════
 function Navbar({
   view, setView, activeOverlay, setActiveOverlay, sweeps24h, vol24h, unseenCount,
+  nonEvmWallet,
 }: {
   view: View
   setView: (v: View) => void
@@ -555,6 +556,7 @@ function Navbar({
   sweeps24h: number
   vol24h: number
   unseenCount: number
+  nonEvmWallet?: NonEvmWalletProps
 }) {
   const [hoveredLink, setHoveredLink] = useState<string | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -673,7 +675,7 @@ function Navbar({
             </div>
           )}
           <EngineStatus />
-          <AccountHeader />
+          <AccountHeader nonEvmWallet={nonEvmWallet} />
         </div>
     </nav>
 
@@ -907,11 +909,74 @@ function HeroTitle({ view, setView, isMobile }: { view: View; setView: (v: View)
 
 
 // ═══════════════════════════════════════════════════════════
+//  NON-EVM PLACEHOLDER (Tron / Solana — coming soon)
+// ═══════════════════════════════════════════════════════════
+
+function NonEvmPlaceholder({
+  family,
+}: {
+  family: string
+  address?: any
+  connections?: any
+}) {
+  const config: Record<string, { name: string; color: string }> = {
+    tron:   { name: 'TRON', color: '#FF0000' },
+    solana: { name: 'Solana', color: '#9945FF' },
+  }
+  const c = config[family] ?? { name: family, color: '#666' }
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '40px 20px',
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 10,
+        padding: '14px 24px', borderRadius: 14,
+        background: `${c.color}08`,
+        border: `1px solid ${c.color}18`,
+      }}>
+        <div style={{
+          width: 8, height: 8, borderRadius: '50%',
+          background: c.color,
+          animation: 'pulse 2s ease-in-out infinite',
+        }} />
+        <span style={{
+          fontFamily: 'var(--font-display)', fontSize: 13,
+          fontWeight: 600, color: c.color,
+        }}>
+          {c.name} deploy coming soon
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════
 //  MAIN PAGE
 // ═══════════════════════════════════════════════════════════
 export default function Home() {
   const { address, isConnected } = useAccount()
   const chainId = useChainId()
+  const walletInfo = useUniversalWallet()
+  const [activeFamily, setActiveFamily] = useState<ChainFamily>('evm')
+  const wallet = { ...walletInfo, activeFamily }
+
+  // Non-EVM disconnect hooks
+  const { disconnect: solanaDisconnect } = useSolanaWallet()
+  const tron = useTron()
+
+  // Build nonEvmWallet prop for AccountHeader when on Tron/Solana
+  const nonEvmWallet: NonEvmWalletProps | undefined = (() => {
+    if (activeFamily === 'evm') return undefined
+    const conn = activeFamily === 'tron' ? wallet.connections.tron : wallet.connections.solana
+    if (!conn?.address) return undefined
+    return {
+      family: activeFamily as 'tron' | 'solana',
+      address: conn.address,
+      disconnect: activeFamily === 'tron' ? tron.disconnect : solanaDisconnect,
+    }
+  })()
   const [view, setView] = useState<View>('send')
   const [activeOverlay, setActiveOverlay] = useState<Overlay>(null)
   const [showIntro, setShowIntro] = useState(false)
@@ -993,11 +1058,12 @@ export default function Home() {
       </div>
 
       {/* Navbar */}
-      <Navbar view={view} setView={setView} activeOverlay={activeOverlay} setActiveOverlay={setActiveOverlay} sweeps24h={sweeps24h} vol24h={vol24h} unseenCount={unseenCount} />
+      <Navbar view={view} setView={setView} activeOverlay={activeOverlay} setActiveOverlay={setActiveOverlay} sweeps24h={sweeps24h} vol24h={vol24h} unseenCount={unseenCount} nonEvmWallet={nonEvmWallet} />
 
       {/* Network + Token + Gas — fixed top-right below navbar */}
       {ready && !isMobileHome && (
         <NetworkTokenWidget
+          onFamilyChange={(family) => setActiveFamily(family)}
           onChainSelect={(cid) => {
             setSelectedChainId(cid)
             setSelectedToken(getNativeToken(cid) ?? null)
@@ -1150,16 +1216,24 @@ export default function Home() {
         }}>
           {/* Send — always mounted */}
           <div style={view === 'send' ? panelActive : panelHidden}>
-            <ErrorBoundary module="TransferForm">
-              <TransferForm noCard externalToken={selectedToken} />
-            </ErrorBoundary>
+            {wallet.activeFamily === 'evm' ? (
+              <ErrorBoundary module="TransferForm">
+                <TransferForm noCard externalToken={selectedToken} />
+              </ErrorBoundary>
+            ) : (
+              <NonEvmPlaceholder family={wallet.activeFamily} />
+            )}
           </div>
 
           {/* Swap — always mounted */}
           <div style={view === 'swap' ? panelActive : panelHidden}>
-            <ErrorBoundary module="SwapModule">
-              <SwapModule noCard onSwapComplete={() => {}} />
-            </ErrorBoundary>
+            {wallet.activeFamily === 'evm' ? (
+              <ErrorBoundary module="SwapModule">
+                <SwapModule noCard onSwapComplete={() => {}} />
+              </ErrorBoundary>
+            ) : (
+              <NonEvmPlaceholder family={wallet.activeFamily} />
+            )}
           </div>
 
           {/* Command Center — always mounted */}

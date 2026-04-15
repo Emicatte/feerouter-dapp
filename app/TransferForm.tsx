@@ -29,7 +29,9 @@ import { UNISWAP_V3_ROUTER_ABI } from '../src/constants/abis/uniswapV3Router'
 import { useBackendCallback } from '../lib/useBackendCallback'
 import { mutationHeaders } from '../lib/rsendFetch'
 import TxConfirmationSheet, { isKnownRecipient, saveKnownRecipient } from './TxConfirmationSheet'
-import { SUPPORTED_CHAINS, type ChainId, type TokenInfo } from './tokens/tokenRegistry'
+import { SUPPORTED_CHAINS, type ChainId, type TokenInfo, TOKEN_LIST } from './tokens/tokenRegistry'
+import { getCCIPConfig, getCCIPChainSelector, CCIP_SUPPORTED_TOKENS } from '@/lib/ccipRegistry'
+import { ChainLogo, CHAIN_META } from '../src/components/ChainLogo'
 import { useTokenPrices } from './hooks/useTokenPrices'
 import { useTokenBalance } from './hooks/useTokenBalance'
 import AddressIntelligence, { recordSuccessfulTx } from './AddressIntelligence'
@@ -105,6 +107,47 @@ const FEE_ROUTER_ABI: Abi = [
   { name: 'RecipientBlacklisted', type: 'error', inputs: [] },
   { name: 'TokenNotAllowed', type: 'error', inputs: [] },
 ]
+
+// ── CCIP Sender ABI (cross-chain) ──────────────────────────────────────────
+const CCIP_SENDER_ABI: Abi = [
+  {
+    name: 'swapAndBridge', type: 'function', stateMutability: 'payable',
+    inputs: [
+      { name: 'tokenIn', type: 'address' }, { name: 'tokenOut', type: 'address' },
+      { name: 'amountIn', type: 'uint256' }, { name: 'minAmountOut', type: 'uint256' },
+      { name: 'destinationChainSelector', type: 'uint64' }, { name: 'recipient', type: 'address' },
+    ], outputs: [],
+  },
+  {
+    name: 'swapETHAndBridge', type: 'function', stateMutability: 'payable',
+    inputs: [
+      { name: 'tokenOut', type: 'address' }, { name: 'amountIn', type: 'uint256' },
+      { name: 'minAmountOut', type: 'uint256' }, { name: 'destinationChainSelector', type: 'uint64' },
+      { name: 'recipient', type: 'address' },
+    ], outputs: [],
+  },
+  {
+    name: 'sendCrossChain', type: 'function', stateMutability: 'payable',
+    inputs: [
+      { name: 'destinationChainSelector', type: 'uint64' }, { name: 'recipient', type: 'address' },
+      { name: 'token', type: 'address' }, { name: 'amount', type: 'uint256' },
+    ], outputs: [],
+  },
+]
+
+// ── Chain colors & names (cross-chain UI) ──────────────────────────────────
+const CHAIN_COLORS: Record<number, string> = {
+  8453:'#0052FF', 1:'#627EEA', 42161:'#28A0F0', 10:'#FF0420',
+  137:'#8247E5', 56:'#F3BA2F', 43114:'#E84142', 324:'#8C8DFC',
+  42220:'#FCFF52', 81457:'#FCFC03', 84532:'#0052FF',
+}
+const CHAIN_NAMES: Record<number, string> = {
+  8453:'Base', 1:'Ethereum', 42161:'Arbitrum', 10:'Optimism',
+  137:'Polygon', 56:'BNB', 43114:'Avalanche', 324:'ZKsync',
+  42220:'Celo', 81457:'Blast', 84532:'Sepolia',
+}
+
+type RouteType = 'direct' | 'swap' | 'bridge' | 'swapAndBridge'
 
 type Phase    = 'idle' | 'preflight' | 'approving' | 'wait_approve' | 'signing' | 'wait_send' | 'done' | 'error'
 type CtaState = 'disconnected' | 'wrong_network' | 'insufficient' | 'no_recipient' | 'no_amount' | 'oracle_denied' | 'no_liquidity' | 'ready' | 'busy'
@@ -195,21 +238,24 @@ function TokenPill({ token, onClick, accentColor, busy }: {
 }
 
 // ── Token Selector Modal — background solido opaco ────────────────────────
-function TokenSelectorModal({ tokens, onSelect, onClose, title, isMobile }: {
+function TokenSelectorModal({ tokens, onSelect, onClose, title, isMobile, multiChainTokens, onSelectMultiChain, currentChainId }: {
   tokens: (TokenConfig & { balance: bigint })[]
   onSelect: (t: TokenConfig & { balance: bigint }) => void
   onClose: () => void
   title: string
   isMobile?: boolean
+  multiChainTokens?: TokenInfo[]
+  onSelectMultiChain?: (t: TokenInfo) => void
+  currentChainId?: number
 }) {
   const ref = useRef<HTMLDivElement>(null)
+  const [search, setSearch] = useState('')
 
   // Chiudi cliccando fuori
   useEffect(() => {
     const h = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose()
     }
-    // Slight delay per evitare che il click che apre la modale la chiuda subito
     const timer = setTimeout(() => document.addEventListener('mousedown', h), 50)
     return () => { clearTimeout(timer); document.removeEventListener('mousedown', h) }
   }, [onClose])
@@ -228,21 +274,39 @@ function TokenSelectorModal({ tokens, onSelect, onClose, title, isMobile }: {
       : v.toFixed(4)
   }
 
+  // Filter tokens by search
+  const q = search.toLowerCase().trim()
+  const filteredLocal = q ? tokens.filter(t =>
+    t.symbol.toLowerCase().includes(q) || t.name.toLowerCase().includes(q)
+  ) : tokens
+  const filteredMultiChain = multiChainTokens && q
+    ? multiChainTokens.filter(t =>
+        t.symbol.toLowerCase().includes(q) || t.name.toLowerCase().includes(q) ||
+        (CHAIN_NAMES[t.chainId] ?? '').toLowerCase().includes(q)
+      )
+    : multiChainTokens
+
+  // Check if a cross-chain route is available (CCIP)
+  const isCCIPRoute = (destChainId: number) => {
+    if (!currentChainId) return false
+    const src = CCIP_SUPPORTED_TOKENS[currentChainId]
+    const dst = CCIP_SUPPORTED_TOKENS[destChainId]
+    return !!(src && dst)
+  }
+
   return (
-    // Overlay semitrasparente
     <div style={{
       position: 'fixed', inset: 0, zIndex: 200,
       background: 'rgba(0,0,0,0.55)',
       display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center',
       padding: isMobile ? 0 : '16px',
     }}>
-      {/* Modale — background SOLIDO, nessuna trasparenza */}
       <div
         ref={ref}
         style={{
           width: '100%', maxWidth: isMobile ? '100%' : 380,
           ...(isMobile ? { height: '85dvh' } : {}),
-          background: '#111120',           // T.card — solido
+          background: '#111120',
           border: '1px solid rgba(255,255,255,0.10)',
           borderRadius: isMobile ? '20px 20px 0 0' : 20,
           boxShadow: '0 24px 80px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.04)',
@@ -251,7 +315,7 @@ function TokenSelectorModal({ tokens, onSelect, onClose, title, isMobile }: {
           animation: 'rpFadeUp 0.2s var(--ease-spring) both',
         }}
       >
-        {/* Header modale */}
+        {/* Header */}
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '16px 18px 12px',
@@ -265,60 +329,159 @@ function TokenSelectorModal({ tokens, onSelect, onClose, title, isMobile }: {
             style={{ width:30, height:30, borderRadius:8, background:'rgba(255,255,255,0.06)', border:'none', color:T.muted, cursor:'pointer', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.15s' }}
             onMouseEnter={e => e.currentTarget.style.background='rgba(255,255,255,0.12)'}
             onMouseLeave={e => e.currentTarget.style.background='rgba(255,255,255,0.06)'}
-          >✕</button>
+          >&#x2715;</button>
         </div>
 
-        {/* Lista token */}
-        <div style={{ overflowY: 'auto', ...(isMobile ? { flex: 1 } : { maxHeight: 360 }) }}>
-          {tokens.map((t, i) => (
-            <button
-              key={t.symbol}
-              type="button"
-              onClick={() => { onSelect(t); onClose() }}
+        {/* Search */}
+        {multiChainTokens && (
+          <div style={{ padding: '8px 18px 4px' }}>
+            <input
+              type="text"
+              placeholder="Search token or chain..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              autoFocus
               style={{
-                width: '100%', display: 'flex', alignItems: 'center', gap: 14,
-                padding: '13px 18px',
-                background: 'transparent',
-                border: 'none',
-                borderBottom: i < tokens.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
-                cursor: 'pointer',
-                transition: 'background 0.12s ease',
-                textAlign: 'left' as const,
+                width: '100%', padding: '10px 14px', borderRadius: 12,
+                border: '1px solid rgba(255,255,255,0.1)',
+                background: 'rgba(255,255,255,0.04)',
+                color: T.text, fontFamily: T.M, fontSize: 13, outline: 'none',
               }}
-              onMouseEnter={e => e.currentTarget.style.background='rgba(255,255,255,0.05)'}
-              onMouseLeave={e => e.currentTarget.style.background='transparent'}
-            >
-              <TokenLogo token={t} size={36} />
-              <div style={{ flex: 1 }}>
-                <div style={{ display:'flex', alignItems:'center', gap:7 }}>
-                  <span style={{ fontFamily:T.D, fontSize:15, fontWeight:700, color:T.text }}>
-                    {t.symbol}
-                  </span>
-                  {t.isEurc && (
-                    <span style={{ fontFamily:T.D, fontSize:9, fontWeight:700, color:'#6699ff', background:'rgba(0,51,204,0.15)', padding:'2px 6px', borderRadius:4, border:'1px solid rgba(0,51,204,0.3)' }}>
-                      ★ EU
-                    </span>
-                  )}
-                  {t.gasless && !t.isEurc && (
-                    <span style={{ fontFamily:T.D, fontSize:9, color:T.emerald, background:'rgba(0,255,163,0.1)', padding:'2px 6px', borderRadius:4 }}>
-                      ⛽ Gasless
-                    </span>
-                  )}
+            />
+          </div>
+        )}
+
+        {/* Token list */}
+        <div style={{ overflowY: 'auto', ...(isMobile ? { flex: 1 } : { maxHeight: multiChainTokens ? 420 : 360 }) }}>
+          {/* Same-chain tokens (with balance) */}
+          {filteredLocal.length > 0 && (
+            <>
+              {multiChainTokens && (
+                <div style={{ padding: '10px 18px 4px', fontFamily: T.D, fontSize: 10, fontWeight: 700, color: T.muted, letterSpacing: '0.08em', textTransform: 'uppercase' as const }}>
+                  {CHAIN_NAMES[currentChainId ?? 0] ?? 'Current chain'}
                 </div>
-                <div style={{ fontFamily:T.M, fontSize:11, color:T.muted, marginTop:2 }}>
-                  {t.name}
-                </div>
+              )}
+              {filteredLocal.map((t, i) => (
+                <button
+                  key={`local-${t.symbol}`}
+                  type="button"
+                  onClick={() => { onSelect(t); onClose() }}
+                  style={{
+                    width: '100%', display: 'flex', alignItems: 'center', gap: 14,
+                    padding: '13px 18px',
+                    background: 'transparent', border: 'none',
+                    borderBottom: i < filteredLocal.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                    cursor: 'pointer', transition: 'background 0.12s ease',
+                    textAlign: 'left' as const,
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background='rgba(255,255,255,0.05)'}
+                  onMouseLeave={e => e.currentTarget.style.background='transparent'}
+                >
+                  <TokenLogo token={t} size={36} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:7 }}>
+                      <span style={{ fontFamily:T.D, fontSize:15, fontWeight:700, color:T.text }}>
+                        {t.symbol}
+                      </span>
+                      {t.isEurc && (
+                        <span style={{ fontFamily:T.D, fontSize:9, fontWeight:700, color:'#6699ff', background:'rgba(0,51,204,0.15)', padding:'2px 6px', borderRadius:4, border:'1px solid rgba(0,51,204,0.3)' }}>
+                          &#x2605; EU
+                        </span>
+                      )}
+                      {t.gasless && !t.isEurc && (
+                        <span style={{ fontFamily:T.D, fontSize:9, color:T.emerald, background:'rgba(0,255,163,0.1)', padding:'2px 6px', borderRadius:4 }}>
+                          Gasless
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ fontFamily:T.M, fontSize:11, color:T.muted, marginTop:2 }}>
+                      {t.name}
+                    </div>
+                  </div>
+                  <div style={{ textAlign:'right' as const }}>
+                    <div style={{ fontFamily:T.M, fontSize:13, fontWeight:600, color:T.text }}>
+                      {fmtBal(t)}
+                    </div>
+                    <div style={{ fontFamily:T.M, fontSize:10, color:T.muted, marginTop:1 }}>
+                      {t.symbol}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </>
+          )}
+
+          {/* Cross-chain tokens */}
+          {filteredMultiChain && filteredMultiChain.length > 0 && onSelectMultiChain && (
+            <>
+              <div style={{ padding: '12px 18px 4px', fontFamily: T.D, fontSize: 10, fontWeight: 700, color: T.muted, letterSpacing: '0.08em', textTransform: 'uppercase' as const, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                Cross-chain (CCIP)
               </div>
-              <div style={{ textAlign:'right' as const }}>
-                <div style={{ fontFamily:T.M, fontSize:13, fontWeight:600, color:T.text }}>
-                  {fmtBal(t)}
-                </div>
-                <div style={{ fontFamily:T.M, fontSize:10, color:T.muted, marginTop:1 }}>
-                  {t.symbol}
-                </div>
-              </div>
-            </button>
-          ))}
+              {filteredMultiChain.map((t, i) => {
+                const available = isCCIPRoute(t.chainId)
+                return (
+                  <button
+                    key={`cc-${t.symbol}-${t.chainId}`}
+                    type="button"
+                    onClick={() => { if (available) { onSelectMultiChain(t); onClose() } }}
+                    disabled={!available}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', gap: 14,
+                      padding: '13px 18px',
+                      background: 'transparent', border: 'none',
+                      borderBottom: i < filteredMultiChain.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                      cursor: available ? 'pointer' : 'default',
+                      opacity: available ? 1 : 0.35,
+                      transition: 'background 0.12s ease',
+                      textAlign: 'left' as const,
+                    }}
+                    onMouseEnter={e => { if (available) e.currentTarget.style.background='rgba(255,255,255,0.05)' }}
+                    onMouseLeave={e => e.currentTarget.style.background='transparent'}
+                  >
+                    {/* Token icon with chain logo badge */}
+                    <div style={{ position: 'relative', width: 36, height: 36, flexShrink: 0 }}>
+                      <img
+                        src={t.logoUrl} alt={t.symbol}
+                        style={{ width: 36, height: 36, borderRadius: '50%', border: '1.5px solid rgba(255,255,255,0.1)' }}
+                        onError={e => { e.currentTarget.style.display = 'none' }}
+                      />
+                      <div style={{
+                        position: 'absolute', bottom: -3, right: -3,
+                        width: 18, height: 18, borderRadius: '50%',
+                        border: '2px solid #111120',
+                        overflow: 'hidden', background: '#111120',
+                      }}>
+                        <ChainLogo chainId={t.chainId} size={18} />
+                      </div>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                        <span style={{ fontFamily: T.D, fontSize: 15, fontWeight: 700, color: T.text }}>
+                          {t.symbol}
+                        </span>
+                        <span style={{
+                          fontFamily: T.D, fontSize: 9, fontWeight: 700,
+                          color: CHAIN_META[t.chainId]?.color ?? '#888',
+                          background: `${CHAIN_META[t.chainId]?.color ?? '#888'}15`,
+                          padding: '2px 6px', borderRadius: 4,
+                        }}>
+                          {CHAIN_META[t.chainId]?.name ?? `Chain ${t.chainId}`}
+                        </span>
+                      </div>
+                      <div style={{ fontFamily: T.M, fontSize: 11, color: T.muted, marginTop: 2 }}>
+                        {t.name}
+                      </div>
+                    </div>
+                    {!available && (
+                      <span style={{ fontFamily: T.D, fontSize: 9, color: T.muted }}>
+                        Coming soon
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -423,9 +586,35 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
   const [tokenIn,   setTokenIn]   = useState<(TokenConfig & { balance: bigint }) | null>(null)
   const [tokenOut,  setTokenOut]  = useState<(TokenConfig & { balance: bigint }) | null>(null)
 
+  // ── Cross-chain state ──────────────────────────────────────────────────
+  const [crossChainOut, setCrossChainOut] = useState<TokenInfo | null>(null)
+
   // ── isSwapMode — auto-detection (niente useState) ─────────────────────
   // Direct se stesso token (stesso address) — Swap se token diversi
-  const isSwapMode = !!(tokenIn && tokenOut && tokenIn.address !== tokenOut.address)
+  const isSwapMode = !!(tokenIn && tokenOut && tokenIn.address !== tokenOut.address) && !crossChainOut
+
+  // ── Route detection ──────────────────────────────────────────────────
+  const destChainId = crossChainOut?.chainId ?? chainId
+  const isCrossChain = destChainId !== chainId
+
+  const routeType: RouteType = (() => {
+    if (!crossChainOut) {
+      // Same-chain logic (existing)
+      if (tokenIn && tokenOut && tokenIn.address !== tokenOut.address) return 'swap'
+      return 'direct'
+    }
+    // Cross-chain logic
+    const sameSymbol = tokenIn?.symbol === crossChainOut.symbol
+    if (sameSymbol) return 'bridge'
+    return 'swapAndBridge'
+  })()
+
+  const routeLabels: Record<RouteType, { label: string; icon: string; color: string }> = {
+    direct:        { label: 'Direct Transfer', icon: '\u2192', color: T.emerald },
+    swap:          { label: 'Swap via Uniswap V3', icon: '\u26A1', color: T.purple },
+    bridge:        { label: 'Bridge via Chainlink CCIP', icon: '\u{1F309}', color: '#3B82F6' },
+    swapAndBridge: { label: 'Swap & Bridge', icon: '\u26A1\u{1F309}', color: T.amber },
+  }
 
   // ── Token selector modal ───────────────────────────────────────────────
   const [selectingToken, setSelectingToken] = useState<SelectingToken>(null)
@@ -678,8 +867,93 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
     } catch (e) { handleErr(e) }
   }, [parseAmtIn, tokenIn, registry, recipient, chainId, sendTransactionAsync])
 
+  // ── Cross-chain: bridge (same token, different chain) ─────────────────
+  const execBridge = useCallback(async () => {
+    const r = parseAmtIn(); if (!r || !tokenIn || !crossChainOut) return
+    const ccipConfig = getCCIPConfig(chainId)
+    const destSelector = getCCIPChainSelector(destChainId)
+    if (!ccipConfig || !destSelector) {
+      setTxError('Cross-chain non disponibile per questa rotta'); setPhase('error'); return
+    }
+    if (ccipConfig.senderContract === '0x0000000000000000000000000000000000000000') {
+      setTxError('CCIP Sender non deployato. Aggiorna ccipRegistry.ts.'); setPhase('error'); return
+    }
+    setPhase('signing')
+    try {
+      // Estimate CCIP fee: ~0.001 ETH placeholder + 10% buffer
+      const ccipFeeEst = parseEther('0.002')
+      const hash = await writeContractAsync({
+        address: ccipConfig.senderContract,
+        abi: CCIP_SENDER_ABI,
+        functionName: 'sendCrossChain',
+        args: [destSelector, getAddress(recipient) as `0x${string}`, tokenIn.address!, r],
+        value: ccipFeeEst,
+      })
+      txLog('bridge.broadcast', { hash, token: tokenIn.symbol, destChain: destChainId })
+      setSendHash(hash); setPhase('wait_send')
+    } catch (e) { handleErr(e) }
+  }, [parseAmtIn, tokenIn, crossChainOut, chainId, destChainId, recipient])
+
+  // ── Cross-chain: swap & bridge (different token, different chain) ──────
+  const execSwapAndBridge = useCallback(async () => {
+    const r = parseAmtIn(); if (!r || !tokenIn || !crossChainOut) return
+    const ccipConfig = getCCIPConfig(chainId)
+    const destSelector = getCCIPChainSelector(destChainId)
+    if (!ccipConfig || !destSelector) {
+      setTxError('Cross-chain non disponibile per questa rotta'); setPhase('error'); return
+    }
+    if (ccipConfig.senderContract === '0x0000000000000000000000000000000000000000') {
+      setTxError('CCIP Sender non deployato. Aggiorna ccipRegistry.ts.'); setPhase('error'); return
+    }
+    if (!swapQuote || swapQuote.status !== 'success') {
+      setTxError('Quotazione non disponibile.'); setPhase('error'); return
+    }
+    setPhase('signing')
+    try {
+      const minOut = swapQuote.minAmountOut
+      const ccipFeeEst = parseEther('0.002')
+
+      // Resolve the tokenOut address on the source chain for the swap
+      // The swap happens on source chain, then the output token is bridged
+      const tokenOutAddr = crossChainOut.address as `0x${string}` | null
+      if (!tokenOutAddr) {
+        setTxError('Token out address non disponibile.'); setPhase('error'); return
+      }
+
+      if (tokenIn.isNative) {
+        // swapETHAndBridge: msg.value = amountIn + ccipFee
+        const hash = await writeContractAsync({
+          address: ccipConfig.senderContract,
+          abi: CCIP_SENDER_ABI,
+          functionName: 'swapETHAndBridge',
+          args: [tokenOutAddr, r, minOut, destSelector, getAddress(recipient) as `0x${string}`],
+          value: r + ccipFeeEst,
+        })
+        txLog('swapAndBridge.broadcast', { hash, tokenIn: tokenIn.symbol, tokenOut: crossChainOut.symbol, destChain: destChainId })
+        setSendHash(hash); setPhase('wait_send')
+      } else {
+        // swapAndBridge: msg.value = ccipFee only
+        const hash = await writeContractAsync({
+          address: ccipConfig.senderContract,
+          abi: CCIP_SENDER_ABI,
+          functionName: 'swapAndBridge',
+          args: [tokenIn.address!, tokenOutAddr, r, minOut, destSelector, getAddress(recipient) as `0x${string}`],
+          value: ccipFeeEst,
+        })
+        txLog('swapAndBridge.broadcast', { hash, tokenIn: tokenIn.symbol, tokenOut: crossChainOut.symbol, destChain: destChainId })
+        setSendHash(hash); setPhase('wait_send')
+      }
+    } catch (e) { handleErr(e) }
+  }, [parseAmtIn, tokenIn, crossChainOut, chainId, destChainId, swapQuote, recipient])
+
   useEffect(() => {
     if (!approveOk || phase !== 'wait_approve') return
+    // Cross-chain routes
+    if (isCrossChain && crossChainOut) {
+      if (routeType === 'bridge') execBridge()
+      else execSwapAndBridge()
+      return
+    }
     // FeeRouter path: Oracle available → use execSwap/execDirect with Oracle
     if (oracleData) {
       if (isSwapMode) execSwap(oracleData)
@@ -688,7 +962,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
       // Direct swap fallback (no FeeRouter, no Oracle) → use Uniswap directly
       execSwapDirect()
     }
-  }, [approveOk, phase, oracleData, isSwapMode, execSwap, execDirect, execSwapDirect])
+  }, [approveOk, phase, oracleData, isSwapMode, isCrossChain, crossChainOut, routeType, execSwap, execDirect, execSwapDirect, execBridge, execSwapAndBridge])
 
   useEffect(() => {
     if (!sendOk || phase !== 'wait_send' || !sendHash || !tokenIn || !address || directERC20Mode) return
@@ -842,6 +1116,72 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
     acquireLock()
     const txIdempotencyKey = generateIdempotencyKey()
 
+    // ── Cross-chain routes: bridge or swapAndBridge ─────────────────────
+    if (isCrossChain && crossChainOut) {
+      // AML check for cross-chain
+      try {
+        const checkRes = await fetch('/api/oracle/check-crosschain', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sender: address, recipient,
+            token: crossChainOut.symbol, amount,
+            sourceChainId: chainId, destChainId,
+          }),
+        })
+        const checkData = await checkRes.json()
+        if (!checkData.approved) {
+          setTxError('Transazione bloccata dal controllo compliance')
+          setPhase('error'); releaseLock(); return
+        }
+      } catch {
+        // AML check fail → proceed (fail-open for frontend, backend enforces)
+      }
+
+      if (routeType === 'bridge') {
+        // Same token, different chain → approve + sendCrossChain
+        if (!tokenIn.isNative) {
+          const ccipConfig = getCCIPConfig(chainId)
+          if (ccipConfig && ccipConfig.senderContract !== '0x0000000000000000000000000000000000000000') {
+            try {
+              setPhase('approving')
+              const ah = await writeContractAsync({
+                address: tokenIn.address! as `0x${string}`, abi: erc20Abi,
+                functionName: 'approve',
+                args: [ccipConfig.senderContract, r],
+              })
+              setApprovHash(ah); setPhase('wait_approve')
+              // execBridge called after approve via effect below
+            } catch (e) { handleErr(e) }
+          } else {
+            await execBridge()
+          }
+        } else {
+          await execBridge()
+        }
+      } else {
+        // swapAndBridge → approve tokenIn + call swapAndBridge
+        if (!tokenIn.isNative) {
+          const ccipConfig = getCCIPConfig(chainId)
+          if (ccipConfig && ccipConfig.senderContract !== '0x0000000000000000000000000000000000000000') {
+            try {
+              setPhase('approving')
+              const ah = await writeContractAsync({
+                address: tokenIn.address! as `0x${string}`, abi: erc20Abi,
+                functionName: 'approve',
+                args: [ccipConfig.senderContract, r],
+              })
+              setApprovHash(ah); setPhase('wait_approve')
+            } catch (e) { handleErr(e) }
+          } else {
+            await execSwapAndBridge()
+          }
+        } else {
+          await execSwapAndBridge()
+        }
+      }
+      return
+    }
+
     // ── GUARD: contratto non deployato su questa chain ─────────────────────
     const ZERO_ADDR = '0x0000000000000000000000000000000000000000'
     const hasFeeRouter = isFeeRouterAvailable(chainId)
@@ -982,6 +1322,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
     setPhase('idle'); setAmount(''); setRecipient(''); setPaymentRef(''); setFiscalRef('')
     setReport(null); setCompRec(null); setApprovHash(undefined); setSendHash(undefined)
     setTxError(''); setOracleData(null); setOracleDenied(false); setDirectERC20Mode(false)
+    setCrossChainOut(null)
   }
 
   const handlePdf = async () => {
@@ -1069,7 +1410,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
   const rawIn    = parseAmtIn()
   const busy     = ['preflight','approving','wait_approve','signing','wait_send'].includes(phase)
   const sym      = tokenIn?.symbol  ?? 'ETH'
-  const symOut   = isSwapMode ? (tokenOut?.symbol ?? 'USDC') : sym
+  const symOut   = crossChainOut ? crossChainOut.symbol : (isSwapMode ? (tokenOut?.symbol ?? 'USDC') : sym)
   const displaySym = isExtERC20 ? externalToken!.symbol : sym
   const isWrong  = isConnected && !([8453, 1, 42161, 10, 137, 56, 43114, 324, 42220, 81457, 84532, 11155111] as number[]).includes(chainId as number)
   const hasInsuf = isConnected && !!rawIn && !!tokenIn && rawIn > tokenIn.balance
@@ -1218,21 +1559,36 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
                 <span style={{ fontFamily:T.D, fontSize:13, fontWeight:600, color:T.muted }}>
                   Receive
                 </span>
-                {isConnected && (isSwapMode ? tokenOut : tokenIn) && (
+                {isConnected && !crossChainOut && (isSwapMode ? tokenOut : tokenIn) && (
                   <span style={{ fontFamily:T.M, fontSize:12, color:T.muted }}>
                     {fmtBal(isSwapMode ? tokenOut! : tokenIn!)} {symOut}
+                  </span>
+                )}
+                {crossChainOut && (
+                  <span style={{ fontFamily:T.M, fontSize:11, color: CHAIN_COLORS[crossChainOut.chainId] ?? T.muted }}>
+                    on {CHAIN_NAMES[crossChainOut.chainId] ?? `Chain ${crossChainOut.chainId}`}
                   </span>
                 )}
               </div>
               {/* Bottom row: token pill LEFT — amount RIGHT */}
               <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-                <div onClick={e => e.stopPropagation()}>
+                <div onClick={e => e.stopPropagation()} style={{ position: 'relative' }}>
                   <TokenPill
                     token={isSwapMode ? tokenOut : tokenIn}
                     busy={busy}
-                    accentColor={isSwapMode ? T.purple : undefined}
+                    accentColor={crossChainOut ? (CHAIN_COLORS[crossChainOut.chainId] ?? '#3B82F6') : (isSwapMode ? T.purple : undefined)}
                     onClick={() => setSelectingToken('out')}
                   />
+                  {crossChainOut && (
+                    <div style={{
+                      position: 'absolute', bottom: -3, left: 22,
+                      width: 18, height: 18, borderRadius: '50%',
+                      border: '2px solid #0c0c1e',
+                      overflow: 'hidden', background: '#0c0c1e',
+                    }}>
+                      <ChainLogo chainId={crossChainOut.chainId} size={18} />
+                    </div>
+                  )}
                 </div>
                 <div style={{ flex:1, textAlign:'right' as const }}>
                   <span style={{ fontFamily:T.D, fontSize:24, fontWeight:400, letterSpacing:'-0.02em', color:T.text, display:'block' }}>
@@ -1257,6 +1613,30 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
           {isSwapMode && swapQuote && (
             <div style={{ marginTop:6 }}>
               <QuotePanel quote={swapQuote} tokenOut={tokenOut} isSwap={isSwapMode} />
+            </div>
+          )}
+
+          {/* Route info banner */}
+          {routeType !== 'direct' && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              padding: '8px 12px', borderRadius: 10,
+              background: 'rgba(255,255,255,0.03)',
+              border: `1px solid ${routeLabels[routeType].color}20`,
+              marginTop: 6,
+            }}>
+              <span style={{ fontSize: 14 }}>{routeLabels[routeType].icon}</span>
+              <span style={{ fontFamily: T.M, fontSize: 10, color: routeLabels[routeType].color }}>
+                {routeLabels[routeType].label}
+              </span>
+              {isCrossChain && (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <ChainLogo chainId={chainId} size={18} />
+                  <span style={{ fontFamily: T.M, fontSize: 10, color: T.muted }}>&rarr;</span>
+                  <ChainLogo chainId={destChainId} size={18} />
+                  <span style={{ fontFamily: T.M, fontSize: 10, color: T.muted }}>~2-5 min</span>
+                </span>
+              )}
             </div>
           )}
 
@@ -1435,8 +1815,10 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
                   : ctaState==='no_recipient'   ? 'Inserisci destinatario'
                   : ctaState==='no_amount'      ? 'Inserisci un importo'
                   : needsApproval && !tokenIn?.isNative ? `Approva ${displaySym}`
-                  : isSwapMode && feeRouterAvailable  ? `Swap & Invia ${sym} → ${symOut}`
-                  : isSwapMode                        ? `Swap Direct ${sym} → ${symOut}`
+                  : routeType === 'bridge'            ? `Bridge ${sym} \u2192 ${CHAIN_NAMES[destChainId] ?? 'Dest'}`
+                  : routeType === 'swapAndBridge'     ? `Swap & Bridge ${sym} \u2192 ${crossChainOut?.symbol ?? symOut} (${CHAIN_NAMES[destChainId] ?? 'Dest'})`
+                  : isSwapMode && feeRouterAvailable  ? `Swap & Invia ${sym} \u2192 ${symOut}`
+                  : isSwapMode                        ? `Swap Direct ${sym} \u2192 ${symOut}`
                   : feeRouterAvailable                ? `Invia ${displaySym}`
                   :                                     `Invia Direct ${displaySym}`}
               </button>
@@ -1452,14 +1834,27 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
           tokens={tokenList}
           onClose={() => setSelectingToken(null)}
           isMobile={isMobile}
+          currentChainId={chainId}
+          multiChainTokens={selectingToken === 'out'
+            ? TOKEN_LIST.filter(t => t.chainId !== chainId)
+            : undefined}
+          onSelectMultiChain={selectingToken === 'out'
+            ? (t: TokenInfo) => {
+                setCrossChainOut(t)
+                // Find matching local token for tokenOut display (same symbol on current chain)
+                const localMatch = tokenList.find(lt => lt.symbol === t.symbol)
+                if (localMatch) setTokenOut(localMatch)
+                setAmount(''); setOracleData(null); setOracleDenied(false)
+                setSelectingToken(null)
+              }
+            : undefined}
           onSelect={t => {
             if (selectingToken === 'in') {
               setTokenIn(t)
             } else {
               setTokenOut(t)
+              setCrossChainOut(null) // selecting local token → clear cross-chain
             }
-            // tokenIn === tokenOut → direct mode (isSwapMode=false)
-            // tokenIn !== tokenOut → swap mode (isSwapMode=true)
             setAmount(''); setOracleData(null); setOracleDenied(false)
             setSelectingToken(null)
           }}

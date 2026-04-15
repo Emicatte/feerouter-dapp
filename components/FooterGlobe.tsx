@@ -611,7 +611,7 @@ const SOCIALS = [
   { label: 'Twitter',  icon: <TwitterIcon />,  url: 'https://twitter.com/RSendsHQ' },
   { label: 'LinkedIn', icon: <LinkedInIcon />, url: '#' },
   { label: 'Discord',  icon: <DiscordIcon />,  url: 'https://discord.gg/rsends' },
-  { label: 'GitHub',   icon: <GitHubIcon />,   url: 'https://github.com/Emicatte/feerouter-dapp' },
+  { label: 'GitHub',   icon: <GitHubIcon />,   url: 'https://discord.gg/kbMVvA9U' },
 ]
 
 // ═══════════════════════════════════════════════════════════

@@ -96,7 +96,7 @@ export const CONTRACT_ADDRESSES: Record<SupportedChainId, {
   },
   // ── Avalanche (43114) ───────────────────────────────────────
   43114: {
-    uniswapV3Router:  '0xbb00FF08d01D300023C629E8fFfFcb65A5a578cEa',
+    uniswapV3Router:  '0xbb00FF08d01D300023C629E8fFfFcb65A5a578cE',
     uniswapV3Quoter:  '0xbe0F5544EC67e9B3b2D979aaA43f18Fd87E6257F',
     uniswapV3Factory: '0x740b1c1de25031C31FF4fC9A62f554A55cdC1baD',
     multicall3:       '0xcA11bde05977b3631167028862bE2a173976CA11',

@@ -22,7 +22,6 @@ from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 import httpx
-from eth_account import Account
 from prometheus_client import Counter, Histogram, Gauge
 from sqlalchemy import select, update, func, cast, Date
 
@@ -40,7 +39,9 @@ from app.models.forwarding_models import (
     ForwardingRule, SweepLog, SweepStatus, GasStrategy,
 )
 from app.services.cache_service import get_redis
-from app.services.circuit_breaker import CircuitBreaker, CircuitOpenError
+from app.services.circuit_breaker import (
+    CircuitBreaker, CircuitOpenError, SweepBlockedError, dependency_guard,
+)
 from app.services.rpc_manager import get_rpc_manager
 
 logger = logging.getLogger("sweep_service")
@@ -660,7 +661,12 @@ async def _send_notification(
 # ═══════════════════════════════════════════════════════════════
 
 def _get_private_key() -> Optional[str]:
-    """Retrieve the sweep wallet private key from settings."""
+    """Retrieve the sweep wallet private key from settings.
+
+    .. deprecated::
+        Prefer ``get_signer()`` from ``key_manager`` for new code.
+        Kept for backward-compat with callers that need the raw key string.
+    """
     key = get_settings().sweep_private_key
     if not key or not key.startswith("0x") or len(key) != 66:
         return None
@@ -692,10 +698,13 @@ async def execute_single_sweep(
         SWEEP_TOTAL.labels(status="failed", chain_id=str(chain_id)).inc()
         return {"status": "failed", "error": f"Chain {chain_id} not supported"}
 
-    pk = _get_private_key()
-    if not pk:
+    from app.services.key_manager import get_signer, SignerError
+
+    try:
+        signer = get_signer()
+    except SignerError as e:
         SWEEP_TOTAL.labels(status="failed", chain_id=str(chain_id)).inc()
-        return {"status": "failed", "error": "Private key not configured"}
+        return {"status": "failed", "error": f"Signer not configured: {e}"}
 
     # Execution lock
     if not await _acquire_lock(f"exec:{sweep_id}"):
@@ -739,7 +748,7 @@ async def execute_single_sweep(
             await _notify(owner, "sweep_executing", ws_base)
 
         # ── Build TX params for gas estimation ─────────
-        account = Account.from_key(pk)
+        signer_address = await signer.get_address()
         rpc = get_rpc_manager(chain_id)
         nonce_raw = await rpc.consensus_call("eth_getTransactionCount", [source, "latest"])
         nonce = int(nonce_raw, 16)
@@ -813,8 +822,8 @@ async def execute_single_sweep(
         if tx_data:
             tx["data"] = tx_data
 
-        signed = account.sign_transaction(tx)
-        raw_hex = "0x" + signed.raw_transaction.hex()
+        raw_tx = await signer.sign_transaction(tx)
+        raw_hex = "0x" + raw_tx.hex()
 
         # ── Send transaction (primary only — never duplicate) ──
         result_raw = await rpc.send_raw_transaction(raw_hex)
@@ -927,6 +936,17 @@ async def execute_single_sweep(
             await _notify(owner, "sweep_error", {**ws_base, "error": err_msg, "status": "failed"})
 
         logger.error("[sweep] #%d failed: %s", sweep_id, err_msg)
+
+        # Critical alert for sweep failure
+        try:
+            from app.services.alert_service import critical_alert
+            await critical_alert(
+                f"Sweep #{sweep_id} FAILED\n"
+                f"Chain: {chain_id}\nError: {err_msg}"
+            )
+        except Exception:
+            pass
+
         await _release_lock(f"exec:{sweep_id}")
         SWEEP_TOTAL.labels(status="failed", chain_id=str(chain_id)).inc()
         SWEEP_LATENCY.observe(_time.monotonic() - _t0)
@@ -1059,6 +1079,20 @@ async def queue_sweep(
     and dispatches the sweep execution as an async task.
     """
     owner = rule.user_id
+
+    # ── 0. Fail-closed dependency check ───────────────
+    # Financial ops MUST NOT proceed without Redis (idempotency)
+    # and Postgres (persistence). RPC is checked per-chain.
+    try:
+        await dependency_guard.require_redis()
+        await dependency_guard.require_rpc(chain_id=rule.chain_id)
+    except SweepBlockedError as e:
+        logger.error(
+            "[queue] Sweep BLOCKED for rule #%d: %s",
+            rule.id, e,
+            extra={"service": "sweep", "rule_id": rule.id},
+        )
+        raise
 
     # ── 1. Distributed lock on trigger TX ──────────────
     if trigger_tx_hash:
@@ -1227,6 +1261,17 @@ async def process_incoming_tx(
     Returns:
         Number of sweeps queued.
     """
+    # ── Fail-closed: verify Postgres is reachable before DB writes ──
+    try:
+        await dependency_guard.require_postgres()
+    except SweepBlockedError as e:
+        logger.error(
+            "[incoming] TX processing BLOCKED: %s (tx=%s)",
+            e, tx_hash[:16],
+            extra={"service": "sweep", "tx_hash": tx_hash},
+        )
+        raise
+
     # ── AML screening (non-blocking on failure) ──────────
     try:
         from app.services.aml_service import screen_transaction

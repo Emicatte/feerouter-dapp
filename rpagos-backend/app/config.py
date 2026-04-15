@@ -34,9 +34,12 @@ class Settings(BaseSettings):
 
     # ── Sweeper / Key Management ────────────────────────
     sweep_private_key: str = ""
-    signer_mode: str = "local"          # "local" (env key) | "kms" (AWS KMS)
+    signer_mode: str = "local"          # "local" (env key) | "kms" (AWS KMS) | "vault" (HashiCorp Vault)
     kms_key_id: str = ""                # AWS KMS key ID (ECC_SECG_P256K1)
     aws_region: str = "eu-west-1"       # AWS region for KMS
+    vault_addr: str = ""                # HashiCorp Vault server URL
+    vault_token: str = ""               # Vault authentication token
+    vault_key_name: str = "rsend-signer"  # Vault Transit key name
 
     # ── Server ────────────────────────────────────────────
     host: str = "0.0.0.0"
@@ -64,12 +67,25 @@ class Settings(BaseSettings):
     notification_rate_limit: int = 30          # max messages per minute per chat
     notification_rate_window: int = 60         # sliding window in seconds
 
+    # ── Reconciliation ────────────────────────────────────
+    # Percentage threshold for reconciliation mismatch alert (e.g. 1.0 = 1%)
+    reconciliation_threshold_pct: float = 1.0
+    # JSON map of chain_id → treasury address, e.g. {"8453":"0xABC...","1":"0xDEF..."}
+    treasury_addresses_json: str = ""
+
     # ── Celery ────────────────────────────────────────────
     celery_broker_url: str = "redis://localhost:6379/1"
     celery_result_backend: str = "redis://localhost:6379/2"
 
     # ── Monitoring ────────────────────────────────────────
     sentry_dsn: str = ""
+
+    # ── OpenTelemetry ─────────────────────────────────────
+    otel_endpoint: str = ""            # OTLP gRPC endpoint (e.g. "http://localhost:4317")
+    otel_service_name: str = "rsend-backend"
+
+    # ── Alert Webhook (Discord/Slack) ─────────────────────
+    alert_webhook_url: str = ""        # Discord or Slack incoming webhook URL
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
@@ -118,6 +134,17 @@ def validate_settings(settings: Settings) -> None:
             errors.append(
                 "SIGNER_MODE=kms but KMS_KEY_ID is empty. "
                 "Set the AWS KMS key ID for transaction signing."
+            )
+    elif settings.signer_mode == "vault":
+        if not settings.vault_addr:
+            errors.append(
+                "SIGNER_MODE=vault but VAULT_ADDR is empty. "
+                "Set the HashiCorp Vault server URL."
+            )
+        if not settings.vault_token:
+            errors.append(
+                "SIGNER_MODE=vault but VAULT_TOKEN is empty. "
+                "Set the Vault authentication token."
             )
 
     # ── ALCHEMY_API_KEY ───────────────────────────────────

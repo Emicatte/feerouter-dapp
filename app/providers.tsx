@@ -1,7 +1,7 @@
 'use client'
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { WagmiProvider, createConfig, http } from 'wagmi'
+import { WagmiProvider, createConfig, http, fallback } from 'wagmi'
 import {
   mainnet, optimism, bsc, polygon, zksync,
   base, arbitrum, celo, avalanche, blast,
@@ -49,6 +49,37 @@ type SupportedChainId = typeof CHAIN[keyof typeof CHAIN]
 
 const WC_PROJECT_ID = process.env.NEXT_PUBLIC_WC_PROJECT_ID!
 
+// ── Multi-provider RPC with automatic failover ──────────────────────────
+const ALCHEMY_KEY = process.env.NEXT_PUBLIC_ALCHEMY_API_KEY ?? ''
+const INFURA_KEY  = process.env.NEXT_PUBLIC_INFURA_API_KEY ?? ''
+
+function alchemy(sub: string) {
+  return ALCHEMY_KEY
+    ? http(`https://${sub}.g.alchemy.com/v2/${ALCHEMY_KEY}`, { batch: true })
+    : null
+}
+
+function infura(net: string) {
+  return INFURA_KEY
+    ? http(`https://${net}.infura.io/v3/${INFURA_KEY}`)
+    : null
+}
+
+/** Build a fallback transport: Alchemy → Infura → public RPCs. Null entries filtered out. */
+function rpcFallback(
+  alchemySub: string | null,
+  infuraNet: string | null,
+  ...publicUrls: string[]
+) {
+  const transports = [
+    alchemySub ? alchemy(alchemySub) : null,
+    infuraNet  ? infura(infuraNet)   : null,
+    ...publicUrls.map(url => http(url)),
+  ].filter(Boolean) as ReturnType<typeof http>[]
+
+  return transports.length === 1 ? transports[0] : fallback(transports)
+}
+
 const connectors = connectorsForWallets(
   [
     {
@@ -83,18 +114,18 @@ const config = createConfig({
   ] as const,
   connectors,
   transports: {
-    [base.id]:        http('https://mainnet.base.org'),
-    [mainnet.id]:     http('https://eth.llamarpc.com'),
-    [arbitrum.id]:    http('https://arb1.arbitrum.io/rpc'),
-    [optimism.id]:    http('https://mainnet.optimism.io'),
-    [polygon.id]:     http('https://polygon-rpc.com'),
-    [bsc.id]:         http('https://bsc-dataseed.binance.org'),
-    [avalanche.id]:   http('https://api.avax.network/ext/bc/C/rpc'),
-    [zksync.id]:      http('https://mainnet.era.zksync.io'),
-    [celo.id]:        http('https://forno.celo.org'),
-    [blast.id]:       http('https://rpc.blast.io'),
-    [baseSepolia.id]: http('https://sepolia.base.org'),
-    [sepolia.id]:     http(),
+    [base.id]:        rpcFallback('base-mainnet',    null,             'https://mainnet.base.org', 'https://base.llamarpc.com'),
+    [mainnet.id]:     rpcFallback('eth-mainnet',     'mainnet',        'https://eth.llamarpc.com', 'https://rpc.ankr.com/eth'),
+    [arbitrum.id]:    rpcFallback('arb-mainnet',     'arbitrum-mainnet', 'https://arb1.arbitrum.io/rpc'),
+    [optimism.id]:    rpcFallback('opt-mainnet',     'optimism-mainnet', 'https://mainnet.optimism.io'),
+    [polygon.id]:     rpcFallback('polygon-mainnet', 'polygon-mainnet', 'https://polygon-rpc.com'),
+    [bsc.id]:         rpcFallback(null,              null,             'https://bsc-dataseed.binance.org', 'https://bsc-dataseed1.ninicoin.io'),
+    [avalanche.id]:   rpcFallback(null,              'avalanche-mainnet', 'https://api.avax.network/ext/bc/C/rpc'),
+    [zksync.id]:      rpcFallback('zksync-mainnet',  null,             'https://mainnet.era.zksync.io'),
+    [celo.id]:        rpcFallback(null,              'celo-mainnet',   'https://forno.celo.org'),
+    [blast.id]:       rpcFallback('blast-mainnet',   null,             'https://rpc.blast.io'),
+    [baseSepolia.id]: rpcFallback('base-sepolia',    null,             'https://sepolia.base.org'),
+    [sepolia.id]:     rpcFallback('eth-sepolia',     'sepolia',        'https://rpc.sepolia.org'),
   },
   ssr: false,
 })

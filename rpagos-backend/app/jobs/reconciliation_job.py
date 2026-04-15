@@ -25,6 +25,8 @@ from app.services.reconciliation_service import (
     check_stale_transactions,
     check_system_balance,
     reconcile_onchain,
+    reconcile_and_enforce,
+    save_daily_snapshot,
 )
 
 logger = logging.getLogger(__name__)
@@ -124,6 +126,25 @@ async def run_reconciliation() -> FullReconciliationReport:
                             )
                 except Exception as e:
                     logger.warning("On-chain reconciliation skipped: %s", e)
+
+            # 5. Treasury reconciliation with circuit breaker enforcement
+            try:
+                enforce_results = await reconcile_and_enforce(session)
+                if enforce_results:
+                    alert_count = sum(1 for r in enforce_results if r.get("alert"))
+                    if alert_count:
+                        logger.warning(
+                            "Treasury reconciliation: %d/%d chains with mismatch",
+                            alert_count, len(enforce_results),
+                        )
+            except Exception as e:
+                logger.error("Treasury reconcile_and_enforce failed: %s", e)
+
+            # 6. Daily snapshot (once per day, idempotent)
+            try:
+                await save_daily_snapshot(session)
+            except Exception as e:
+                logger.error("Daily snapshot failed: %s", e)
 
             await session.commit()
 
