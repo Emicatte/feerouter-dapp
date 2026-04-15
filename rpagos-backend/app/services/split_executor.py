@@ -17,9 +17,29 @@ import json
 import logging
 
 from app.services.split_engine import SplitPlan, SplitOutput
+from app.services.aml_exceptions import AMLBlockedError
 from app.models.split_models import SplitExecution
 
 logger = logging.getLogger("rsend.split_exec")
+
+# ──────────────────────────────────────────────────────────────
+# Rough EUR conversion for AML thresholds.
+# Stablecoins → 1:1. For ETH/WETH a conservative estimate is used;
+# real-time price would come from the oracle, but for AML gating
+# a ballpark is sufficient (over-estimating is safer).
+# ──────────────────────────────────────────────────────────────
+_STABLECOINS = {"USDC", "USDT", "DAI"}
+_ETH_EUR_ESTIMATE = 3000.0  # conservative; updated manually or via config
+
+
+def _wei_to_eur(amount_wei: int, token: str, decimals: int) -> float:
+    """Best-effort conversion from wei to EUR for AML threshold checks."""
+    units = amount_wei / (10 ** decimals)
+    if token.upper() in _STABLECOINS:
+        return units  # 1 stablecoin ≈ 1 EUR
+    if token.upper() in ("ETH", "WETH"):
+        return units * _ETH_EUR_ESTIMATE
+    return units  # fallback: treat as 1:1
 
 
 # ──────────────────────────────────────────────────────────────
@@ -93,6 +113,9 @@ class SplitExecutor:
             allowed, reason = kill_switch.can_execute(plan.client_id)
             if not allowed:
                 raise RuntimeError(f"Blocked by kill switch: {reason}")
+
+            # ── AML Gate: screen BEFORE any on-chain TX ────
+            await self._aml_gate(plan)
 
             # ── Crea record esecuzione ──────────────────────
             execution = SplitExecution(
@@ -218,3 +241,53 @@ class SplitExecutor:
         if not addr:
             raise ValueError(f"Unknown token: {symbol}")
         return addr
+
+    async def _aml_gate(self, plan: SplitPlan) -> None:
+        """Pre-execution AML check: screens all recipients + anti-structuring.
+
+        Blocks the ENTIRE plan if any recipient is sanctioned.
+        Flags (but allows) if threshold/structuring patterns detected.
+        """
+        from app.services.aml_service import is_blacklisted, check_split_plan
+
+        # 1. Screen ALL recipient addresses against sanctions
+        blocked_recipients: list[dict] = []
+        for output in plan.outputs:
+            is_blocked, reason = await is_blacklisted(output.wallet)
+            if is_blocked:
+                blocked_recipients.append({
+                    "address": output.wallet,
+                    "reason": reason,
+                })
+
+        if blocked_recipients:
+            logger.error(
+                "[split_exec] AML BLOCKED: %d recipient(s) on sanctions list",
+                len(blocked_recipients),
+                extra={"blocked": blocked_recipients, "client_id": plan.client_id},
+            )
+            raise AMLBlockedError(
+                f"Split blocked: {len(blocked_recipients)} recipient(s) "
+                f"failed AML screening"
+            )
+
+        # 2. Anti-structuring: check aggregate amounts
+        recipients = [o.wallet for o in plan.outputs]
+        amounts_eur = [
+            _wei_to_eur(o.amount, plan.token, plan.decimals)
+            for o in plan.outputs
+        ]
+
+        aml_result = await check_split_plan(
+            source_wallet=plan.client_id,
+            recipients=recipients,
+            amounts_eur=amounts_eur,
+        )
+
+        if aml_result.requires_manual_review:
+            total_eur = sum(amounts_eur)
+            logger.warning(
+                "[split_exec] AML FLAG: split requires manual review "
+                "(€%.2f across %d recipients, risk=%s)",
+                total_eur, len(recipients), aml_result.risk_level,
+            )

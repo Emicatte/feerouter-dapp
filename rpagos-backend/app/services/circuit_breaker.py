@@ -650,7 +650,7 @@ class CircuitBreaker:
                 self._half_open_calls = 0
 
     def _log_transition(self, old_str: str, new_str: str) -> None:
-        """Log state transition for audit trail."""
+        """Log state transition for audit trail + fire alert."""
         if old_str == new_str:
             return
 
@@ -668,6 +668,51 @@ class CircuitBreaker:
                 "force_reason": self._force_reason,
             },
         )
+
+        # Fire alert on significant transitions (best-effort, non-blocking)
+        self._fire_transition_alert(old_str, new_str)
+
+    def _fire_transition_alert(self, old_str: str, new_str: str) -> None:
+        """Fire alert on OPEN (problem) or CLOSED (recovery) transitions."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return  # no event loop — skip alerting
+
+        try:
+            from app.services.alert_service import fire_alert, AlertType
+
+            context = {
+                "breaker": self.name,
+                "failures": self._failure_count,
+                "transition": f"{old_str} -> {new_str}",
+            }
+
+            if new_str == "open":
+                # Determine alert type from breaker name
+                if "sign" in self.name or "kms" in self.name:
+                    alert_type = AlertType.SIGNING_DOWN
+                elif "rpc" in self.name:
+                    alert_type = AlertType.RPC_DOWN
+                elif "redis" in self.name:
+                    alert_type = AlertType.REDIS_DOWN
+                else:
+                    alert_type = AlertType.SIGNING_DOWN
+
+                loop.create_task(fire_alert(
+                    alert_type,
+                    f"Circuit breaker OPEN for {self.name}: "
+                    f"{self._failure_count} consecutive failures",
+                    context,
+                ))
+            elif new_str == "closed" and old_str in ("open", "half_open"):
+                loop.create_task(fire_alert(
+                    AlertType.CB_RECOVERY,
+                    f"Circuit breaker RECOVERED for {self.name}",
+                    context,
+                ))
+        except Exception:
+            pass  # alerting must never break the circuit breaker
 
 
 # ═══════════════════════════════════════════════════════════════

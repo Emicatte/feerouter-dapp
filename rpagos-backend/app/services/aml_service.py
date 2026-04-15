@@ -625,6 +625,85 @@ async def add_to_blacklist(
     logger.warning("AML: Address %s added to blacklist: %s", address[:10], reason)
 
 
+async def check_split_plan(
+    source_wallet: str,
+    recipients: list[str],
+    amounts_eur: list[float],
+    chain_id: int = 0,
+) -> AMLCheckResult:
+    """AML check specific to split plans: detects structuring via splitting.
+
+    Red flags:
+    - >70% of amounts are just below single threshold (€800–€999)
+    - > 5 distinct recipients in a single operation
+    - Aggregate total > daily threshold but individual amounts < single threshold
+    """
+    alerts: list[str] = []
+    total = sum(amounts_eur)
+    cfg = await _get_thresholds()
+    threshold_single = cfg["single"]
+
+    # Anti-structuring: if >70% of amounts are between 80%–99% of single threshold
+    near_floor = threshold_single * 0.8
+    near_threshold = [a for a in amounts_eur if near_floor <= a < threshold_single]
+    if len(amounts_eur) >= 3 and len(near_threshold) > len(amounts_eur) * 0.7:
+        alerts.append(AlertType.structuring.value)
+
+    # Many recipients = dispersion risk
+    if len(recipients) > 5:
+        alerts.append(AlertType.velocity.value)
+
+    # Aggregate exceeds daily threshold while individual amounts are below single
+    all_below_single = all(a < threshold_single for a in amounts_eur)
+    if all_below_single and total > cfg["daily"]:
+        alerts.append(AlertType.threshold_daily.value)
+
+    # Monthly check on aggregate
+    monthly_total = await _get_monthly_total_eur(source_wallet) + total
+    requires_kyc = monthly_total > cfg["monthly"]
+    if requires_kyc:
+        alerts.append(AlertType.threshold_monthly.value)
+
+    # Determine risk level
+    if AlertType.structuring.value in alerts:
+        risk = "high"
+    elif alerts:
+        risk = "medium"
+    else:
+        risk = "low"
+
+    requires_review = risk in ("medium", "high")
+
+    # Persist alerts
+    if alerts:
+        details = (
+            f"Split: {len(recipients)} recipients, total €{total:.0f}, "
+            f"monthly €{monthly_total:.0f}"
+        )
+        for alert_type_str in alerts:
+            await _create_alert(
+                sender=source_wallet,
+                recipient="SPLIT_AGGREGATE",
+                chain_id=chain_id,
+                tx_hash=None,
+                amount_eur=total,
+                token_symbol="SPLIT",
+                alert_type=AlertType(alert_type_str),
+                risk_level=RiskLevel(risk),
+                details=details,
+                requires_kyc=requires_kyc,
+            )
+
+    return AMLCheckResult(
+        approved=True,  # splits are flagged, not blocked by monitoring
+        risk_level=risk,
+        alerts=alerts,
+        details=f"Split: {len(recipients)} recipients, total €{total:.0f}",
+        requires_kyc=requires_kyc,
+        requires_manual_review=requires_review,
+    )
+
+
 async def remove_from_blacklist(address: str):
     """Soft-remove an address from the blacklist."""
     from sqlalchemy import update

@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
 
+    # ── Alert Notifications (separate from sweep notifications) ──
+    telegram_alert_chat_id: str = ""   # dedicated chat/group for critical alerts
+
     # ── Notification Rate Limit ───────────────────────────
     notification_rate_limit: int = 30          # max messages per minute per chat
     notification_rate_window: int = 60         # sliding window in seconds

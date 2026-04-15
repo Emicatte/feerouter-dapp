@@ -14,7 +14,9 @@ All signers implement the AbstractSigner interface.
 import abc
 import asyncio
 import logging
+import threading
 import time as _time
+from collections import defaultdict
 from typing import Optional
 
 from eth_account import Account
@@ -22,6 +24,121 @@ from eth_account import Account
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+# ═══════════════════════════════════════════════════════════════
+#  KMS Rate Limiter (local defence-in-depth, on top of IAM)
+# ═══════════════════════════════════════════════════════════════
+
+class KMSRateLimiter:
+    """In-process rate limiter for KMS signing — defence-in-depth.
+
+    Complements the IAM-level rate limit.  Thread-safe via a lock
+    so concurrent asyncio-to-thread calls don't race.
+    """
+
+    def __init__(self, max_per_minute: int = 60, max_per_hour: int = 500):
+        self.max_per_minute = max_per_minute
+        self.max_per_hour = max_per_hour
+        self._minute_counts: dict[str, int] = defaultdict(int)
+        self._hour_counts: dict[str, int] = defaultdict(int)
+        self._last_reset_minute: float = _time.monotonic()
+        self._last_reset_hour: float = _time.monotonic()
+        self._lock = threading.Lock()
+
+    def check_and_increment(self, operation: str = "sign") -> bool:
+        """Return True if the operation is within limits, False to reject."""
+        with self._lock:
+            now = _time.monotonic()
+
+            if now - self._last_reset_minute > 60:
+                self._minute_counts.clear()
+                self._last_reset_minute = now
+            if now - self._last_reset_hour > 3600:
+                self._hour_counts.clear()
+                self._last_reset_hour = now
+
+            self._minute_counts[operation] += 1
+            self._hour_counts[operation] += 1
+
+            if self._minute_counts[operation] > self.max_per_minute:
+                logger.critical(
+                    "KMS rate limit EXCEEDED: %d/%d per minute for %s",
+                    self._minute_counts[operation], self.max_per_minute, operation,
+                )
+                return False
+
+            if self._hour_counts[operation] > self.max_per_hour:
+                logger.critical(
+                    "KMS rate limit EXCEEDED: %d/%d per hour for %s",
+                    self._hour_counts[operation], self.max_per_hour, operation,
+                )
+                return False
+
+            return True
+
+
+# ═══════════════════════════════════════════════════════════════
+#  KMS Audit Logger (append-only DB log)
+# ═══════════════════════════════════════════════════════════════
+
+class KMSAuditLogger:
+    """Persists every KMS operation to kms_audit_log (non-blocking)."""
+
+    @staticmethod
+    async def log_operation(
+        key_id: str,
+        operation: str,
+        *,
+        chain_id: Optional[int] = None,
+        context: Optional[dict] = None,
+        success: bool = True,
+        error: Optional[str] = None,
+    ) -> None:
+        """Write to Postgres. Failures are logged but never raised."""
+        try:
+            from app.db.session import async_session
+            from app.models.kms_models import KMSAuditLog
+
+            async with async_session() as db:
+                entry = KMSAuditLog(
+                    key_id=key_id,
+                    operation=operation,
+                    chain_id=chain_id,
+                    context=context,
+                    success=success,
+                    error=error,
+                )
+                db.add(entry)
+                await db.commit()
+        except Exception as exc:
+            logger.warning("KMS audit log write failed (non-fatal): %s", exc)
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Key Rotation Manager
+# ═══════════════════════════════════════════════════════════════
+
+class KeyRotationManager:
+    """Manages KMS key rotation.
+
+    - Active key signs new transactions.
+    - Previous keys are retained for verification of old signatures.
+    - Rotation period is handled externally (e.g. 90-day cron);
+      this class only tracks which keys to use.
+    """
+
+    def __init__(
+        self,
+        active_key_id: str,
+        previous_key_ids: Optional[list[str]] = None,
+    ):
+        self.active_key_id = active_key_id
+        self.previous_key_ids = previous_key_ids or []
+
+    @property
+    def all_key_ids(self) -> list[str]:
+        return [self.active_key_id] + self.previous_key_ids
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -153,6 +270,9 @@ class KMSSigner(AbstractSigner):
         self,
         key_id: Optional[str] = None,
         region: Optional[str] = None,
+        previous_key_ids: Optional[list[str]] = None,
+        rate_limit_per_minute: int = 60,
+        rate_limit_per_hour: int = 500,
     ):
         settings = get_settings()
         self._key_id = key_id or settings.kms_key_id
@@ -168,10 +288,23 @@ class KMSSigner(AbstractSigner):
 
         self._kms = boto3.client("kms", region_name=self._region)
         self._cached_address: Optional[str] = None
+
+        # ── Hardening: rate limiter, audit, rotation ──────
+        self._rate_limiter = KMSRateLimiter(
+            max_per_minute=rate_limit_per_minute,
+            max_per_hour=rate_limit_per_hour,
+        )
+        self._audit = KMSAuditLogger()
+        self._rotation = KeyRotationManager(
+            active_key_id=self._key_id,
+            previous_key_ids=previous_key_ids or [],
+        )
+
         logger.info(
-            "KMSSigner initialised: key=%s region=%s",
+            "KMSSigner initialised: key=%s region=%s previous_keys=%d",
             self._key_id,
             self._region,
+            len(self._rotation.previous_key_ids),
         )
 
     # ── Address derivation ────────────────────────────────
@@ -215,21 +348,66 @@ class KMSSigner(AbstractSigner):
     async def sign_hash(self, msg_hash: bytes) -> tuple[int, int, int]:
         """Sign a 32-byte hash via KMS.
 
-        Returns:
-            (v, r, s) with v = 27 or 28 (non-EIP-155).
+        Rate-limited and audit-logged. Returns (v, r, s) with v = 27|28.
         """
-        r, s = await asyncio.to_thread(self._kms_sign_hash, msg_hash)
-        v_raw = await asyncio.to_thread(self._recover_v, msg_hash, r, s)
-        return v_raw + 27, r, s
+        if not self._rate_limiter.check_and_increment("sign_hash"):
+            await self._audit.log_operation(
+                self._key_id, "sign_hash",
+                success=False, error="rate_limit_exceeded",
+            )
+            raise SignerError("KMS signing rate limit exceeded")
+
+        try:
+            r, s = await asyncio.to_thread(self._kms_sign_hash, msg_hash)
+            v_raw = await asyncio.to_thread(self._recover_v, msg_hash, r, s)
+            # Fire-and-forget audit
+            asyncio.create_task(self._audit.log_operation(
+                self._key_id, "sign_hash", success=True,
+            ))
+            return v_raw + 27, r, s
+        except Exception as exc:
+            asyncio.create_task(self._audit.log_operation(
+                self._key_id, "sign_hash",
+                success=False, error=str(exc)[:500],
+            ))
+            raise
 
     # ── Transaction signing ───────────────────────────────
 
     async def sign_transaction(self, tx_dict: dict) -> bytes:
         """Sign a transaction via KMS.
 
+        Rate-limited and audit-logged.
         Supports legacy (type 0) and EIP-1559 (type 2) transactions.
         """
-        return await asyncio.to_thread(self._sign_sync, tx_dict)
+        if not self._rate_limiter.check_and_increment("sign_tx"):
+            await self._audit.log_operation(
+                self._key_id, "sign_tx",
+                chain_id=tx_dict.get("chainId"),
+                success=False, error="rate_limit_exceeded",
+            )
+            raise SignerError("KMS signing rate limit exceeded")
+
+        chain_id = tx_dict.get("chainId")
+        tx_context = {
+            "to": tx_dict.get("to", "")[:42],
+            "chain_id": chain_id,
+        }
+
+        try:
+            result = await asyncio.to_thread(self._sign_sync, tx_dict)
+            asyncio.create_task(self._audit.log_operation(
+                self._key_id, "sign_tx",
+                chain_id=chain_id, context=tx_context, success=True,
+            ))
+            return result
+        except Exception as exc:
+            asyncio.create_task(self._audit.log_operation(
+                self._key_id, "sign_tx",
+                chain_id=chain_id, context=tx_context,
+                success=False, error=str(exc)[:500],
+            ))
+            raise
 
     def _sign_sync(self, tx_dict: dict) -> bytes:
         """Synchronous signing pipeline."""
@@ -321,6 +499,63 @@ class KMSSigner(AbstractSigner):
                 continue
 
         raise SignerError("Failed to determine recovery parameter v")
+
+    # ── Key rotation: verify with active + previous keys ──────
+
+    async def verify_with_rotation(
+        self, msg_hash: bytes, signature_der: bytes,
+    ) -> bool:
+        """Verify a signature against the active key and all previous keys.
+
+        Useful after key rotation to validate old signatures.
+        """
+        for key_id in self._rotation.all_key_ids:
+            try:
+                response = await asyncio.to_thread(
+                    self._kms.verify,
+                    KeyId=key_id,
+                    Message=msg_hash,
+                    Signature=signature_der,
+                    SigningAlgorithm="ECDSA_SHA_256",
+                    MessageType="DIGEST",
+                )
+                if response.get("SignatureValid"):
+                    asyncio.create_task(self._audit.log_operation(
+                        key_id, "verify", success=True,
+                    ))
+                    return True
+            except Exception:
+                continue
+
+        asyncio.create_task(self._audit.log_operation(
+            self._key_id, "verify",
+            success=False, error="no_matching_key",
+        ))
+        return False
+
+    # ── Health check ──────────────────────────────────────────
+
+    async def health_check(self) -> dict:
+        """Check that the KMS key is usable. Returns component status dict."""
+        try:
+            response = await asyncio.to_thread(
+                self._kms.describe_key, KeyId=self._key_id,
+            )
+            meta = response.get("KeyMetadata", {})
+            enabled = meta.get("Enabled", False)
+            state = meta.get("KeyState", "Unknown")
+            return {
+                "status": "healthy" if enabled else "unhealthy",
+                "key_id": self._key_id,
+                "key_state": state,
+                "enabled": enabled,
+            }
+        except Exception as exc:
+            return {
+                "status": "unhealthy",
+                "key_id": self._key_id,
+                "error": str(exc)[:200],
+            }
 
 
 # ═══════════════════════════════════════════════════════════════

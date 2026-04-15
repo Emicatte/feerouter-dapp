@@ -101,6 +101,15 @@ async def lifespan(app: FastAPI):
             "Redis required for idempotency — webhooks will be rejected (fail-closed) without Redis"
         )
 
+    # ── Initialise AlertService ──────────────────────
+    from app.services.alert_service import init_alert_service
+    alert_chat = settings.telegram_alert_chat_id or settings.telegram_chat_id
+    init_alert_service(
+        telegram_token=settings.telegram_bot_token or None,
+        telegram_chat_id=alert_chat or None,
+        webhook_url=settings.alert_webhook_url or None,
+    )
+
     # ── Start WebSocket background tasks ─────────────
     feed_manager.start_background_tasks()
     payment_manager.start_heartbeat()
