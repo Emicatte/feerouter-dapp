@@ -9,7 +9,7 @@ const COINGECKO_API = 'https://api.coingecko.com/api/v3'
 const REFRESH_INTERVAL = 30_000 // 30 secondi — prezzi più reattivi
 
 export interface TokenPrices {
-  [coingeckoId: string]: { eur: number; usd: number }
+  [coingeckoId: string]: { eur: number; usd: number; usd_24h_change?: number }
 }
 
 /**
@@ -18,14 +18,18 @@ export interface TokenPrices {
 async function fetchFromCoinGecko(): Promise<TokenPrices> {
   const ids = getAllCoingeckoIds().join(',')
   const res = await fetch(
-    `${COINGECKO_API}/simple/price?ids=${ids}&vs_currencies=eur,usd`,
+    `${COINGECKO_API}/simple/price?ids=${ids}&vs_currencies=eur,usd&include_24hr_change=true`,
   )
   if (!res.ok) throw new Error(`CoinGecko ${res.status}`)
-  const data: Record<string, { eur?: number; usd?: number }> = await res.json()
+  const data: Record<string, { eur?: number; usd?: number; usd_24h_change?: number }> = await res.json()
 
   const merged: TokenPrices = {}
   for (const [id, vals] of Object.entries(data)) {
-    merged[id] = { eur: vals.eur ?? 0, usd: vals.usd ?? 0 }
+    merged[id] = {
+      eur: vals.eur ?? 0,
+      usd: vals.usd ?? 0,
+      usd_24h_change: typeof vals.usd_24h_change === 'number' ? vals.usd_24h_change : undefined,
+    }
   }
   return merged
 }
@@ -39,11 +43,16 @@ async function fetchFromBackend(): Promise<TokenPrices> {
   const data = await res.json()
   const eur: Record<string, number> = data.eur ?? {}
   const usd: Record<string, number> = data.usd ?? {}
+  const usd24h: Record<string, number> = data.usd_24h_change ?? {}
 
   const merged: TokenPrices = {}
   const allIds = new Set([...Object.keys(eur), ...Object.keys(usd)])
   for (const id of allIds) {
-    merged[id] = { eur: eur[id] ?? 0, usd: usd[id] ?? 0 }
+    merged[id] = {
+      eur: eur[id] ?? 0,
+      usd: usd[id] ?? 0,
+      usd_24h_change: typeof usd24h[id] === 'number' ? usd24h[id] : undefined,
+    }
   }
   return merged
 }

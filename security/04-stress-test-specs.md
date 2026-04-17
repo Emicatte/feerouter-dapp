@@ -1,0 +1,370 @@
+# Stress Test Specifications — RSend / RPagos Platform
+
+**Date:** 2026-04-17
+**Purpose:** 10 concrete stress test scenarios targeting identified concurrency gaps, failover paths, and load boundaries.
+
+---
+
+## Scenario 1: Payment Intent Creation Burst
+
+**Objective:** Verify rate limiting, database connection pooling, and monthly limit enforcement under burst load.
+
+**Preconditions:**
+- API key with `scope=write`, `rate_limit_rpm=100`
+- Redis available and healthy
+- Database connection pool: default size
+
+**Load profile:**
+- 1 API key sends 200 POST `/api/v1/merchant/payment-intent` requests in 60 seconds
+- Ramp: 0→200 req/s linear over 10 seconds, sustain for 50 seconds
+- Payload: valid intent (amount=10 USDC, chain=base)
+
+**Expected behavior:**
+- First 100 requests: 201 Created
+- Requests 101-200: 429 `KEY_RATE_LIMIT_EXCEEDED` with `X-RateLimit-Remaining: 0`
+- Rate limit headers present on all responses
+- No database connection exhaustion (pool returns connections after each request)
+- `total_intents_created` on the API key increments exactly 100
+
+**Failure criteria:**
+- Any request after the 100th returns 201 (rate limit not enforced)
+- Database connection pool exhaustion (500 errors)
+- Rate limit counter drift > ±2 between Redis and expected count
+
+**Monitoring points:**
+- `X-RateLimit-Remaining` header values on each response
+- PostgreSQL `pg_stat_activity` connection count
+- Redis ZSET cardinality for `rl:global:key:{key_id}`
+- Application error logs for connection pool warnings
+
+---
+
+## Scenario 2: Concurrent TX Callback Matching (Race Condition)
+
+**Objective:** Reproduce the double-matching race condition (F-BE-02) by sending duplicate TX callbacks concurrently.
+
+**Preconditions:**
+- 1 payment intent in `pending` status with known `deposit_address`
+- Known TX hash that matches the intent's currency and amount
+
+**Load profile:**
+- 10 concurrent POST `/api/v1/tx/callback` requests with identical TX hash
+- All sent simultaneously (within 5ms window)
+- Use async HTTP client with connection pooling to minimize timing variance
+
+**Expected behavior (current — VULNERABLE):**
+- Multiple requests may match the same intent
+- Multiple `payment.completed` webhooks dispatched to merchant
+- `matched_tx_hash` set multiple times (last write wins)
+
+**Expected behavior (after fix):**
+- Exactly 1 request matches the intent → 200 with `matched: true`
+- Remaining 9 requests → 200 with `matched: false, reason: tx_already_matched`
+- Exactly 1 webhook dispatched to merchant
+
+**Failure criteria:**
+- More than 1 response with `matched: true`
+- More than 1 webhook delivered to merchant endpoint
+- Database shows multiple intents completed for the same TX hash
+
+**Monitoring points:**
+- Response bodies: count of `matched: true` responses
+- Merchant webhook endpoint: count of received `payment.completed` events
+- Database: `SELECT COUNT(*) FROM payment_intents WHERE matched_tx_hash = '{tx_hash}'`
+- Application logs: count of "TX matched intent" log entries
+
+---
+
+## Scenario 3: Rate Limiter Redis Failover
+
+**Objective:** Verify graceful degradation from Redis to in-memory rate limiting and recovery back to Redis.
+
+**Preconditions:**
+- Application running with 4 worker processes (Gunicorn/Uvicorn)
+- Redis initially healthy
+- Baseline: 60 req/min limit on GET endpoints
+
+**Load profile:**
+- Phase 1 (0-60s): 30 req/s sustained — all within limits
+- Phase 2 (60-120s): Kill Redis. Continue 30 req/s
+- Phase 3 (120-180s): Continue 30 req/s with Redis down
+- Phase 4 (180-240s): Restart Redis. Continue 30 req/s
+
+**Expected behavior:**
+- Phase 1: All requests succeed, rate headers from Redis
+- Phase 2: Warning log "Redis unavailable — using in-memory fallback". Requests continue succeeding
+- Phase 3: In-memory counters active. Each worker tracks independently → effective limit is 4×60 = 240 req/min across workers
+- Phase 4: Redis reconnects, counters reset to Redis-based tracking
+
+**Failure criteria:**
+- Application crashes or returns 500 during Redis failover
+- Rate limit enforcement gap > 10× configured limit during fallback
+- Redis reconnection takes > 30 seconds after restart
+- Memory leak in in-memory fallback (monitor RSS)
+
+**Monitoring points:**
+- Response header `X-RateLimit-Remaining` source (Redis vs in-memory)
+- Application logs for Redis connection warnings
+- `_memory_limiter._buckets` size (via debug endpoint or process inspection)
+- Worker process RSS memory over time
+
+---
+
+## Scenario 4: Webhook Delivery Under Retry Storms
+
+**Objective:** Test webhook delivery when merchant endpoints are slow or failing, causing retry accumulation.
+
+**Preconditions:**
+- 10 merchants with registered webhook URLs
+- Merchant endpoints configured to: 3 return 200 immediately, 3 return 500, 4 timeout after 10s
+- 100 payment completions triggered in 60 seconds
+
+**Load profile:**
+- 100 `payment.completed` events generated by matching 100 TXs to 100 pending intents
+- Each event triggers webhook to the associated merchant
+- Failed webhooks retry with exponential backoff (Celery or asyncio)
+
+**Expected behavior:**
+- 30 webhooks delivered immediately (3 fast merchants × ~10 events each)
+- 70 webhooks enter retry queue
+- Retry queue grows but does not exceed memory limits
+- After 5 minutes: retry attempts for the 500-returning merchants
+- Timeout merchants: each retry holds a connection for 10s
+
+**Failure criteria:**
+- Webhook retry storm exhausts outbound HTTP connection pool
+- Event loop blocked by synchronous webhook delivery
+- Memory growth > 100MB from queued retry payloads
+- Successful merchants stop receiving webhooks due to backpressure from failing merchants
+
+**Monitoring points:**
+- Outbound HTTP connection count
+- Celery queue depth (if Celery available)
+- asyncio task count (if asyncio fallback)
+- Event loop latency (time between scheduled and actual execution)
+- Application memory RSS
+
+---
+
+## Scenario 5: Concurrent Sweep Execution
+
+**Objective:** Reproduce the double-sweep race condition (F-BE-05) and verify that only one sweep executes.
+
+**Preconditions:**
+- 1 payment intent in `completed` status
+- Deposit address has sufficient balance for sweep
+- Celery worker AND asyncio fallback both active
+
+**Load profile:**
+- Trigger 5 concurrent `execute_sweep()` calls for the same `intent_id`
+- Methods: 2 via Celery task, 2 via asyncio task, 1 via manual API call
+
+**Expected behavior (current — VULNERABLE):**
+- Multiple sweeps may execute simultaneously
+- Multiple on-chain transactions submitted from the same deposit address
+- Nonce conflicts may cause some to fail, but the first one succeeds and drains the balance
+
+**Expected behavior (after fix):**
+- Exactly 1 sweep executes → intent transitions to `settled`
+- Remaining 4 see `status=sweeping` and skip
+- Exactly 1 on-chain transfer to merchant
+- Exactly 1 on-chain fee transfer to treasury
+
+**Failure criteria:**
+- More than 1 successful on-chain transfer from the deposit address
+- Intent stuck in `sweeping` status without completion (deadlock)
+- Nonce gap created by failed concurrent transactions
+
+**Monitoring points:**
+- On-chain transaction count from deposit address
+- Database intent status transitions (log `TX_STATE_CHANGE` audit events)
+- `NonceManager` gap detection alerts
+- Application logs for "already sweeping, skipping" messages
+
+---
+
+## Scenario 6: AML Threshold Boundary Testing
+
+**Objective:** Verify AML daily cumulative threshold enforcement under concurrent transactions from the same sender.
+
+**Preconditions:**
+- AML daily threshold: €10,000
+- Redis available for cumulative tracking
+- Sender address with no prior daily activity
+
+**Load profile:**
+- 20 concurrent transactions of €900 each from the same sender address
+- All submitted within a 100ms window
+- Total attempted: €18,000 (1.8× daily limit)
+
+**Expected behavior (current — VULNERABLE):**
+- All 20 transactions may pass the AML check before any individual check reflects the cumulative total
+- Final Redis counter shows €18,000 but no transaction was individually flagged
+
+**Expected behavior (after fix):**
+- First 11 transactions pass (cumulative ≤ €9,900)
+- 12th transaction triggers `threshold_daily` alert (cumulative €10,800 > €10,000)
+- Transactions 12-20 flagged for review
+
+**Failure criteria:**
+- More than 12 transactions pass without AML alert
+- Redis counter shows incorrect cumulative total
+- Race between `INCRBYFLOAT` and `EXPIRE` causes counter persistence bug
+
+**Monitoring points:**
+- Redis key `aml:daily:{sender}` value after all transactions
+- AML alert count in database audit log
+- Per-transaction response: `risk_level` and `requires_review` fields
+- Redis key TTL (should be ~86400s, not -1)
+
+---
+
+## Scenario 7: API Key Rotation Under Active Traffic
+
+**Objective:** Verify that revoking an API key immediately blocks all in-flight and future requests.
+
+**Preconditions:**
+- API key `rsend_live_abc123` with `scope=write`, actively used
+- Sustained traffic: 10 req/s using this key
+
+**Load profile:**
+- Phase 1 (0-30s): 10 req/s with key `rsend_live_abc123` — all succeed
+- Phase 2 (30s): Revoke the key via admin API
+- Phase 3 (30-60s): Continue 10 req/s with the revoked key
+
+**Expected behavior:**
+- Phase 1: All requests return 200
+- Phase 2: Revocation completes, key marked `is_active=False`
+- Phase 3: All requests return 401 `INVALID_API_KEY`
+- In-flight requests at revocation moment: may succeed (DB read already cached) or fail
+
+**Failure criteria:**
+- Any request succeeds more than 1 second after revocation
+- Revocation takes > 5 seconds to propagate
+- Cached auth state allows stale key usage beyond cache TTL
+
+**Monitoring points:**
+- Response status codes over time (transition from 200 → 401)
+- Exact timestamp of last successful request vs revocation timestamp
+- Database `is_active` field update timestamp
+- Redis cache invalidation (if key verification is cached)
+
+---
+
+## Scenario 8: WebSocket Notification Fan-Out
+
+**Objective:** Test WebSocket notification delivery to many concurrent checkout clients for the same intent.
+
+**Preconditions:**
+- 1 payment intent in `pending` status
+- WebSocket endpoint available at `/ws/checkout/{intent_id}`
+
+**Load profile:**
+- 1000 WebSocket clients connected to the same intent's checkout channel
+- 1 `payment.completed` event triggers notification to all clients
+- Clients hold connections for 60 seconds after notification
+
+**Expected behavior:**
+- All 1000 clients receive the `payment_completed` message within 5 seconds
+- WebSocket manager handles fan-out without blocking the event loop
+- Memory per connection: < 10KB (total < 10MB for 1000 connections)
+- After clients disconnect: all resources freed
+
+**Failure criteria:**
+- Any client does not receive the notification
+- Notification delivery takes > 10 seconds for the last client
+- Event loop blocked during fan-out (affects API response times)
+- Memory leak after client disconnection (connections not cleaned up)
+- Total memory > 50MB for WebSocket connections
+
+**Monitoring points:**
+- `notify_payment_completed()` return value (number of clients notified)
+- Time from event trigger to last client notification
+- Event loop utilization during fan-out
+- Process memory before, during, and after test
+- WebSocket manager internal connection count
+
+---
+
+## Scenario 9: Cross-Chain CCIP Message Ordering
+
+**Objective:** Verify that cross-chain messages are processed correctly when multiple transfers arrive out of order on the destination chain.
+
+**Preconditions:**
+- RSendCCIPSender deployed on source chain (e.g., Ethereum)
+- RSendCCIPReceiver deployed on destination chain (e.g., Base)
+- Sender-receiver binding configured
+- 3 different tokens supported
+
+**Load profile:**
+- Send 10 cross-chain transfers in rapid succession (1 per block)
+- Mix of tokens: 4 USDC, 3 USDT, 3 DAI
+- Vary amounts: 100, 500, 1000, 5000 units
+- CCIP delivers messages out of order (message 5 arrives before message 3)
+
+**Expected behavior:**
+- All 10 messages eventually processed by receiver
+- `processedMessages` mapping prevents replay of any message
+- Each recipient receives correct token and amount regardless of delivery order
+- No token stuck in receiver contract
+
+**Failure criteria:**
+- Any message processed twice (replay)
+- Any message not processed (stuck in CCIP)
+- Token balance mismatch: receiver contract retains tokens after all messages processed
+- `UnknownSender` revert due to misconfigured allowlist
+
+**Monitoring points:**
+- `CrossChainReceived` events on destination chain
+- `processedMessages` mapping entries
+- Receiver contract token balances (should be 0 after all distributions)
+- CCIP Explorer message status (success/failed/pending)
+- Gas usage per `ccipReceive` call
+
+---
+
+## Scenario 10: Database Connection Pool Exhaustion
+
+**Objective:** Verify application behavior when all database connections are in use.
+
+**Preconditions:**
+- SQLAlchemy async pool: `pool_size=5, max_overflow=10` (15 total)
+- Application running with 1 worker
+
+**Load profile:**
+- Phase 1: 20 concurrent requests that each hold a DB connection for 5 seconds (simulate slow query via `pg_sleep(5)` or equivalent)
+- Phase 2: While connections are exhausted, send 10 normal requests
+- Phase 3: Slow queries complete, connections return to pool
+
+**Expected behavior:**
+- Phase 1: First 15 requests acquire connections, 5 requests queue waiting
+- Phase 2: Normal requests queue behind slow requests, timeout after `pool_timeout` (default 30s)
+- Phase 3: Queued requests proceed, normal operation resumes
+
+**Failure criteria:**
+- Application crashes (unhandled `TimeoutError` from connection pool)
+- Connection leak: pool never returns to full capacity after test
+- Requests hang indefinitely (no timeout)
+- Error responses don't include meaningful error message
+
+**Monitoring points:**
+- `pg_stat_activity` active connection count
+- SQLAlchemy pool checkout/checkin counts
+- Application response times (p50, p95, p99) during each phase
+- Error log entries for pool exhaustion
+- Pool status after test: `pool.status()` shows all connections returned
+
+---
+
+## Test Infrastructure Requirements
+
+| Requirement | Tool | Purpose |
+|-------------|------|---------|
+| HTTP load generator | `locust` or `k6` | Scenarios 1, 3, 4, 7 |
+| Concurrent HTTP client | `asyncio` + `aiohttp` | Scenarios 2, 5, 6 |
+| WebSocket client | `websockets` library | Scenario 8 |
+| Redis control | `redis-cli` | Scenario 3 (kill/restart) |
+| Blockchain testnet | Foundry `anvil` or Sepolia | Scenarios 5, 9 |
+| Database monitoring | `pg_stat_activity` queries | Scenarios 1, 10 |
+| Process monitoring | `psutil` or `top` | All scenarios (memory/CPU) |
+| Webhook mock server | `fastapi` stub | Scenario 4 |

@@ -115,7 +115,7 @@ const config = createConfig({
   connectors,
   transports: {
     [base.id]:        rpcFallback('base-mainnet',    null,             'https://mainnet.base.org', 'https://base.llamarpc.com'),
-    [mainnet.id]:     rpcFallback('eth-mainnet',     'mainnet',        'https://eth.llamarpc.com', 'https://rpc.ankr.com/eth'),
+    [mainnet.id]:     rpcFallback('eth-mainnet',     'mainnet',        'https://rpc.ankr.com/eth', 'https://rpc.ankr.com/eth'),
     [arbitrum.id]:    rpcFallback('arb-mainnet',     'arbitrum-mainnet', 'https://arb1.arbitrum.io/rpc'),
     [optimism.id]:    rpcFallback('opt-mainnet',     'optimism-mainnet', 'https://mainnet.optimism.io'),
     [polygon.id]:     rpcFallback('polygon-mainnet', 'polygon-mainnet', 'https://polygon-rpc.com'),

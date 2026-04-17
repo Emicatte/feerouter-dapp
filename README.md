@@ -10,24 +10,37 @@ Frontend (Next.js 14)          Backend (FastAPI)              Smart Contracts (S
 CommandCenter.tsx              execution_engine.py            FeeRouterV4.sol
 TransferForm.tsx               strategy_engine.py             RSendBatchDistributor.sol
 CrossChainForm.tsx             sweep_service.py               RSendForwarder.sol
-PortfolioDashboard.tsx         distribution_service.py        RSendCCIPSender.sol
-SwapModule.tsx                 ledger_service.py              RSendCCIPReceiver.sol
-SweepFeed.tsx (WebSocket)
+PortfolioDashboard.tsx         split_executor.py              RSendCCIPSender.sol
+SwapModule.tsx                 distribution_service.py        RSendCCIPReceiver.sol
+SweepFeed.tsx (WebSocket)      ledger_service.py
                                reconciliation_service.py
-Chain Adapters
-├── evm-adapter.ts             Middleware
-├── solana-adapter.ts          ├── rate_limit.py
-└── tron-adapter.ts            ├── idempotency.py
-                               ├── input_sanitization.py
-Hooks                          ├── api_auth.py
-├── useUniversalWallet.ts      └── error_handler.py
-├── useForwardingRules.ts
-├── useSwapQuote.ts            Infrastructure
-├── usePermit2Flow.ts          ├── Redis (cache + rate limit)
-└── useSweepWebSocket.ts       ├── Celery (async tasks)
-                               ├── PostgreSQL (asyncpg)
+Chain Adapters                 aml_service.py
+├── evm-adapter.ts             key_manager.py (KMS/Local)
+├── solana-adapter.ts
+└── tron-adapter.ts            Middleware
+                               ├── correlation.py (X-Correlation-ID)
+Hooks                          ├── structured_logging.py
+├── useUniversalWallet.ts      ├── rate_limit.py
+├── useForwardingRules.ts      ├── idempotency.py
+├── useSwapQuote.ts            ├── input_sanitization.py
+├── usePermit2Flow.ts          ├── api_auth.py
+└── useSweepWebSocket.ts       └── error_handler.py
+
+Oracle (Next.js API)           Security
+├── sign/route.ts              ├── signing_rate_limit.py
+│   ├── signing guard          ├── signing_audit.py
+│   ├── AML check              ├── circuit_breaker.py
+│   └── EIP-712 sign           └── alert_service.py
+
+                               Infrastructure
+                               ├── Redis (cache + rate limit + nonce dedup)
+                               ├── Celery (async tasks)
+                               ├── PostgreSQL (asyncpg, 15 migrations)
+                               ├── AWS KMS (HSM signing + IAM policy)
                                ├── Sentry (errors)
-                               └── Prometheus (metrics)
+                               ├── Prometheus (metrics)
+                               ├── OpenTelemetry (tracing)
+                               └── Telegram/Webhook (alerts)
 ```
 
 ## Features
@@ -88,14 +101,29 @@ Hooks                          ├── api_auth.py
 - AML compliance check before every cross-chain transfer
 
 ### Compliance & Security
-- AML screening (OFAC, Chainalysis integration)
-- DAC8 XML report generation
-- Anomaly detection (statistical)
-- Anti-phishing setup
+- **AML screening** — OFAC SDN, EU sanctions, local blacklist (hardcoded + DB)
+- **Transaction monitoring** — single tx (>EUR1K), daily (>EUR5K), monthly (>EUR15K DAC8 KYC), velocity (>10/h), structuring detection
+- **AML admin panel** — alert review workflow (pending/reviewed/escalated/dismissed), sanctions management, 24h statistics
+- **Split AML gate** — pre-execution recipient screening + anti-structuring detection on split plans
+- DAC8 XML report generation (CARF-compliant)
+- Anomaly detection (statistical z-score)
 - Input sanitization middleware
 - HMAC webhook verification
 - API key authentication (production)
-- Circuit breakers on all external services
+
+### Signing Protection
+- **Oracle signing guard** — pre-flight validation before EIP-712 signature (chain, recipient, amount bounds, deadline)
+- **Rate limiting** — per-wallet (10/min, 50/hr), per-IP (20/min), global (100/min)
+- **Replay protection** — server-side nonce deduplication via Redis SETNX
+- **Immutable audit log** — every signing request (approved/denied) persisted to Postgres
+- **AML integration** — full AML check before oracle signature
+
+### KMS Hardening
+- **IAM policy** — signing restricted to backend role, destructive ops require MFA + admin role
+- **Local rate limiter** — defence-in-depth (60/min, 500/hr) on top of IAM limits
+- **KMS audit log** — every sign/verify/rotate operation persisted to Postgres
+- **Key rotation** — sign with active key, verify with active + previous keys
+- **Health check** — `describe_key` validation of key state
 
 ### Financial Infrastructure
 - Double-entry bookkeeping ledger
@@ -103,15 +131,42 @@ Hooks                          ├── api_auth.py
 - Spending policy enforcement (reserve/release)
 - Nonce management with gap detection
 - Idempotent webhook processing (Redis-backed, fail-closed)
+- **Fail-closed circuit breakers** — financial ops blocked when Redis/Postgres/RPC down
+- **DependencyGuard** — pre-flight infrastructure checks before sweep/transfer/execution
 
 ### Monitoring & Observability
-- `/health`, `/health/live`, `/health/ready`, `/health/deep`
+- **Correlation ID** — `X-Correlation-ID` propagated across HTTP, Celery, and logs (contextvars)
+- **Structured JSON logging** — correlation_id, service, chain_id, tx_hash, duration_ms
+- `/health`, `/health/live`, `/health/ready`, `/health/deep` (5-component concurrent check)
 - `/health/sweep` — full pipeline health (DB, Redis, Celery, circuit breakers, hot wallet)
 - `/health/rpc` — per-chain RPC provider status
 - `/health/config` — env var audit (values never exposed)
 - Prometheus metrics via `/metrics`
 - Sentry error tracking
-- Structured JSON logging
+- OpenTelemetry tracing (optional)
+
+### Alert Service
+- **Immediate notifications** — Telegram bot + generic webhook (Slack/Discord/PagerDuty)
+- **9 alert types** — SIGNING_DOWN, SIGNING_SPIKE, KMS_RATE_LIMIT, RPC_DOWN, REDIS_DOWN, AML_BLOCK, SWEEP_FAILED, BALANCE_LOW, CB_RECOVERY
+- **Per-severity cooldown** — EMERGENCY (1min), CRITICAL (5min), WARNING (15min), INFO (60min)
+- **Circuit breaker integration** — automatic alert on OPEN + recovery notification on CLOSED
+
+### Token Explorer
+- **Multi-chain token list** — unified view across all 12 supported chains (EVM + TRON)
+- **Bulk market data** — single `/api/tokens-market` call fetches price, 24h change, 7d sparkline, logo, market cap, and 24h volume for every token (collapses 16+ CoinGecko requests into one)
+- **Server-side cache** — 5 min TTL with stale-on-error fallback (UI degrades gracefully if CoinGecko is unreachable)
+- **Ranked ordering** — majors first (BTC, ETH, TRX, BNB, AVAX, POL, OP, ARB, CELO), then stables (USDC, USDT, DAI, cUSD, USDB, USDD, WETH)
+- **Per-row sparkline** — Catmull-Rom smoothed SVG chart with gradient fill, in-line per token row
+- **Inline Token Detail view** (Uniswap-style, no route change):
+  - Back button → `AnimatePresence` transition to the table
+  - Large 48px logo + name + symbol + current price (mono font)
+  - Interactive 700×300 SVG chart with hover crosshair + circle marker + tooltip (price override on hover, change recomputed vs series start)
+  - Time-range pills `[1H | 1D | 1W | 1M | 1Y]` (only `1W` active; others disabled with "Coming soon" tooltip)
+  - Stats grid: market cap, 24h volume, chains count — all compact-formatted (`$281.7B`, `$293.5M`)
+  - Chain pill list with real CoinGecko CDN icons + letter-bubble fallback on 404
+  - Per-chain contract addresses: truncated `0xAAAA…BBBB`, clipboard copy with 1.5s flash, explorer link (`SUPPORTED_CHAINS[chainId].explorerUrl/token/{addr}`), native tokens render as "Native token"
+- **Resilient icons** — two-tier fallback: CDN image first, colored letter bubble on error (no broken-image artifacts)
+- **Parallax background** — `.rp-bg` orb layer drifts at 15% of scroll velocity via `requestAnimationFrame` + `translate3d`, respects `prefers-reduced-motion`
 
 ## Stack
 
@@ -137,16 +192,17 @@ Hooks                          ├── api_auth.py
 |---|---|
 | FastAPI + Uvicorn | API server (4 workers prod) |
 | SQLAlchemy 2.0 + asyncpg | Async ORM + PostgreSQL |
-| Alembic | Database migrations |
-| Redis + hiredis | Cache, rate limiting, idempotency |
+| Alembic | Database migrations (15 versions) |
+| Redis + hiredis | Cache, rate limiting, idempotency, nonce dedup |
 | Celery | Async task queue |
 | eth-account + eth-abi | EVM transaction signing |
-| boto3 | AWS KMS signing (optional) |
+| boto3 | AWS KMS signing + audit |
 | Sentry SDK | Error tracking |
-| Prometheus | Metrics |
+| Prometheus | Metrics + circuit breaker gauges |
+| OpenTelemetry | Distributed tracing (optional) |
 | SciPy + Pandas | Anomaly detection |
 | lxml | DAC8 XML compliance reports |
-| httpx | Async HTTP client |
+| httpx | Async HTTP client (alerts, webhooks) |
 
 ### Smart Contracts
 | Tool | Purpose |
@@ -166,12 +222,17 @@ fee-router-dapp/
 │   ├── PortfolioDashboard.tsx    # Portfolio analytics
 │   ├── SwapModule.tsx            # Token swap UI
 │   ├── SweepFeed.tsx             # Real-time sweep WebSocket feed
+│   ├── ExploreTokens.tsx         # Multi-chain token explorer + inline detail view switcher
+│   ├── TokenDetailView.tsx       # Uniswap-style detail: chart + stats + chains + addresses
+│   ├── tokens/
+│   │   └── tokenRegistry.ts      # TOKEN_LIST + SUPPORTED_CHAINS (explorer URLs, native currency, icon URLs)
 │   ├── providers.tsx             # EVM providers (Wagmi + RainbowKit)
 │   ├── providers-solana.tsx      # Solana wallet adapter
 │   ├── providers-tron.tsx        # Tron wallet adapter
 │   └── api/                      # Next.js API routes
 │       ├── oracle/sign/          # Compliance oracle
-│       └── portfolio/[address]/  # Portfolio data
+│       ├── portfolio/[address]/  # Portfolio data
+│       └── tokens-market/        # CoinGecko bulk proxy (price + 24h + 7d sparkline + image, 5-min cache, stale-on-error)
 ├── components/shared/
 │   └── ChainFamilySwitch.tsx     # EVM/Solana/Tron selector
 ├── hooks/
@@ -211,12 +272,15 @@ fee-router-dapp/
 │   │   ├── config.py             # Settings (env vars)
 │   │   ├── celery_app.py         # Celery config
 │   │   ├── api/
-│   │   │   ├── routes.py         # TX callback, anomalies, DAC8
-│   │   │   ├── merchant_routes.py # B2B merchant API (payment intents, webhooks)
-│   │   │   ├── sweeper_routes.py # Sweep operations
+│   │   │   ├── routes.py              # TX callback, anomalies, DAC8
+│   │   │   ├── merchant_routes.py     # B2B merchant API
+│   │   │   ├── sweeper_routes.py      # Sweep operations
 │   │   │   ├── distribution_routes.py
 │   │   │   ├── execution_routes.py    # Cross-chain engine
 │   │   │   ├── strategy_routes.py     # Conditional automation
+│   │   │   ├── signing_routes.py      # Signing guard + audit
+│   │   │   ├── aml_routes.py          # AML check + admin panel
+│   │   │   ├── health_routes.py       # /health/deep (5-component)
 │   │   │   ├── ledger_routes.py
 │   │   │   ├── audit_routes.py
 │   │   │   ├── price_routes.py
@@ -228,19 +292,27 @@ fee-router-dapp/
 │   │   │   ├── command_models.py      # DistributionList, SweepBatch
 │   │   │   ├── strategy_models.py     # Strategy (conditions + actions)
 │   │   │   ├── merchant_models.py     # PaymentIntent, MerchantWebhook, WebhookDelivery
-│   │   │   ├── aml_models.py          # BlacklistedWallet
+│   │   │   ├── aml_models.py          # SanctionEntry, AMLAlert, AMLConfig, BlacklistedWallet
+│   │   │   ├── signing_models.py     # SigningAuditLog (immutable)
+│   │   │   ├── kms_models.py         # KMSAuditLog (immutable)
 │   │   │   └── schemas.py            # Pydantic schemas
 │   │   ├── services/
 │   │   │   ├── execution_engine.py    # Cross-chain pipeline
 │   │   │   ├── strategy_engine.py     # Condition evaluator
 │   │   │   ├── sweep_service.py       # Sweep orchestration
+│   │   │   ├── split_executor.py      # Split plan execution + AML gate
 │   │   │   ├── distribution_service.py
 │   │   │   ├── ledger_service.py      # Double-entry bookkeeping
 │   │   │   ├── reconciliation_service.py
 │   │   │   ├── webhook_service.py     # Merchant webhook delivery + retry
-│   │   │   ├── aml_service.py         # AML/OFAC screening
+│   │   │   ├── aml_service.py         # AML screening + monitoring + split checks
+│   │   │   ├── aml_exceptions.py      # AMLBlockedError, AMLReviewRequired
 │   │   │   ├── anomaly_service.py     # Statistical detection
-│   │   │   ├── circuit_breaker.py     # Fault tolerance
+│   │   │   ├── circuit_breaker.py     # Fault tolerance + DependencyGuard
+│   │   │   ├── alert_service.py       # Telegram/webhook alerts + cooldown
+│   │   │   ├── signing_audit.py       # Immutable signing audit log
+│   │   │   ├── signing_rate_limit.py  # Redis-backed signing rate limits
+│   │   │   ├── key_manager.py         # KMS/Local/Vault signers + rate limit + audit
 │   │   │   ├── cache_service.py       # Redis
 │   │   │   ├── nonce_manager.py       # Nonce + gap detection
 │   │   │   ├── wallet_manager.py      # Hot wallet
@@ -250,6 +322,8 @@ fee-router-dapp/
 │   │   │   ├── notification_service.py
 │   │   │   └── spending_policy.py     # Reserve/release
 │   │   ├── middleware/
+│   │   │   ├── correlation.py         # X-Correlation-ID (contextvars)
+│   │   │   ├── structured_logging.py  # JSON formatter + TimedOperation
 │   │   │   ├── rate_limit.py
 │   │   │   ├── idempotency.py
 │   │   │   ├── input_sanitization.py
@@ -267,9 +341,14 @@ fee-router-dapp/
 │   │   │   └── notification_tasks.py
 │   │   └── jobs/
 │   │       └── reconciliation_job.py
-│   ├── alembic/                  # DB migrations
+│   ├── alembic/                  # DB migrations (0001–0015)
 │   │   ├── env.py
 │   │   └── versions/
+│   ├── infrastructure/
+│   │   └── kms_policy.json       # AWS KMS IAM policy (signing + admin)
+│   ├── data/
+│   │   └── sanctions/
+│   │       └── ofac_sdn.json     # OFAC SDN sanctioned addresses
 │   ├── docker-compose.yml
 │   └── requirements.txt
 └── public/
@@ -371,22 +450,39 @@ docker-compose up -d  # PostgreSQL + Redis + Celery
 | POST | `/api/v1/merchant/webhook/test` | Send test event |
 | GET | `/api/v1/merchant/transactions` | List merchant transactions |
 
+### Signing Guard (internal, called by oracle)
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/internal/signing/check` | Pre-signing validation (rate limit, nonce, chain, amount, deadline) |
+| POST | `/api/internal/signing/audit` | Write to immutable signing audit log |
+
+### AML
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/v1/aml/check` | Full AML check (screening + monitoring) |
+| GET | `/admin/aml/alerts` | List alerts (filter by status/sender, paginated) |
+| POST | `/admin/aml/alerts/{id}/review` | Review alert (reviewed/escalated/dismissed) |
+| POST | `/admin/aml/sanctions/update` | Upload sanctions list (JSON) or load OFAC file |
+| GET | `/admin/aml/stats` | 24h alert statistics |
+
 ### Compliance
 | Method | Endpoint | Description |
 |---|---|---|
 | GET | `/api/v1/anomalies` | List anomaly alerts |
 | POST | `/api/v1/dac8/generate` | Generate DAC8 XML report |
 
-### Health
+### Health & Monitoring
 | Method | Endpoint | Description |
 |---|---|---|
 | GET | `/health` | Basic health + Redis status |
 | GET | `/health/live` | Liveness probe (container) |
 | GET | `/health/ready` | Readiness probe (DB + Redis) |
-| GET | `/health/deep` | Last reconciliation report |
+| GET | `/health/deep` | 5-component check (Postgres, Redis, Celery, RPC, KMS) |
 | GET | `/health/sweep` | Full pipeline health |
 | GET | `/health/rpc` | Per-chain RPC status |
 | GET | `/health/config` | Env var audit |
+| GET | `/health/dependencies` | Circuit breaker states |
+| GET | `/health/reconciliation` | Last reconciliation report |
 | GET | `/metrics` | Prometheus metrics |
 
 ## Networks
@@ -423,12 +519,17 @@ REDIS_URL=                        # Redis URL
 ALCHEMY_API_KEY=                  # Alchemy API
 ALCHEMY_WEBHOOK_SECRET=           # Webhook HMAC (optional, enables webhook mode)
 SWEEP_PRIVATE_KEY=                # Hot wallet key (local signer)
-SIGNER_MODE=local                 # local | kms
+SIGNER_MODE=local                 # local | kms | vault
 KMS_KEY_ID=                       # AWS KMS key (if signer_mode=kms)
-HMAC_SECRET=                      # API HMAC secret
-TELEGRAM_BOT_TOKEN=               # Notifications (optional)
-TELEGRAM_CHAT_ID=                 # Notifications (optional)
+AWS_REGION=eu-west-1              # AWS region for KMS
+DEPOSIT_MASTER_KEY=               # Master key for deposit address derivation
+HMAC_SECRET=                      # API HMAC secret (>= 32 chars in prod)
+TELEGRAM_BOT_TOKEN=               # Sweep notifications (optional)
+TELEGRAM_CHAT_ID=                 # Sweep notifications chat
+TELEGRAM_ALERT_CHAT_ID=           # Critical alerts chat (falls back to TELEGRAM_CHAT_ID)
+ALERT_WEBHOOK_URL=                # Discord/Slack webhook for critical alerts
 SENTRY_DSN=                       # Error tracking (optional)
+OTEL_ENDPOINT=                    # OpenTelemetry OTLP endpoint (optional)
 DEBUG=false                       # Enables /docs, verbose logging
 ```
 

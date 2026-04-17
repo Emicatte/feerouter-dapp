@@ -513,9 +513,9 @@ export default function CrossChainForm({ noCard }: Props) {
               C.purple
             )}
 
-            {/* RSend fee */}
+            {/* RSends fee */}
             {row(
-              'RSend fee',
+              'RSends fee',
               `${rsendFee.toFixed(rsendFee < 0.01 ? 6 : 2)} ${outToken} (0.5%)`,
               C.sub
             )}

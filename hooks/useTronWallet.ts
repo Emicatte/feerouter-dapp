@@ -105,21 +105,46 @@ export function useTronWallet() {
       const tronLink = (window as any).tronLink
       if (!tronLink) throw new Error('TronLink not installed')
 
-      const res = await tronLink.request({ method: 'tron_requestAccounts' })
+      let res: any
+      try {
+        res = await tronLink.request({ method: 'tron_requestAccounts' })
+      } catch (reqErr) {
+        // Some TronLink versions throw instead of returning a code object
+        res = reqErr
+      }
+      try { console.log('[RSend] TronLink response:', JSON.stringify(res)) } catch {}
 
-      if (res.code === 200 || res.code === 4001) {
-        // 4001 = already connected
-        const tw = (window as any).tronWeb
-        if (tw && tw.defaultAddress?.base58) {
-          setState(s => ({
-            ...s,
-            address: tw.defaultAddress.base58,
-            isConnected: true,
-            network: detectTronNetwork(tw),
-          }))
+      const code = res && typeof res === 'object' ? res.code : undefined
+      // 4000 = request in queue / not logged in, 4001 = already accepted,
+      // 4002 = user rejected. Only 4002 is a hard rejection.
+      if (code === 4002) {
+        throw new Error('User rejected connection')
+      }
+
+      // Ground truth: wait up to ~2s for tronWeb to become ready + have an address.
+      // Newer TronLink versions may return void/undefined from request(), so we
+      // rely on polling the injected tronWeb object rather than the response code.
+      const tw: any = await (async () => {
+        for (let i = 0; i < 10; i++) {
+          const w = (window as any).tronWeb
+          if (w && w.ready && w.defaultAddress?.base58) return w
+          await new Promise(r => setTimeout(r, 200))
         }
+        return (window as any).tronWeb
+      })()
+
+      if (tw && tw.defaultAddress?.base58) {
+        setState(s => ({
+          ...s,
+          address: tw.defaultAddress.base58,
+          isConnected: true,
+          network: detectTronNetwork(tw),
+        }))
       } else {
-        throw new Error(`TronLink rejected: code ${res.code}`)
+        throw new Error(
+          `TronLink not ready after request (code=${code ?? 'undefined'}) — ` +
+            `unlock wallet or approve the connection in the extension popup`,
+        )
       }
     } catch (err) {
       console.error('[RSend] TronLink connect failed:', err)

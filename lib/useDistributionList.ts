@@ -38,7 +38,7 @@ export function useDistributionList(address: string | undefined) {
     if (!silent) setLoading(true)
     try {
       const res = await fetch(
-        `${BACKEND}/api/v1/distribution/lists?owner_address=${address.toLowerCase()}`,
+        `${BACKEND}/api/v1/distributions?owner_address=${address.toLowerCase()}`,
         { signal: AbortSignal.timeout(15000) }
       )
       if (res.ok) {
@@ -55,7 +55,7 @@ export function useDistributionList(address: string | undefined) {
   useEffect(() => { fetchLists() }, [fetchLists])
 
   const createList = useCallback(async (name: string, entries: DistributionEntry[]) => {
-    const res = await fetch(`${BACKEND}/api/v1/distribution/lists`, {
+    const res = await fetch(`${BACKEND}/api/v1/distributions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ owner_address: address, name, entries }),
@@ -69,7 +69,7 @@ export function useDistributionList(address: string | undefined) {
   }, [address, fetchLists])
 
   const deleteList = useCallback(async (id: number) => {
-    const res = await fetch(`${BACKEND}/api/v1/distribution/lists/${id}`, {
+    const res = await fetch(`${BACKEND}/api/v1/distributions/${id}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ owner_address: address }),

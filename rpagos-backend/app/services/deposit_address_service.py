@@ -13,6 +13,7 @@ Funzioni principali:
   - sweep_deposit(intent_id, destination, db)         (sweep fondi al merchant/treasury)
 """
 
+import asyncio
 import logging
 from typing import Optional
 
@@ -145,6 +146,64 @@ def get_private_key_for_intent(intent_id: str) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════
+#  Balance query
+# ═══════════════════════════════════════════════════════════════
+
+USDC_ADDRESSES = {
+    "BASE": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "ETH": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    "ARBITRUM": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+}
+USDT_ADDRESSES = {
+    "ETH": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+    "ARBITRUM": "0xFd086bC7CD5C481DCC9C85ebE478A1C0b69FCbb9",
+}
+ERC20_BALANCE_ABI = [
+    {
+        "constant": True,
+        "inputs": [{"name": "_owner", "type": "address"}],
+        "name": "balanceOf",
+        "outputs": [{"name": "balance", "type": "uint256"}],
+        "type": "function",
+    },
+]
+
+
+async def get_deposit_balance(intent_id: str, currency: str, chain: str) -> int:
+    """Read on-chain balance of a deposit address in raw units."""
+    from web3 import Web3
+
+    settings = get_settings()
+    rpc_urls = {
+        "BASE": f"https://base-mainnet.g.alchemy.com/v2/{settings.alchemy_api_key}",
+        "ETH": f"https://eth-mainnet.g.alchemy.com/v2/{settings.alchemy_api_key}",
+        "ARBITRUM": f"https://arb-mainnet.g.alchemy.com/v2/{settings.alchemy_api_key}",
+    }
+    rpc_url = rpc_urls.get(chain.upper())
+    if not rpc_url:
+        raise ValueError(f"Chain '{chain}' non supportata")
+
+    w3 = Web3(Web3.HTTPProvider(rpc_url))
+    child_key = get_private_key_for_intent(intent_id)
+    deposit_addr = Account.from_key(child_key).address
+
+    is_native = currency.upper() == "ETH"
+    if is_native:
+        return await asyncio.to_thread(w3.eth.get_balance, deposit_addr)
+
+    token_map = {"USDC": USDC_ADDRESSES, "USDT": USDT_ADDRESSES}
+    token_address = token_map.get(currency.upper(), {}).get(chain.upper())
+    if not token_address:
+        raise ValueError(f"Token address per {currency} su {chain} non noto")
+
+    contract = w3.eth.contract(
+        address=Web3.to_checksum_address(token_address),
+        abi=ERC20_BALANCE_ABI,
+    )
+    return await asyncio.to_thread(contract.functions.balanceOf(deposit_addr).call)
+
+
+# ═══════════════════════════════════════════════════════════════
 #  Sweep — trasferisci fondi dal deposit address al treasury
 # ═══════════════════════════════════════════════════════════════
 
@@ -155,6 +214,7 @@ async def sweep_deposit(
     token_address: Optional[str] = None,
     currency: str = "ETH",
     chain: str = "BASE",
+    amount: Optional[int] = None,
 ) -> Optional[str]:
     """
     Sweeppa i fondi da un deposit address verso il destination address.
@@ -163,7 +223,7 @@ async def sweep_deposit(
       1. Ricostruisce la private key del deposit address
       2. Controlla il balance (native o ERC-20)
       3. Se il deposit address non ha ETH per il gas, invia gas dal hot wallet
-      4. Invia tutti i fondi a destination
+      4. Invia i fondi a destination (amount specifico o tutto il balance)
       5. Ritorna il tx_hash dello sweep
 
     Args:
@@ -172,6 +232,7 @@ async def sweep_deposit(
         token_address: Contratto ERC-20 (None per native ETH)
         currency: "ETH", "USDC", ecc.
         chain: "BASE", "ETH", "ARBITRUM"
+        amount: Raw units to transfer; None = sweep full balance
 
     Returns:
         tx_hash dello sweep, oppure None se balance = 0
@@ -229,7 +290,7 @@ async def sweep_deposit(
 
     # ── Check balance ────────────────────────────────────────
     if is_native:
-        balance = w3.eth.get_balance(deposit_addr)
+        balance = await asyncio.to_thread(w3.eth.get_balance, deposit_addr)
         if balance == 0:
             logger.info("Sweep skip: deposit=%s balance=0 ETH", deposit_addr)
             return None
@@ -258,14 +319,21 @@ async def sweep_deposit(
             address=Web3.to_checksum_address(token_address),
             abi=erc20_abi,
         )
-        balance = token_contract.functions.balanceOf(deposit_addr).call()
+        balance = await asyncio.to_thread(token_contract.functions.balanceOf(deposit_addr).call)
         if balance == 0:
             logger.info("Sweep skip: deposit=%s balance=0 %s", deposit_addr, currency)
             return None
+        if amount is not None and balance < amount:
+            logger.warning(
+                "Sweep skip: deposit=%s balance=%d < requested amount=%d %s",
+                deposit_addr, balance, amount, currency,
+            )
+            return None
 
     # ── Gas funding: deposit address potrebbe non avere ETH ──
-    native_balance = w3.eth.get_balance(deposit_addr)
-    gas_price = w3.eth.gas_price
+    native_balance = await asyncio.to_thread(w3.eth.get_balance, deposit_addr)
+    gas_price = await asyncio.to_thread(lambda: w3.eth.gas_price)
+    chain_id = await asyncio.to_thread(lambda: w3.eth.chain_id)
     estimated_gas = 65_000 if not is_native else 21_000
     gas_needed = gas_price * estimated_gas
 
@@ -275,16 +343,15 @@ async def sweep_deposit(
 
         # ── Gas funding via key_manager (supports local + KMS) ──
         from app.services.key_manager import get_signer, SignerError
-        import asyncio
 
         try:
             km_signer = get_signer()
         except SignerError:
             raise ValueError("Signer not configured — impossibile inviare gas per lo sweep")
 
-        # get_address() is async; we're in sync context here
-        loop = asyncio.get_event_loop()
-        hot_wallet_addr = loop.run_until_complete(km_signer.get_address())
+        hot_wallet_addr = await km_signer.get_address()
+
+        hot_wallet_nonce = await asyncio.to_thread(w3.eth.get_transaction_count, hot_wallet_addr)
 
         gas_fund_tx = {
             "from": hot_wallet_addr,
@@ -292,13 +359,13 @@ async def sweep_deposit(
             "value": gas_to_send,
             "gas": 21_000,
             "gasPrice": gas_price,
-            "nonce": w3.eth.get_transaction_count(hot_wallet_addr),
-            "chainId": w3.eth.chain_id,
+            "nonce": hot_wallet_nonce,
+            "chainId": chain_id,
         }
 
-        raw_signed = loop.run_until_complete(km_signer.sign_transaction(gas_fund_tx))
-        gas_tx_hash = w3.eth.send_raw_transaction(raw_signed)
-        w3.eth.wait_for_transaction_receipt(gas_tx_hash, timeout=120)
+        raw_signed = await km_signer.sign_transaction(gas_fund_tx)
+        gas_tx_hash = await asyncio.to_thread(w3.eth.send_raw_transaction, raw_signed)
+        await asyncio.to_thread(w3.eth.wait_for_transaction_receipt, gas_tx_hash, timeout=120)
 
         logger.info(
             "Gas funded: hot_wallet=%s -> deposit=%s amount=%s wei tx=%s",
@@ -306,12 +373,16 @@ async def sweep_deposit(
         )
 
     # ── Build sweep TX ───────────────────────────────────────
-    nonce = w3.eth.get_transaction_count(deposit_addr)
+    nonce = await asyncio.to_thread(w3.eth.get_transaction_count, deposit_addr)
 
     if is_native:
-        # Sweep native ETH: invia tutto meno il gas
+        # Sweep native ETH: specific amount or full balance minus gas
         sweep_gas = 21_000
-        sweep_value = w3.eth.get_balance(deposit_addr) - (gas_price * sweep_gas)
+        if amount is not None:
+            sweep_value = amount
+        else:
+            current_balance = await asyncio.to_thread(w3.eth.get_balance, deposit_addr)
+            sweep_value = current_balance - (gas_price * sweep_gas)
         if sweep_value <= 0:
             logger.warning("Sweep skip: insufficient balance after gas for intent=%s", intent_id)
             return None
@@ -323,28 +394,30 @@ async def sweep_deposit(
             "gas": sweep_gas,
             "gasPrice": gas_price,
             "nonce": nonce,
-            "chainId": w3.eth.chain_id,
+            "chainId": chain_id,
         }
     else:
-        # Sweep ERC-20: transfer(destination, balance)
+        # Sweep ERC-20: transfer(destination, amount or full balance)
+        transfer_amount = amount if amount is not None else balance
         sweep_tx = token_contract.functions.transfer(
             Web3.to_checksum_address(destination),
-            balance,
+            transfer_amount,
         ).build_transaction({
             "from": deposit_addr,
             "gas": estimated_gas,
             "gasPrice": gas_price,
             "nonce": nonce,
-            "chainId": w3.eth.chain_id,
+            "chainId": chain_id,
         })
 
     # ── Sign & send ──────────────────────────────────────────
     signed_tx = deposit_account.sign_transaction(sweep_tx)
-    tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+    tx_hash = await asyncio.to_thread(w3.eth.send_raw_transaction, signed_tx.raw_transaction)
 
+    sent_amount = amount if amount is not None else balance
     logger.info(
         "Sweep sent: intent=%s deposit=%s -> %s amount=%s %s tx=%s",
-        intent_id, deposit_addr, destination, balance, currency, tx_hash.hex(),
+        intent_id, deposit_addr, destination, sent_amount, currency, tx_hash.hex(),
     )
 
     return tx_hash.hex()

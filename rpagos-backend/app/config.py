@@ -3,6 +3,7 @@ RPagos Backend — Configurazione Production-Ready.
 """
 
 import logging
+import os
 import re
 import sys
 
@@ -20,7 +21,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
 
     # ── Sicurezza ─────────────────────────────────────────
-    hmac_secret: str = "change-me-in-production"
+    hmac_secret: str = "MUST_BE_SET_VIA_ENV_32_CHARS_MIN"
 
     # ── Alchemy ───────────────────────────────────────────
     alchemy_api_key: str = ""
@@ -89,6 +90,11 @@ class Settings(BaseSettings):
 
     # ── Alert Webhook (Discord/Slack) ─────────────────────
     alert_webhook_url: str = ""        # Discord or Slack incoming webhook URL
+
+    # ── Platform Fee ─────────────────────────────────────
+    platform_fee_bps: int = 100              # 100 basis points = 1.0%
+    platform_treasury_address: str = ""       # RSends treasury wallet
+    platform_fee_enabled: bool = True
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
@@ -160,7 +166,7 @@ def validate_settings(settings: Settings) -> None:
 
     # ── HMAC_SECRET (prod only) ───────────────────────────
     if is_prod:
-        if settings.hmac_secret == "change-me-in-production":
+        if settings.hmac_secret in ("change-me-in-production", "MUST_BE_SET_VIA_ENV_32_CHARS_MIN"):
             errors.append(
                 "HMAC_SECRET is still the default placeholder. "
                 "Webhook signatures are NOT secure. Set a unique secret >= 32 chars."
@@ -205,6 +211,20 @@ def validate_settings(settings: Settings) -> None:
         warnings.append(
             "TELEGRAM_BOT_TOKEN is empty. Sweep notifications are disabled."
         )
+
+    # ── Production-only hardening (F-BE-09, F-BE-13, F-BE-01) ──
+    env = os.getenv("ENVIRONMENT", "").lower()
+    if env.startswith("prod"):
+        if settings.redis_url.startswith("redis://") and not settings.redis_url.startswith("rediss://"):
+            errors.append("Redis URL must use TLS (rediss://) in production")
+        if settings.celery_broker_url.startswith("redis://") and not settings.celery_broker_url.startswith("rediss://"):
+            errors.append("Celery broker URL must use TLS (rediss://) in production")
+
+        if "rpagos:password@" in settings.database_url:
+            errors.append("Default placeholder database credentials detected in production")
+
+        if settings.debug:
+            errors.append("DEBUG=true is forbidden when ENVIRONMENT=production")
 
     # ── Print results ─────────────────────────────────────
     for w in warnings:

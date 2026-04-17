@@ -350,6 +350,36 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     headers={"Retry-After": str(ADMIN_BAN_DURATION)},
                 )
 
+        # ── Global per-key rate limit ────────────────────────
+        client = getattr(request.state, "client", None)
+        if client and client.get("key_id"):
+            _key_id = client["key_id"]
+            _rpm = client.get("rate_limit_rpm", 100)
+            _global_rl_key = f"rl:global:key:{_key_id}"
+            try:
+                _allowed, _remaining, _reset = await _check_redis(_global_rl_key, _rpm, 60)
+            except Exception:
+                from app.config import get_settings
+                if not get_settings().debug:
+                    return JSONResponse(
+                        status_code=503,
+                        content={
+                            "error": "RATE_LIMIT_UNAVAILABLE",
+                            "message": "Rate limiting service temporarily unavailable — retry later",
+                        },
+                        headers={"Retry-After": "5"},
+                    )
+                _allowed, _remaining, _reset = _memory_limiter.check(_global_rl_key, _rpm, 60)
+            if not _allowed:
+                return JSONResponse(
+                    status_code=429,
+                    content={
+                        "error": "KEY_RATE_LIMIT_EXCEEDED",
+                        "message": f"API key rate limit exceeded: {_rpm} requests/minute",
+                    },
+                    headers=_make_rate_headers(_rpm, 0, _reset),
+                )
+
         # ── Determine rate limit key and limits ──────────────
         is_checkout_public = (
             method == "GET"
@@ -384,6 +414,20 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             if not _redis_warned:
                 logger.warning("Redis unavailable for rate limiting — using in-memory fallback")
                 _redis_warned = True
+
+            # F-BE-10: in production with multiple workers, in-memory fallback
+            # gives effective_limit = N_workers × configured_limit. Fail closed.
+            from app.config import get_settings
+            if not get_settings().debug:
+                return JSONResponse(
+                    status_code=503,
+                    content={
+                        "error": "RATE_LIMIT_UNAVAILABLE",
+                        "message": "Rate limiting service temporarily unavailable — retry later",
+                    },
+                    headers={"Retry-After": "5"},
+                )
+
             allowed, remaining, reset_epoch = _memory_limiter.check(rl_key, max_req, window)
 
         rate_headers = _make_rate_headers(max_req, remaining, reset_epoch)

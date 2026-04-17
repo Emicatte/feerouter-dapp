@@ -1,7 +1,7 @@
 /**
  * app/tokens/tokenRegistry.ts — Unified Multi-Chain Token Registry
  *
- * SINGLE SOURCE OF TRUTH per tutti i token supportati da RSend.
+ * SINGLE SOURCE OF TRUTH per tutti i token supportati da RSends.
  * Il backend (rpagos-backend/app/tokens/registry.py) rispecchia questi dati.
  *
  * Chains supportate:
@@ -28,7 +28,7 @@ export interface TokenInfo {
   logoUrl: string              // icona locale /tokens/*.svg
   coingeckoId: string          // per price feed
   minAmount: string            // importo minimo in unità human (es. "0.001")
-  batchDistributorAddress?: string  // contratto RSend per batch distribution
+  batchDistributorAddress?: string  // contratto RSends per batch distribution
 }
 
 export const SUPPORTED_CHAINS = {
@@ -206,7 +206,7 @@ export const TOKEN_LIST: TokenInfo[] = [
   {
     symbol: 'POL', name: 'POL', decimals: 18,
     address: null, chainId: 137, isNative: true,
-    logoUrl: '/tokens/pol.svg', coingeckoId: 'matic-network',
+    logoUrl: '/tokens/pol.svg', coingeckoId: 'polygon-ecosystem-token',
     minAmount: '0.1',
   },
   {

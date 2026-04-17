@@ -1,34 +1,71 @@
-"""API Key Authentication Middleware — optional layer, enabled in production."""
+"""API Key Authentication Middleware — scope enforcement + environment tagging."""
+import os
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from app.security.api_keys import verify_api_key, is_exempt
 from app.config import get_settings
 
+ADMIN_PATHS = ("/api/v1/keys/generate", "/api/v1/keys/revoke")
+
 
 class APIKeyMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         settings = get_settings()
 
-        # Skip in debug mode
-        if settings.debug:
+        if (
+            os.getenv("RSEND_DEV_AUTH_BYPASS") == "1"
+            and not os.getenv("ENVIRONMENT", "").lower().startswith("prod")
+        ):
+            request.state.client = {"client_id": "debug", "scope": "admin", "environment": "live"}
             return await call_next(request)
 
-        # Skip exempt paths
         if is_exempt(request.url.path):
             return await call_next(request)
 
-        # Skip GET requests (public read access)
+        client = await verify_api_key(request)
+
+        # GET requests: auth is optional (public read fallback)
         if request.method == "GET":
+            if client:
+                request.state.client = client
             return await call_next(request)
 
-        client = await verify_api_key(request)
+        # Non-GET: auth is mandatory
         if client is None:
             return JSONResponse(
                 status_code=401,
-                content={"error": "INVALID_API_KEY", "message": "Valid API key required"}
+                content={"error": "INVALID_API_KEY", "message": "Valid API key required"},
             )
 
-        # Attach client info to request state
+        scope = client.get("scope", "read")
+        path = request.url.path
+
+        # Read scope cannot make mutations
+        if scope == "read":
+            return JSONResponse(
+                status_code=403,
+                content={
+                    "error": "INSUFFICIENT_SCOPE",
+                    "message": f"This key has 'read' scope. {request.method} requests require 'write' or 'admin' scope.",
+                },
+            )
+
+        # Admin-only paths
+        if any(path.startswith(p) for p in ADMIN_PATHS):
+            if scope != "admin":
+                return JSONResponse(
+                    status_code=403,
+                    content={
+                        "error": "ADMIN_REQUIRED",
+                        "message": "This endpoint requires 'admin' scope.",
+                    },
+                )
+
+        # Tag test keys
+        if client.get("environment") == "test":
+            request.state.testnet_only = True
+
         request.state.client = client
         return await call_next(request)

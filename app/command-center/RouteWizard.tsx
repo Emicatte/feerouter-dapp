@@ -64,7 +64,7 @@ function RouteWizard({
   /**
    * Pure simulation hook (POST /api/v1/splits/simulate). Used by Step 3 to
    * render a backend-computed preview of the distribution plan (BPS-exact
-   * math + RSend fee). Optional: if absent, the static client-side preview
+   * math + RSends fee). Optional: if absent, the static client-side preview
    * is used.
    */
   onSimulateSplit?: (p: SimulateSplitPayload) => Promise<SimulationResult>
@@ -1532,13 +1532,13 @@ function Step3Review({
               })
           }
 
-          {/* ── RSend fee ── */}
+          {/* ── RSends fee ── */}
           <div style={{
             display: 'flex', justifyContent: 'space-between',
             padding: '6px 0 0', marginTop: 4,
             borderTop: `1px solid ${C.border}`,
           }}>
-            <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>RSend fee</span>
+            <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>RSends fee</span>
             <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>
               {simulation
                 ? `${(simulation.rsend_fee.bps / 100).toFixed(2)}% (${simulation.rsend_fee.amount_human})`

@@ -10,11 +10,12 @@ import { FEE_ROUTER_ABI } from '../../lib/feeRouterAbi'
 import { mutationHeaders, parseRSendError } from '../../lib/rsendFetch'
 import { logger } from '../../lib/logger'
 
-type SettingsSection = 'security' | 'notifications' | 'distribution' | 'export' | 'danger'
+type SettingsSection = 'security' | 'notifications' | 'distribution' | 'apikeys' | 'export' | 'danger'
 
 function SettingsTab({
   address, chainId, rules, emergencyStop,
   distLists, distLoading, createDistList, deleteDistList,
+  initialSection, onInitialSectionConsumed,
 }: {
   address: string
   chainId: number
@@ -24,8 +25,17 @@ function SettingsTab({
   distLoading: boolean
   createDistList: (name: string, entries: DistributionEntry[]) => Promise<any>
   deleteDistList: (id: number) => Promise<void>
+  initialSection?: SettingsSection | null
+  onInitialSectionConsumed?: () => void
 }) {
-  const [expanded, setExpanded] = useState<SettingsSection | null>('security')
+  const [expanded, setExpanded] = useState<SettingsSection | null>(initialSection ?? 'security')
+
+  useEffect(() => {
+    if (initialSection) {
+      setExpanded(initialSection)
+      onInitialSectionConsumed?.()
+    }
+  }, [initialSection, onInitialSectionConsumed])
 
   // ── Security: spending limits ──
   const [limits, setLimits] = useState<any>(null)
@@ -46,6 +56,18 @@ function SettingsTab({
   const [distConfirmDel, setDistConfirmDel] = useState<number | null>(null)
   const [distDeleting, setDistDeleting] = useState(false)
   const distDeletingRef = useRef(false)
+
+  // ── API Keys ──
+  const [apiKeys, setApiKeys] = useState<any[]>([])
+  const [apiKeysLoading, setApiKeysLoading] = useState(false)
+  const [newKeyLabel, setNewKeyLabel] = useState('')
+  const [newKeyScope, setNewKeyScope] = useState<'read' | 'write' | 'admin'>('write')
+  const [newKeyEnv, setNewKeyEnv] = useState<'test' | 'live'>('live')
+  const [generatingKey, setGeneratingKey] = useState(false)
+  const generatingRef = useRef(false)
+  const [newKeyPlaintext, setNewKeyPlaintext] = useState<string | null>(null)
+  const [copiedKeyId, setCopiedKeyId] = useState<number | null>(null)
+  const [revokingId, setRevokingId] = useState<number | null>(null)
 
   // ── Export ──
   const [exportFormat, setExportFormat] = useState<'csv' | 'json'>('csv')
@@ -74,6 +96,56 @@ function SettingsTab({
       .catch(() => {})
       .finally(() => setLimitsLoading(false))
   }, [expanded, address, chainId])
+
+  // ── API Keys: fetch / generate / revoke ──
+  const fetchApiKeys = useCallback(async () => {
+    setApiKeysLoading(true)
+    try {
+      const res = await fetch(`${BACKEND}/api/v1/keys?owner_address=${address}`, { signal: AbortSignal.timeout(10000) })
+      if (res.ok) setApiKeys(await res.json())
+    } catch {}
+    finally { setApiKeysLoading(false) }
+  }, [address])
+
+  useEffect(() => {
+    if (expanded === 'apikeys') fetchApiKeys()
+  }, [expanded, fetchApiKeys])
+
+  const generateApiKey = async () => {
+    if (generatingRef.current || !newKeyLabel.trim()) return
+    generatingRef.current = true
+    setGeneratingKey(true)
+    try {
+      const res = await fetch(`${BACKEND}/api/v1/keys/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner_address: address, label: newKeyLabel.trim(), scope: newKeyScope, environment: newKeyEnv }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        alert(err.detail || 'Failed to generate key')
+        return
+      }
+      const data = await res.json()
+      setNewKeyPlaintext(data.key)
+      setNewKeyLabel('')
+      fetchApiKeys()
+    } catch { alert('Failed to generate key') }
+    finally { generatingRef.current = false; setGeneratingKey(false) }
+  }
+
+  const revokeApiKey = async (keyId: number) => {
+    setRevokingId(keyId)
+    try {
+      await fetch(`${BACKEND}/api/v1/keys/${keyId}/revoke`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ owner_address: address }),
+      })
+      fetchApiKeys()
+    } catch {}
+    finally { setRevokingId(null) }
+  }
 
   // Load notification prefs from localStorage
   useEffect(() => {
@@ -552,6 +624,185 @@ function SettingsTab({
                   </button>
                 </div>
               </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ════════════ API KEYS ════════════ */}
+      <SectionHeader id="apikeys" label="API Keys" icon="🔑" color={C.purple} />
+      <AnimatePresence>
+        {expanded === 'apikeys' && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.25, ease: EASE }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div style={{ padding: '10px 0', display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+              {/* Generate new key */}
+              <div style={cardStyle}>
+                <div style={{ fontFamily: C.M, fontSize: 9, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Generate new key</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <input
+                    value={newKeyLabel}
+                    onChange={e => setNewKeyLabel(e.target.value)}
+                    placeholder="Key label (e.g. Production, Staging)"
+                    style={{ ...inp, flex: '1 1 140px', minWidth: 140 }}
+                    onKeyDown={e => e.key === 'Enter' && generateApiKey()}
+                  />
+                  <select
+                    value={newKeyScope}
+                    onChange={e => setNewKeyScope(e.target.value as any)}
+                    style={{ ...selectStyle, flex: '0 0 auto', minWidth: 100 }}
+                  >
+                    <option value="read">Read Only</option>
+                    <option value="write">Read + Write</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                  <select
+                    value={newKeyEnv}
+                    onChange={e => setNewKeyEnv(e.target.value as any)}
+                    style={{ ...selectStyle, flex: '0 0 auto', minWidth: 80 }}
+                  >
+                    <option value="live">Live</option>
+                    <option value="test">Test</option>
+                  </select>
+                  <button
+                    onClick={generateApiKey}
+                    disabled={generatingKey || !newKeyLabel.trim()}
+                    style={{
+                      padding: '8px 16px', borderRadius: 8,
+                      background: C.purple, color: '#fff', border: 'none',
+                      cursor: 'pointer', fontFamily: C.D, fontSize: 12,
+                      opacity: generatingKey || !newKeyLabel.trim() ? 0.5 : 1,
+                      whiteSpace: 'nowrap', transition: 'opacity 0.2s',
+                    }}
+                  >
+                    {generatingKey ? 'Generating...' : 'Generate Key'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Newly generated key — show ONCE */}
+              {newKeyPlaintext && (
+                <div style={{
+                  background: 'rgba(0,214,143,0.08)',
+                  border: '1px solid rgba(0,214,143,0.3)',
+                  borderRadius: 10, padding: 14,
+                }}>
+                  <div style={{ fontFamily: C.D, fontSize: 11, color: C.green, marginBottom: 8, fontWeight: 600 }}>
+                    Copy this key now — it won't be shown again
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <code style={{
+                      fontFamily: C.M, fontSize: 11, color: C.text,
+                      background: 'rgba(0,0,0,0.3)', padding: '6px 10px',
+                      borderRadius: 6, flex: 1, wordBreak: 'break-all',
+                    }}>
+                      {newKeyPlaintext}
+                    </code>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(newKeyPlaintext)
+                        setCopiedKeyId(-1)
+                        setTimeout(() => setCopiedKeyId(null), 2000)
+                      }}
+                      style={{
+                        padding: '6px 12px', borderRadius: 6,
+                        background: copiedKeyId === -1 ? C.green : 'rgba(255,255,255,0.06)',
+                        border: 'none', cursor: 'pointer', color: '#fff',
+                        fontFamily: C.D, fontSize: 11, whiteSpace: 'nowrap',
+                        transition: 'background 0.2s',
+                      }}
+                    >
+                      {copiedKeyId === -1 ? 'Copied!' : 'Copy'}
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => setNewKeyPlaintext(null)}
+                    style={{
+                      marginTop: 8, background: 'none', border: 'none',
+                      color: C.dim, fontSize: 11, cursor: 'pointer', fontFamily: C.D,
+                    }}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
+
+              {/* List existing keys */}
+              {apiKeysLoading ? <Sk w="100%" h={60} /> : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {apiKeys.length === 0 && !newKeyPlaintext && (
+                    <div style={{ color: C.dim, fontFamily: C.D, fontSize: 12, padding: '12px 0' }}>
+                      No API keys yet. Generate one above.
+                    </div>
+                  )}
+                  {apiKeys.map(k => {
+                    const scopeColors: Record<string, string> = { read: C.dim, write: C.blue, admin: C.purple }
+                    const envColor = k.environment === 'test' ? C.amber : C.green
+                    return (
+                      <div key={k.id} style={{
+                        padding: '10px 12px', borderRadius: 10,
+                        background: 'rgba(255,255,255,0.02)',
+                        border: `1px solid ${k.is_active ? C.border : 'rgba(255,76,106,0.2)'}`,
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+                            <span style={{ fontFamily: C.D, fontSize: 12, color: k.is_active ? C.text : C.dim }}>{k.label}</span>
+                            <span style={{ fontSize: 8, fontFamily: C.M, padding: '1px 5px', borderRadius: 4, background: `${scopeColors[k.scope] || C.dim}20`, color: scopeColors[k.scope] || C.dim, textTransform: 'uppercase' }}>{k.scope}</span>
+                            <span style={{ fontSize: 8, fontFamily: C.M, padding: '1px 5px', borderRadius: 4, background: `${envColor}20`, color: envColor, textTransform: 'uppercase' }}>{k.environment}</span>
+                            {!k.is_active && (
+                              <span style={{ fontSize: 8, color: C.red, fontFamily: C.M, background: 'rgba(255,76,106,0.1)', padding: '1px 5px', borderRadius: 4 }}>REVOKED</span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                            <span style={{ fontSize: 9, color: C.dim, fontFamily: C.M }}>{k.rate_limit_rpm || 100} req/min</span>
+                            {k.is_active && (
+                              <button
+                                onClick={() => revokeApiKey(k.id)}
+                                disabled={revokingId === k.id}
+                                style={{
+                                  padding: '4px 10px', borderRadius: 6,
+                                  background: 'rgba(255,76,106,0.1)',
+                                  border: '1px solid rgba(255,76,106,0.3)',
+                                  color: C.red, cursor: 'pointer',
+                                  fontFamily: C.D, fontSize: 10,
+                                  opacity: revokingId === k.id ? 0.5 : 1,
+                                  transition: 'opacity 0.2s',
+                                }}
+                              >
+                                {revokingId === k.id ? '...' : 'Revoke'}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <code style={{ fontFamily: C.M, fontSize: 10, color: C.dim }}>{k.prefix}</code>
+                        <div style={{ marginTop: 4, fontFamily: C.M, fontSize: 9, color: C.sub }}>
+                          {k.total_requests || 0} requests · {k.total_intents_created || 0} intents · ${k.total_volume_usd || '0'} volume
+                          {k.last_used_at && <span> · Used {new Date(k.last_used_at).toLocaleDateString()}</span>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Usage hint */}
+              <div style={{
+                marginTop: 4, padding: 10, borderRadius: 8,
+                background: 'rgba(139,92,246,0.05)',
+                border: '1px solid rgba(139,92,246,0.15)',
+              }}>
+                <div style={{ fontFamily: C.D, fontSize: 10, color: C.purple, marginBottom: 4 }}>Usage</div>
+                <code style={{ fontFamily: C.M, fontSize: 10, color: C.sub }}>
+                  Authorization: Bearer rsend_live_your_key_here
+                </code>
+              </div>
+
             </div>
           </motion.div>
         )}

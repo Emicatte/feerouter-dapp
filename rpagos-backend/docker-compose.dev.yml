@@ -39,6 +39,8 @@ services:
       ALCHEMY_API_KEY: ${ALCHEMY_API_KEY:-}
       SWEEP_PRIVATE_KEY: ${SWEEP_PRIVATE_KEY:-}
       DEBUG: "true"
+      RSEND_DEV_AUTH_BYPASS: "1"
+      ENVIRONMENT: "development"
     restart: unless-stopped
 
   celery-beat:

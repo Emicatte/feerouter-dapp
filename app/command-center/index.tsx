@@ -29,10 +29,14 @@ export default function CommandCenter({
   ownerAddress,
   chainId: chainIdProp,
   isVisible = true,
+  deepLink,
+  onDeepLinkConsumed,
 }: {
   ownerAddress?: string
   chainId?: number
   isVisible?: boolean
+  deepLink?: string | null
+  onDeepLinkConsumed?: () => void
 }) {
   const { address: hookAddr, isConnected } = useAccount()
   const hookChainId = useChainId()
@@ -44,6 +48,15 @@ export default function CommandCenter({
 
   const [tab, setTab] = useState<Tab>('routes')
   const [tabLoading, setTabLoading] = useState(false)
+  const [settingsInitialSection, setSettingsInitialSection] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (deepLink === 'apikeys') {
+      setTab('settings')
+      setSettingsInitialSection('apikeys')
+      onDeepLinkConsumed?.()
+    }
+  }, [deepLink, onDeepLinkConsumed])
 
   // ── ETH price (derived from stats, fallback $3200) ────
   const [ethPrice, setEthPrice] = useState(3200)
@@ -281,6 +294,8 @@ export default function CommandCenter({
                   distLoading={distLoading}
                   createDistList={createDistList}
                   deleteDistList={deleteDistList}
+                  initialSection={settingsInitialSection as any}
+                  onInitialSectionConsumed={() => setSettingsInitialSection(null)}
                 />
               )}
             </>

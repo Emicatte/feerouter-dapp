@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select, and_, func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.merchant_models import PaymentIntent, IntentStatus
@@ -143,6 +144,9 @@ async def match_transaction(
                 PaymentIntent.matched_tx_hash.is_(None),
             )
         )
+        .with_for_update(skip_locked=True)
+        .order_by(PaymentIntent.created_at.asc())
+        .limit(1)
     )
     intent = result.scalar_one_or_none()
 
@@ -273,7 +277,28 @@ async def match_transaction(
     if is_overpayment:
         intent.overpaid_amount = str(overpaid_amt)
 
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        logger.info("tx_already_matched (unique constraint): tx=%s", tx_hash)
+        return MatchResult(matched=False, reason="tx_already_matched")
+
+    # ── Track volume on the API key that created this intent ──
+    try:
+        from app.services.key_usage_service import add_volume
+        from app.models.api_key_models import ApiKey
+        from decimal import Decimal
+        _key_q = select(ApiKey).where(
+            ApiKey.owner_address == intent.merchant_id,
+            ApiKey.is_active == True,  # noqa: E712
+        ).limit(1)
+        _key_result = await db.execute(_key_q)
+        _key = _key_result.scalar_one_or_none()
+        if _key:
+            await add_volume(db, _key.id, Decimal(str(tx.amount)))
+    except Exception:
+        logger.debug("Volume tracking failed for intent %s", intent.intent_id, exc_info=True)
 
     # ── Audit log ────────────────────────────────────────────
     event_type = "payment.completed"
@@ -297,6 +322,24 @@ async def match_transaction(
         changes=changes,
     )
 
+    # ── Fee preview for webhook ─────────────────────────────
+    from app.services.platform_fee_service import calculate_fee, token_decimals
+    decimals = token_decimals(intent.currency)
+    try:
+        received_raw = int(float(str(tx.amount)) * 10 ** decimals)
+        fee_preview = calculate_fee(received_raw)
+    except Exception:
+        fee_preview = None
+        logger.debug("Fee preview calc failed for intent %s", intent.intent_id, exc_info=True)
+
+    fee_payload = {}
+    if fee_preview and fee_preview.enabled:
+        fee_payload = {
+            "fee_bps": fee_preview.fee_bps,
+            "estimated_fee": str(fee_preview.fee_amount / 10 ** decimals),
+            "estimated_net": str(fee_preview.merchant_amount / 10 ** decimals),
+        }
+
     # ── Webhook al merchant ──────────────────────────────────
     webhook_triggered = False
     try:
@@ -309,6 +352,7 @@ async def match_transaction(
                 "matched_tx_hash": tx_hash,
                 "amount_received": str(tx.amount),
                 "overpaid_amount": str(overpaid_amt) if overpaid_amt else None,
+                **fee_payload,
             },
         )
         webhook_triggered = True

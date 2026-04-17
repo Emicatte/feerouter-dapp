@@ -611,7 +611,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
 
   const routeLabels: Record<RouteType, { label: string; icon: string; color: string }> = {
     direct:        { label: 'Direct Transfer', icon: '\u2192', color: T.emerald },
-    swap:          { label: 'Swap via Uniswap V3', icon: '\u26A1', color: T.purple },
+    swap:          { label: 'Swap', icon: '\u26A1', color: T.purple },
     bridge:        { label: 'Bridge via Chainlink CCIP', icon: '\u{1F309}', color: '#3B82F6' },
     swapAndBridge: { label: 'Swap & Bridge', icon: '\u26A1\u{1F309}', color: T.amber },
   }
@@ -1375,7 +1375,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
 
       // Campi fiscali
       emittente: {
-        legalName: process.env.NEXT_PUBLIC_COMPANY_NAME || 'RSend S.r.l.',
+        legalName: process.env.NEXT_PUBLIC_COMPANY_NAME || 'RSends S.r.l.',
         vatNumber: process.env.NEXT_PUBLIC_COMPANY_VAT || 'IT______________',
         registeredOffice: process.env.NEXT_PUBLIC_COMPANY_ADDRESS || '(sede da configurare)',
         pec: process.env.NEXT_PUBLIC_COMPANY_PEC || '',

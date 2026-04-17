@@ -149,6 +149,13 @@ class PaymentIntent(Base):
     allow_partial = Column(Boolean, default=False)
     allow_overpayment = Column(Boolean, default=True)
 
+    # Platform fee tracking
+    fee_bps = Column(Integer, nullable=True)
+    fee_amount = Column(String(32), nullable=True)
+    fee_tx_hash = Column(String(130), nullable=True)
+    fee_swept_at = Column(DateTime(timezone=True), nullable=True)
+    merchant_sweep_amount = Column(String(32), nullable=True)
+
     __table_args__ = (
         Index("ix_intent_merchant_status", "merchant_id", "status"),
         Index("ix_intent_status_expires", "status", "expires_at"),
@@ -301,6 +308,10 @@ class PaymentIntentResponse(BaseModel):
     underpaid_amount: Optional[str] = None
     sweep_tx_hash: Optional[str] = None
     swept_at: Optional[str] = None
+    fee_bps: Optional[int] = None
+    fee_amount: Optional[str] = None
+    fee_tx_hash: Optional[str] = None
+    merchant_sweep_amount: Optional[str] = None
     expires_at: str
     created_at: str
     completed_at: Optional[str]

@@ -131,7 +131,7 @@ LOCK_TTL = 300          # 5 minutes
 #  REDIS DISTRIBUTED LOCK
 # ═══════════════════════════════════════════════════════════════
 
-async def _acquire_lock(key: str, ttl: int = LOCK_TTL) -> bool:
+async def acquire_sweep_lock(key: str, ttl: int = LOCK_TTL) -> bool:
     """SETNX-based distributed lock. Returns True if acquired.
 
     Fail-closed: if Redis is unavailable, returns False to prevent
@@ -145,14 +145,18 @@ async def _acquire_lock(key: str, ttl: int = LOCK_TTL) -> bool:
         logger.warning("Redis lock unavailable for %s — rejecting (fail-closed)", key)
         return False  # fail-closed: reject to prevent duplicate sweeps
 
+_acquire_lock = acquire_sweep_lock
 
-async def _release_lock(key: str) -> None:
+
+async def release_sweep_lock(key: str) -> None:
     """Release a distributed lock."""
     try:
         r = await get_redis()
         await r.delete(f"sweep_lock:{key}")
     except Exception:
         pass
+
+_release_lock = release_sweep_lock
 
 
 # ═══════════════════════════════════════════════════════════════

@@ -448,9 +448,9 @@ export default function TxConfirmationSheet({
           </div>
         </div>
 
-        {/* Fee RSend */}
+        {/* Fee RSends */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontFamily: T.M, fontSize: 11, color: T.muted }}>Fee RSend</span>
+          <span style={{ fontFamily: T.M, fontSize: 11, color: T.muted }}>Fee RSends</span>
           <span style={{ fontFamily: T.D, fontSize: 13, fontWeight: 600, color: T.amber }}>
             {feeAmount} {tokenInfo.symbol} (0.5%)
           </span>

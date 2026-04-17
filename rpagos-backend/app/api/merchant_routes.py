@@ -38,6 +38,7 @@ from app.models.merchant_models import (
 from app.services.webhook_service import send_test_event, _dispatch_event
 from app.services.audit_service import log_event
 from app.services.deposit_address_service import generate_deposit_address
+from app.services.key_usage_service import increment_intent_count, check_monthly_limits
 
 from datetime import datetime, timezone, timedelta
 
@@ -86,6 +87,12 @@ def _intent_to_response(intent: PaymentIntent) -> PaymentIntentResponse:
         amount_received=intent.amount_received,
         overpaid_amount=intent.overpaid_amount,
         underpaid_amount=intent.underpaid_amount,
+        sweep_tx_hash=intent.sweep_tx_hash,
+        swept_at=intent.swept_at.isoformat() if intent.swept_at else None,
+        fee_bps=intent.fee_bps,
+        fee_amount=intent.fee_amount,
+        fee_tx_hash=intent.fee_tx_hash,
+        merchant_sweep_amount=intent.merchant_sweep_amount,
         expires_at=intent.expires_at.isoformat(),
         created_at=intent.created_at.isoformat(),
         completed_at=intent.completed_at.isoformat() if intent.completed_at else None,
@@ -110,6 +117,36 @@ async def create_payment_intent(
     L'intent scade dopo expires_in_minutes (default 30 min).
     """
     merchant_id = _get_merchant_id(request)
+    client = getattr(request.state, "client", None)
+    key_id = client.get("key_id") if client else None
+    env = client.get("environment", "live") if client else "live"
+
+    # Environment enforcement: test keys ↔ testnet, live keys ↔ mainnet
+    TESTNET_CHAINS = {"base_sepolia", "sepolia", "goerli", "nile", "shasta", "devnet"}
+    MAINNET_CHAINS = {"base", "ethereum", "eth", "arbitrum", "optimism", "polygon", "bnb", "avalanche", "tron", "solana"}
+    requested_chain = (payload.chain or "base").lower()
+
+    if env == "test" and requested_chain in MAINNET_CHAINS:
+        raise HTTPException(400, {
+            "error": "TESTNET_ONLY",
+            "message": f"Test API keys can only create intents on testnet chains. Requested: {requested_chain}.",
+            "allowed_chains": sorted(TESTNET_CHAINS),
+        })
+    if env == "live" and requested_chain in TESTNET_CHAINS:
+        raise HTTPException(400, {
+            "error": "MAINNET_ONLY",
+            "message": f"Live API keys cannot create intents on testnet chains. Requested: {requested_chain}.",
+        })
+
+    # Monthly limits
+    if key_id:
+        limit_check = await check_monthly_limits(db, key_id)
+        if not limit_check["allowed"]:
+            raise HTTPException(429, {
+                "error": "MONTHLY_LIMIT_EXCEEDED",
+                "message": limit_check["reason"],
+            })
+
     now = datetime.now(timezone.utc)
     intent_id = _generate_intent_id()
 
@@ -163,6 +200,10 @@ async def create_payment_intent(
             "expires_in_minutes": payload.expires_in_minutes,
         },
     )
+
+    # Track usage
+    if key_id:
+        await increment_intent_count(db, key_id)
 
     await db.commit()
 

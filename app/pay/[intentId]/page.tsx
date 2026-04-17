@@ -156,8 +156,8 @@ function QRCode({ data, className }: { data: string; className?: string }) {
 }
 
 function merchantName(meta: Record<string, unknown> | null): string {
-  if (!meta) return 'RSend Payment'
-  return (meta.merchant_name as string) || (meta.store_name as string) || 'RSend Payment'
+  if (!meta) return 'RSends Payment'
+  return (meta.merchant_name as string) || (meta.store_name as string) || 'RSends Payment'
 }
 
 // ═══════════════════════════════════════════════════════════════

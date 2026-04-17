@@ -17,6 +17,7 @@ FINANCIAL ENDPOINTS (fail-closed = rifiuta se non può verificare):
 NON-FINANCIAL (fail-open = processa comunque):
   - Tutti gli altri POST/PUT
 """
+import asyncio
 import hashlib
 import json
 import logging
@@ -68,7 +69,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
             # Non-financial: processa comunque
             return await call_next(request)
 
-        # Check se già processata
+        # Check se già processata (fast path)
         try:
             cached = await r.get(cache_key)
             if cached:
@@ -82,34 +83,68 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             logger.warning("Idempotency check failed: %s", e)
 
+        # Acquire in-flight lock. If another request is processing this key,
+        # poll for its result briefly then return it (or 409 if it doesn't finish).
+        lock_key = f"{cache_key}:lock"
+        try:
+            acquired = await r.set(lock_key, "processing", nx=True, ex=30)
+        except Exception as e:
+            logger.warning("Idempotency lock acquire failed: %s", e)
+            acquired = True  # degrade gracefully — same as current behavior
+
+        if not acquired:
+            for _ in range(20):
+                await asyncio.sleep(0.5)
+                try:
+                    peer_cached = await r.get(cache_key)
+                except Exception:
+                    peer_cached = None
+                if peer_cached:
+                    data = json.loads(peer_cached)
+                    return JSONResponse(
+                        status_code=data["status_code"],
+                        content=data["body"],
+                        headers={"X-Idempotency-Replayed": "true"},
+                    )
+            return JSONResponse(
+                status_code=409,
+                content={
+                    "error": "DUPLICATE_REQUEST_IN_FLIGHT",
+                    "message": "A request with this idempotency key is still being processed",
+                },
+            )
+
         # Processa la richiesta
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
 
-        # Salva risposta in cache (solo se 2xx)
-        if 200 <= response.status_code < 300:
+            # Salva risposta in cache (solo se 2xx)
+            if 200 <= response.status_code < 300:
+                try:
+                    body_bytes = b""
+                    async for chunk in response.body_iterator:
+                        body_bytes += chunk
+
+                    body_str = body_bytes.decode("utf-8")
+                    cache_data = json.dumps({
+                        "status_code": response.status_code,
+                        "body": json.loads(body_str) if body_str else {},
+                    })
+                    await r.set(cache_key, cache_data, ex=IDEMPOTENCY_TTL)
+
+                    return Response(
+                        content=body_bytes,
+                        status_code=response.status_code,
+                        headers=dict(response.headers),
+                        media_type=response.media_type,
+                    )
+                except Exception as e:
+                    logger.warning("Idempotency cache write failed: %s", e)
+                    return Response(content=body_bytes, status_code=response.status_code)
+
+            return response
+        finally:
             try:
-                # Leggi il body della risposta
-                body_bytes = b""
-                async for chunk in response.body_iterator:
-                    body_bytes += chunk
-
-                body_str = body_bytes.decode("utf-8")
-                cache_data = json.dumps({
-                    "status_code": response.status_code,
-                    "body": json.loads(body_str) if body_str else {},
-                })
-                await r.set(cache_key, cache_data, ex=IDEMPOTENCY_TTL)
-
-                # Ricostruisci la response (perché abbiamo consumato il body_iterator)
-                return Response(
-                    content=body_bytes,
-                    status_code=response.status_code,
-                    headers=dict(response.headers),
-                    media_type=response.media_type,
-                )
-            except Exception as e:
-                logger.warning("Idempotency cache write failed: %s", e)
-                # Ritorna una response vuota con lo status code giusto
-                return Response(content=body_bytes, status_code=response.status_code)
-
-        return response
+                await r.delete(lock_key)
+            except Exception:
+                pass

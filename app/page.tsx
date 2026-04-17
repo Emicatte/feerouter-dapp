@@ -21,6 +21,8 @@ const SecurityOverlay = dynamic(() => import('./overlays/SecurityOverlay'), { ss
 const ComplianceOverlay = dynamic(() => import('./overlays/ComplianceOverlay'), { ssr: false })
 const DevelopersOverlay = dynamic(() => import('./overlays/DevelopersOverlay'), { ssr: false })
 const PricingOverlay = dynamic(() => import('./overlays/PricingOverlay'), { ssr: false })
+const ApiDocsOverlay = dynamic(() => import('./overlays/ApiDocsOverlay'), { ssr: false })
+const CommandCenterOverlay = dynamic(() => import('./overlays/CommandCenterOverlay'), { ssr: false })
 import { useSweepWebSocket } from '../lib/useSweepWebSocket'
 import { useSweepStats } from '../lib/useSweepStats'
 import AntiPhishingSetup from './AntiPhishingSetup'
@@ -33,10 +35,13 @@ import { ChainFamilySwitch } from '../components/shared/ChainFamilySwitch'
 import { useUniversalWallet } from '../hooks/useUniversalWallet'
 import type { ChainFamily } from '../lib/chain-adapters/types'
 import { useWallet as useSolanaWallet } from '@solana/wallet-adapter-react'
+import { useWalletModal } from '@solana/wallet-adapter-react-ui'
 import { useTron } from './providers-tron'
 import type { NonEvmWalletProps } from './AccountHeader'
 import { ErrorBoundary } from '../components/shared/ErrorBoundary'
 import { ToastContainer } from '../components/shared/Toast'
+import ExploreTokens from './ExploreTokens'
+import LandingSections from './LandingSections'
 
 // Dynamic import — CommandCenter uses Recharts + heavy WebSocket logic
 const CommandCenter = dynamic(() => import('./command-center'), {
@@ -89,7 +94,7 @@ const C = {
 }
 
 type View = 'send' | 'swap' | 'command'
-type Overlay = null | 'about' | 'how' | 'security' | 'compliance' | 'developers' | 'pricing'
+type Overlay = null | 'about' | 'how' | 'security' | 'compliance' | 'developers' | 'pricing' | 'apidocs' | 'commandcenter'
 
 const GRAD: React.CSSProperties = {
   background: 'linear-gradient(135deg, #FFFFFF 0%, #60A5FA 60%, #1D4ED8 100%)',
@@ -269,6 +274,9 @@ function NetworkTokenWidget({
   const ref = useRef<HTMLDivElement>(null)
   const wallet = useUniversalWallet()
   const isEvmActive = wallet.activeFamily === 'evm'
+  const tron = useTron()
+  const { connecting: solanaConnecting } = useSolanaWallet()
+  const { setVisible: setSolanaModalVisible } = useWalletModal()
 
   const chain = CHAINS.find(c => c.id === chainId) ?? CHAINS[0]
   const isTestnet = !!(chain as typeof CHAINS[number] & { testnet?: boolean }).testnet
@@ -343,34 +351,78 @@ function NetworkTokenWidget({
 
       {/* ── Non-EVM wallet address display ───────────────── */}
       {!isEvmActive && (
-        <div
-          className="bf-blur-16"
-          style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            background: 'rgba(12,12,30,0.85)',
-            borderRadius: 14, padding: '8px 14px',
-            border: '1px solid rgba(255,255,255,0.06)',
-          }}
-        >
-          {wallet.activeAddress ? (
-            <>
-              <div style={{
-                width: 7, height: 7, borderRadius: '50%',
-                background: '#00D68F', boxShadow: '0 0 6px #00D68F60',
-              }} />
-              <span style={{ fontFamily: C.M, fontSize: 11, color: C.text }}>
-                {wallet.activeAddress.display}
-              </span>
-              <span style={{ fontFamily: C.D, fontSize: 10, color: C.dim, textTransform: 'uppercase' }}>
-                {wallet.activeFamily}
-              </span>
-            </>
-          ) : (
-            <span style={{ fontFamily: C.D, fontSize: 11, color: C.dim }}>
-              Connect {wallet.activeFamily === 'solana' ? 'Phantom' : 'TronLink'} to continue
+        wallet.activeAddress ? (
+          <div
+            className="bf-blur-16"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              background: 'rgba(12,12,30,0.85)',
+              borderRadius: 14, padding: '8px 14px',
+              border: '1px solid rgba(255,255,255,0.06)',
+            }}
+          >
+            <div style={{
+              width: 7, height: 7, borderRadius: '50%',
+              background: '#00D68F', boxShadow: '0 0 6px #00D68F60',
+            }} />
+            <span style={{ fontFamily: C.M, fontSize: 11, color: C.text }}>
+              {wallet.activeAddress.display}
             </span>
-          )}
-        </div>
+            <span style={{ fontFamily: C.D, fontSize: 10, color: C.dim, textTransform: 'uppercase' }}>
+              {wallet.activeFamily}
+            </span>
+          </div>
+        ) : (() => {
+          const isTron = wallet.activeFamily === 'tron'
+          const tronMissing = isTron && !tron.isInstalled
+          const connecting = isTron ? tron.isConnecting : solanaConnecting
+          const label = tronMissing
+            ? 'Install TronLink \u2197'
+            : connecting
+            ? 'Connecting…'
+            : `Connect ${isTron ? 'TronLink' : 'Phantom'}`
+          const handleClick = () => {
+            if (connecting) return
+            if (tronMissing) {
+              window.open('https://www.tronlink.org/', '_blank', 'noopener,noreferrer')
+              return
+            }
+            if (isTron) tron.connect()
+            else setSolanaModalVisible(true)
+          }
+          return (
+            <button
+              type="button"
+              onClick={handleClick}
+              disabled={connecting}
+              onMouseEnter={e => {
+                if (connecting) return
+                e.currentTarget.style.filter = 'brightness(1.15)'
+                e.currentTarget.style.transform = 'scale(1.03)'
+                e.currentTarget.style.boxShadow = '0 4px 18px rgba(99,102,241,0.45)'
+              }}
+              onMouseLeave={e => {
+                if (connecting) return
+                e.currentTarget.style.filter = 'brightness(1)'
+                e.currentTarget.style.transform = 'scale(1)'
+                e.currentTarget.style.boxShadow = '0 2px 12px rgba(99,102,241,0.30)'
+              }}
+              style={{
+                fontFamily: C.D, fontSize: 12, fontWeight: 700, color: '#fff',
+                letterSpacing: '0.02em',
+                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                border: 'none', borderRadius: 10,
+                padding: '8px 18px',
+                cursor: connecting ? 'default' : 'pointer',
+                opacity: connecting ? 0.7 : 1,
+                boxShadow: '0 2px 12px rgba(99,102,241,0.30)',
+                transition: 'filter 0.15s, transform 0.15s, box-shadow 0.15s, opacity 0.15s',
+              }}
+            >
+              {label}
+            </button>
+          )
+        })()
       )}
 
       {/* ── Unified pill: Chain | Token | Gas (EVM only) ──── */}
@@ -979,6 +1031,7 @@ export default function Home() {
   })()
   const [view, setView] = useState<View>('send')
   const [activeOverlay, setActiveOverlay] = useState<Overlay>(null)
+  const [commandDeepLink, setCommandDeepLink] = useState<string | null>(null)
   const [showIntro, setShowIntro] = useState(false)
   const [ready, setReady] = useState(false)
   const [showAntiPhishing, setShowAntiPhishing] = useState(false)
@@ -1039,21 +1092,47 @@ export default function Home() {
 
   useEffect(() => { setReady(true) }, [])
 
+  // Parallax — orbs layer drifts at 15% of scroll velocity for depth.
+  // .rp-bg is position:fixed, so the container's translate is all the movement.
+  const orbLayerRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+    let ticking = false
+    let lastScrollY = 0
+    const onScroll = () => {
+      lastScrollY = window.scrollY
+      if (ticking) return
+      ticking = true
+      requestAnimationFrame(() => {
+        if (orbLayerRef.current) {
+          orbLayerRef.current.style.transform = `translate3d(0, ${lastScrollY * 0.15}px, 0)`
+        }
+        ticking = false
+      })
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
   return (
     <>
       <ToastContainer />
       {/* Background */}
       <div className="rp-bg" aria-hidden="true">
         <div className="rp-bg__base" />
-        <div className="rp-orb rp-orb--1" style={{ opacity: 1 }} />
-        <div className="rp-orb rp-orb--2" style={{ opacity: 1 }} />
-        <div className="rp-orb rp-orb--3" style={{ opacity: 1 }} />
-        <div className="rp-orb rp-orb--4" style={{ opacity: 1 }} />
-        <div className="rp-orb rp-orb--5" style={{ opacity: 1 }} />
-         <div className="rp-orb rp-orb--9" style={{ opacity: 2 }} />
-        <div className="rp-orb rp-orb--6" style={{ opacity: 0.65 }} />
-        <div className="rp-orb rp-orb--7" style={{ opacity: 0.55 }} />
-        <div className="rp-orb rp-orb--8" style={{ opacity: 0.50 }} />
+        <div ref={orbLayerRef} style={{ position: 'absolute', inset: 0, willChange: 'transform' }}>
+          <div className="rp-orb rp-orb--1" style={{ opacity: 1 }} />
+          <div className="rp-orb rp-orb--2" style={{ opacity: 1 }} />
+          <div className="rp-orb rp-orb--3" style={{ opacity: 1 }} />
+          <div className="rp-orb rp-orb--4" style={{ opacity: 1 }} />
+          <div className="rp-orb rp-orb--5" style={{ opacity: 1 }} />
+          <div className="rp-orb rp-orb--9" style={{ opacity: 2 }} />
+          <div className="rp-orb rp-orb--6" style={{ opacity: 0.65 }} />
+          <div className="rp-orb rp-orb--7" style={{ opacity: 0.55 }} />
+          <div className="rp-orb rp-orb--8" style={{ opacity: 0.50 }} />
+        </div>
         <div className="rp-bg__noise" />
       </div>
 
@@ -1097,11 +1176,26 @@ export default function Home() {
       <OverlayShell isMobile={isMobileHome} active={activeOverlay === 'pricing'} onClose={() => setActiveOverlay(null)}>
         <PricingOverlay />
       </OverlayShell>
+      {activeOverlay === 'apidocs' && (
+        <ApiDocsOverlay onClose={() => setActiveOverlay(null)} onGoToCommand={() => {
+          setActiveOverlay(null)
+          setCommandDeepLink('apikeys')
+          setView('command')
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+        }} />
+      )}
+      {activeOverlay === 'commandcenter' && (
+        <CommandCenterOverlay onClose={() => setActiveOverlay(null)} onGoToCommand={() => {
+          setActiveOverlay(null)
+          setView('command')
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+        }} />
+      )}
 
       {/* Main content — padded below navbar */}
       <main className="main-content" style={{
         minHeight: '100dvh',
-        paddingTop: isMobileHome ? '60px' : 'clamp(70px, 10vh, 120px)',
+        paddingTop: isMobileHome ? '88px' : 'clamp(104px, 13vh, 160px)',
         paddingBottom: `calc(60px + var(--sab, 0px))`, paddingLeft: 16, paddingRight: 16,
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         opacity: ready ? 1 : 0, transition: 'opacity 0.9s ease',
@@ -1239,12 +1333,21 @@ export default function Home() {
           {/* Command Center — always mounted */}
           <div style={view === 'command' ? panelActive : panelHidden}>
             <ErrorBoundary module="CommandCenter">
-              <CommandCenter ownerAddress={address} chainId={chainId} isVisible={view === 'command'} />
+              <CommandCenter ownerAddress={address} chainId={chainId} isVisible={view === 'command'} deepLink={commandDeepLink} onDeepLinkConsumed={() => setCommandDeepLink(null)} />
             </ErrorBoundary>
           </div>
         </div>
 
       </main>
+
+      {/* ── B2B Landing Sections ──── */}
+      <LandingSections
+        onOpenDev={() => setActiveOverlay('apidocs')}
+        onOpenBiz={() => setActiveOverlay('commandcenter')}
+      />
+
+      {/* ── Explore Tokens Section ──── */}
+      <ExploreTokens />
 
       
 

@@ -43,6 +43,20 @@ from app.models.aml_models import (
 
 logger = logging.getLogger("aml")
 
+# Lua script: atomic increment + SET EX in a single Redis call.
+# Prevents the race where concurrent INCRBYFLOAT + EXPIRE are not atomic,
+# and where multiple callers read a stale total before any increment lands.
+_AML_DAILY_INCR_LUA = """
+local key = KEYS[1]
+local add_amount = tonumber(ARGV[1])
+local ttl = tonumber(ARGV[2])
+
+local current = tonumber(redis.call('GET', key) or '0')
+local new_total = current + add_amount
+redis.call('SET', key, tostring(new_total), 'EX', ttl)
+return tostring(new_total)
+"""
+
 
 # ═══════════════════════════════════════════════════════════════
 #  Well-known sanctioned addresses (always checked, no DB needed)
@@ -239,10 +253,8 @@ async def _update_daily_total(sender: str, add_eur: float) -> float:
         from app.services.cache_service import get_redis
         r = await get_redis()
         if r:
-            # Use INCRBYFLOAT for atomicity
-            new_total = await r.incrbyfloat(redis_key, add_eur)
-            await r.expire(redis_key, 86400)
-            return float(new_total)
+            result = await r.eval(_AML_DAILY_INCR_LUA, 1, redis_key, str(add_eur), "86400")
+            return float(result)
     except Exception:
         pass
     return add_eur

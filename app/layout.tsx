@@ -25,7 +25,7 @@ export const metadata: Metadata = {
   keywords:    ['Web3', 'Base', 'USDC', 'EURC', 'pagamenti', 'crypto', 'B2B', 'split routing', 'DAC8'],
   icons: {
     icon: [
-      { url: '/favicon.ico', sizes: '32x32' },
+      
       { url: '/favicon.svg', type: 'image/svg+xml' },
     ],
     apple: '/apple-touch-icon.png',
@@ -36,7 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="it" className={`${inter.variable} ${dmMono.variable}`}>
       <head>
-        <link rel="icon" href="/favicon.ico" sizes="32x32" />
+        
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
       </head>

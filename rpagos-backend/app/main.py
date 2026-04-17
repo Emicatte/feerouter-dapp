@@ -236,6 +236,10 @@ app.add_middleware(RateLimitMiddleware)
 from app.middleware.idempotency import IdempotencyMiddleware
 app.add_middleware(IdempotencyMiddleware)
 
+# ── Request Timeout Middleware ─────────────────────────
+from app.middleware.request_timeout import RequestTimeoutMiddleware
+app.add_middleware(RequestTimeoutMiddleware)
+
 # ── Global Error Handler ───────────────────────────────
 from app.middleware.error_handler import ErrorHandlerMiddleware
 app.add_middleware(ErrorHandlerMiddleware)
@@ -283,6 +287,8 @@ from app.api.signing_routes import signing_router
 app.include_router(signing_router)
 from app.api.aml_routes import aml_router
 app.include_router(aml_router)
+from app.api.api_key_routes import api_key_router
+app.include_router(api_key_router)
 
 
 # ── Health checks ────────────────────────────────────────

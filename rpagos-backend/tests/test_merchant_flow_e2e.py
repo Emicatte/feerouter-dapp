@@ -2,13 +2,13 @@
 RPagos Backend — Merchant Flow E2E Tests.
 
 Testa l'intero flusso merchant end-to-end contro il server locale.
-Richiede il backend in esecuzione su localhost:8000 con DEBUG=true.
+Richiede il backend in esecuzione su localhost:8000 con RSEND_DEV_AUTH_BYPASS=1.
 
 Run:
     pytest tests/test_merchant_flow_e2e.py -v -m "not slow"
 
 Pre-requisiti:
-    1. Backend avviato: cd rpagos-backend && DEBUG=true python3 -m app.main
+    1. Backend avviato: cd rpagos-backend && RSEND_DEV_AUTH_BYPASS=1 ENVIRONMENT=development python3 -m app.main
     2. DEPOSIT_MASTER_SEED impostato in .env (serve per generare deposit address)
     3. Nessun Redis richiesto per i test (fail-open idempotency)
 
@@ -79,7 +79,7 @@ async def _health_or_skip():
         except (httpx.ConnectError, AssertionError):
             pytest.skip(
                 "Backend non raggiungibile su localhost:8000. "
-                "Avvia con: cd rpagos-backend && DEBUG=true python3 -m app.main"
+                "Avvia con: cd rpagos-backend && RSEND_DEV_AUTH_BYPASS=1 ENVIRONMENT=development python3 -m app.main"
             )
 
 

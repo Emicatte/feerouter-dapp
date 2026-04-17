@@ -109,27 +109,14 @@ class _RpcSigner:
         self._chain_id = chain_id
         self._cached_address: Optional[str] = None
 
-    @property
-    def address(self) -> str:
-        if self._cached_address:
-            return self._cached_address
-        # Synchronous fallback for property — use _ensure_address() in async context
-        import asyncio
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # Can't block; return placeholder — callers should use _ensure_address()
-            raise RuntimeError("Use 'await signer._ensure_address()' in async context")
-        self._cached_address = loop.run_until_complete(self._signer.get_address())
-        return self._cached_address
-
-    async def _ensure_address(self) -> str:
+    async def get_address(self) -> str:
         if not self._cached_address:
             self._cached_address = await self._signer.get_address()
         return self._cached_address
 
     async def _next_nonce(self) -> int:
         """Legge il nonce 'pending' del master wallet."""
-        addr = await self._ensure_address()
+        addr = await self.get_address()
         raw = await self._rpc.consensus_call(
             "eth_getTransactionCount",
             [addr, "pending"],
@@ -173,7 +160,7 @@ class _RpcSigner:
 
     async def send_native(self, to: str, value: int) -> str:
         value_int = int(value)
-        addr = await self._ensure_address()
+        addr = await self.get_address()
         est_params = {
             "from": addr,
             "to": to,
@@ -193,7 +180,7 @@ class _RpcSigner:
         amount_padded = hex(int(amount))[2:].rjust(64, "0")
         data = "0x" + method_id + to_padded + amount_padded
 
-        addr = await self._ensure_address()
+        addr = await self.get_address()
         est_params = {
             "from": addr,
             "to": token_address,
