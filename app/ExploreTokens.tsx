@@ -479,10 +479,10 @@ export default function ExploreTokens() {
   // Grid — preview uses 5 cols (no Chains), full desktop uses 6.
   // minmax(0,1fr) prevents the token cell from pushing right-aligned cells when names are long.
   const previewGrid = isMobile
-    ? '32px minmax(0,1fr) 90px 72px 70px'
+    ? '32px minmax(0,1fr) 90px 72px'
     : '40px minmax(0,1fr) 130px 100px 120px'
   const fullGrid = isMobile
-    ? '32px minmax(0,1fr) 90px 72px 70px'
+    ? '32px minmax(0,1fr) 90px 72px'
     : '40px minmax(0,1fr) 130px 100px 120px 100px'
 
   return (
@@ -602,7 +602,7 @@ export default function ExploreTokens() {
               transition={{ duration: 0.22, ease: 'easeOut' }}
             >
               <TableContainer variant="preview">
-                <TableHeader grid={previewGrid} showSparkline showChains={false} />
+                <TableHeader grid={previewGrid} showSparkline={!isMobile} showChains={false} />
                 {previewRows.map((row, idx) => {
                   const m = market[row.coingeckoId]
                   return (
@@ -618,6 +618,7 @@ export default function ExploreTokens() {
                       image={m?.image ?? null}
                       sparkLoading={!m || m.sparkline.length < 2}
                       pricesLoading={marketLoading}
+                      showSparkline={!isMobile}
                       showChains={false}
                       onOpen={setSelectedCoingeckoId}
                     />
@@ -638,7 +639,7 @@ export default function ExploreTokens() {
               transition={{ duration: 0.25, ease: 'easeOut' }}
             >
               <TableContainer>
-                <TableHeader grid={fullGrid} showSparkline showChains={!isMobile} />
+                <TableHeader grid={fullGrid} showSparkline={!isMobile} showChains={!isMobile} />
                 {visibleFullRows.length === 0 ? (
                   <div
                     style={{
@@ -667,6 +668,7 @@ export default function ExploreTokens() {
                         image={m?.image ?? null}
                         sparkLoading={!m || m.sparkline.length < 2}
                         pricesLoading={marketLoading}
+                        showSparkline={!isMobile}
                         showChains={!isMobile}
                         onOpen={setSelectedCoingeckoId}
                       />
@@ -788,6 +790,7 @@ function TokenRowUI({
   image,
   sparkLoading,
   pricesLoading,
+  showSparkline,
   showChains,
   onOpen,
 }: {
@@ -801,6 +804,7 @@ function TokenRowUI({
   image: string | null
   sparkLoading: boolean
   pricesLoading: boolean
+  showSparkline: boolean
   showChains: boolean
   onOpen?: (coingeckoId: string) => void
 }) {
@@ -837,7 +841,7 @@ function TokenRowUI({
       <div style={{ fontFamily: C.M, fontSize: 13, color: C.dim }}>{rank}</div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-        <TokenLogo symbol={row.symbol} src={image} />
+        <TokenLogo symbol={row.symbol} src={image || row.logoUrl} />
         <div style={{ minWidth: 0 }}>
           <div
             style={{
@@ -906,18 +910,20 @@ function TokenRowUI({
         )}
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <div
-          style={{
-            background: 'rgba(255,255,255,0.02)',
-            borderRadius: 6,
-            padding: 4,
-            display: 'inline-flex',
-          }}
-        >
-          <Sparkline data={spark} loading={sparkLoading} />
+      {showSparkline && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <div
+            style={{
+              background: 'rgba(255,255,255,0.02)',
+              borderRadius: 6,
+              padding: 4,
+              display: 'inline-flex',
+            }}
+          >
+            <Sparkline data={spark} loading={sparkLoading} />
+          </div>
         </div>
-      </div>
+      )}
 
       {showChains && (
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>

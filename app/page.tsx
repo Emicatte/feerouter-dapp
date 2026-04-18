@@ -904,17 +904,14 @@ function HeroTitle({ view, setView, isMobile }: { view: View; setView: (v: View)
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, ease: EASE }}
-        className="hero-title"
+        className="hero-title text-[2rem] sm:text-5xl md:text-6xl lg:text-7xl leading-[1.1] px-4 md:px-0 text-balance"
         style={{
           fontFamily: C.D,
-          fontSize: isMobile ? 'clamp(20px, 6vw, 28px)' : 'clamp(40px, 6.0vw, 55px)',
-          whiteSpace: 'nowrap' as const,
           fontWeight: 700,
           letterSpacing: '-0.02em',
           textAlign: 'center',
           width: '100%',
           marginBottom: 8,
-          lineHeight: 1.2,
           wordSpacing: '0.15em',
         }}
       >
@@ -1345,7 +1342,11 @@ export default function Home() {
       />
 
       {/* ── Explore Tokens Section ──── */}
-      <ExploreTokens />
+      <section className="w-full flex justify-center px-4 md:px-8 py-16 md:py-24">
+        <div className="w-full max-w-5xl">
+          <ExploreTokens />
+        </div>
+      </section>
 
       
 
