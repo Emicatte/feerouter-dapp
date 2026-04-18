@@ -8,6 +8,7 @@ import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { formatUnits } from 'viem'
 import { getRegistry } from '../lib/contractRegistry'
 import dynamic from 'next/dynamic'
+import { useIsMobile } from '../hooks/useIsMobile'
 
 const PortfolioDashboard = dynamic(() => import('./PortfolioDashboard'), { ssr: false })
 
@@ -79,6 +80,7 @@ export default function AccountHeader({ nonEvmWallet }: { nonEvmWallet?: NonEvmW
   const triggerRef                      = useRef<HTMLButtonElement>(null)
 
   const reg = getRegistry(chainId)
+  const isMobile = useIsMobile()
 
   // Posizione menu
   const updatePos = useCallback(() => {
@@ -191,8 +193,11 @@ export default function AccountHeader({ nonEvmWallet }: { nonEvmWallet?: NonEvmW
             background: 'rgba(0,0,0,0.25)',
           }} />
           <div onClick={e => e.stopPropagation()} style={{
-            position: 'fixed', top: menuPos.top, right: menuPos.right,
-            width: 320, zIndex: 99999,
+            position: 'fixed', top: menuPos.top,
+            ...(isMobile
+              ? { left: 8, right: 8 }
+              : { right: menuPos.right, width: 320 }),
+            zIndex: 99999,
             background: '#111120', border: '1.5px solid rgba(255,255,255,0.12)',
             borderRadius: 20, boxShadow: '0 24px 80px rgba(0,0,0,0.95)',
             overflow: 'hidden', animation: 'rpFadeUp 0.18s ease both',
