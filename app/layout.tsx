@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Inter, DM_Mono } from 'next/font/google'
 import './globals.css'
 import { Providers } from './providers'
@@ -32,6 +32,15 @@ export const metadata: Metadata = {
   },
 }
 
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  // Dark theme: prevents iOS Safari from rendering the status bar
+  // in light mode when the app background is dark.
+  themeColor: '#0a0a0f',
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="it" className={`${inter.variable} ${dmMono.variable}`}>
@@ -40,7 +49,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
       </head>
-      <body className={inter.className} style={{ background: '#0a0a0f' }}>
+      <body
+        className={`${inter.className} overflow-x-hidden`}
+        style={{ background: '#0a0a0f', minHeight: '100dvh' }}
+      >
         <Providers>
           {children}
           <FooterGlobe />
