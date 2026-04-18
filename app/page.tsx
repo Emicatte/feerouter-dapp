@@ -10,9 +10,6 @@ import type { Variants, Transition } from 'framer-motion'
 import dynamic from 'next/dynamic'
 
 // STATIC IMPORTS
-import TransferForm from './TransferForm'
-import SwapModule from './SwapModule'
-// CrossChainForm logic integrated into TransferForm — no separate tab
 import AccountHeader from './AccountHeader'
 // Overlays — lazy loaded (only when user opens menu)
 const AboutOverlay = dynamic(() => import('./overlays/AboutOverlay'), { ssr: false })
@@ -38,76 +35,18 @@ import { useWallet as useSolanaWallet } from '@solana/wallet-adapter-react'
 import { useWalletModal } from '@solana/wallet-adapter-react-ui'
 import { useTron } from './providers-tron'
 import type { NonEvmWalletProps } from './AccountHeader'
-import { ErrorBoundary } from '../components/shared/ErrorBoundary'
 import { ToastContainer } from '../components/shared/Toast'
 import ExploreTokens from './ExploreTokens'
 import LandingSections from './LandingSections'
-
-// Dynamic import — CommandCenter uses Recharts + heavy WebSocket logic
-const CommandCenter = dynamic(() => import('./command-center'), {
-  ssr: false,
-  loading: () => <SkeletonLoader />,
-})
+import { C, EASE } from '@/app/designTokens'
 
 
 
-const SkeletonLoader = () => (
-  <div style={{
-    minHeight: 400, width: '100%',
-    background: '#111118',
-    borderRadius: 24,
-    border: '1px solid rgba(255,255,255,0.06)',
-    display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: 16
-  }}>
-    <div style={{ 
-      width: 32, height: 32, 
-      border: '3px solid rgba(255,255,255,0.05)', 
-      borderTopColor: '#8B5CF6', 
-      borderRadius: '50%', 
-      animation: 'rsSpin 1s linear infinite' 
-    }} />
-    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#4A4E64', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-      Loading Module
-    </div>
-  </div>
-);
-
-// ═══════════════════════════════════════════════════════════
-//  PALETTE
-// ═══════════════════════════════════════════════════════════
-const C = {
-  bg:      '#0a0a0f',
-  surface: '#111118',
-  card:    '#16161f',
-  border:  'rgba(255,255,255,0.06)',
-  text:    '#E2E2F0',
-  sub:     '#8A8FA8',
-  dim:     '#4A4E64',
-  green:   '#00D68F',
-  red:     '#FF4C6A',
-  amber:   '#FFB547',
-  blue:    '#3B82F6',
-  purple:  '#8B5CF6',
-  D:       'var(--font-display)',
-  M:       'var(--font-mono)',
-  S:       '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-}
-
-type View = 'send' | 'swap' | 'command'
 type Overlay = null | 'about' | 'how' | 'security' | 'compliance' | 'developers' | 'pricing' | 'apidocs' | 'commandcenter'
 
 const GRAD: React.CSSProperties = {
-  background: 'linear-gradient(135deg, #FFFFFF 0%, #60A5FA 60%, #1D4ED8 100%)',
-  WebkitBackgroundClip: 'text',
-  WebkitTextFillColor: 'transparent',
+  color: '#C8512C',
 }
-
-// ════════════════════════════════════════════════════��══════
-//  MOTION CONFIG — Faster, more responsive transitions
-// ═══════════════════════════════════════════════════════════
-const EASE: [number, number, number, number] = [0.4, 0, 0.2, 1]
-// Apple/Linear-style spring easing — leggero overshooting, settle morbido
-const SPRING: [number, number, number, number] = [0.16, 1, 0.3, 1]
 
 const cinematicT: Transition = { duration: 0.45, ease: EASE }
 
@@ -121,19 +60,6 @@ const formV: Variants = {
   enter:  { opacity: 0, y: 12, scale: 0.97 },
   center: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.45, ease: EASE } },
   exit:   { opacity: 0, y: -8, scale: 0.97, transition: { duration: 0.3, ease: EASE } },
-}
-
-// Cross-fade CSS puro — tutti i pannelli sempre montati, zero mount/unmount
-const FADE_MS = 380
-const panelBase: React.CSSProperties = {
-  transition: `opacity ${FADE_MS}ms cubic-bezier(0.16,1,0.3,1)`,
-  willChange: 'opacity',
-}
-const panelActive: React.CSSProperties = {
-  ...panelBase, position: 'relative', opacity: 1, pointerEvents: 'auto', zIndex: 1,
-}
-const panelHidden: React.CSSProperties = {
-  ...panelBase, position: 'absolute', top: 0, left: 0, right: 0, opacity: 0, pointerEvents: 'none', zIndex: 0,
 }
 
 const overlayV: Variants = {
@@ -175,7 +101,7 @@ function ParticleIntro({ onDone }: { onDone: () => void }) {
       ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H)
       const na = Math.min(1, el / 2000) * 0.12
       const n1 = ctx.createRadialGradient(cx - 150, cy - 80, 0, cx - 150, cy - 80, 280)
-      n1.addColorStop(0, `rgba(139,92,246,${na})`); n1.addColorStop(1, 'transparent')
+      n1.addColorStop(0, `rgba(200,81,44,${na})`); n1.addColorStop(1, 'transparent')
       ctx.fillStyle = n1; ctx.fillRect(0, 0, W, H)
 
       if (el > 1500 && ph === 0) { ph = 1; setPhase(1) }
@@ -207,12 +133,12 @@ function ParticleIntro({ onDone }: { onDone: () => void }) {
       <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0 }} />
       <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center' }}>
         <div style={{ opacity: phase >= 2 ? 1 : 0, transition: 'opacity 0.6s ease', marginBottom: 8 }}>
-          <div style={{ width: 52, height: 52, borderRadius: 13, background: 'linear-gradient(135deg,#3B82F6,#8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', boxShadow: phase >= 2 ? '0 0 50px rgba(139,92,246,0.4)' : 'none' }}>
+          <div style={{ width: 52, height: 52, borderRadius: 13, background: C.text, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto', boxShadow: phase >= 2 ? '0 0 50px rgba(200,81,44,0.4)' : 'none' }}>
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M13 2L4.5 12.5h5.5l-1 9.5 8.5-11.5h-5.5L13 2z" fill="white" fillOpacity="0.95"/></svg>
           </div>
         </div>
         <div style={{ opacity: phase >= 3 ? 1 : 0, transform: phase >= 3 ? 'translateY(0)' : 'translateY(10px)', transition: 'all 0.8s cubic-bezier(.16,1,.3,1)' }}>
-          <div style={{ fontFamily: C.M, fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase' as const, color: 'transparent', background: 'linear-gradient(90deg,#3B82F6,#8B5CF6,#FF4C6A,#FFB547,#3B82F6)', backgroundSize: '200% 100%', WebkitBackgroundClip: 'text', animation: phase >= 3 ? 'holoShift 3s linear infinite' : 'none' }}>
+          <div style={{ fontFamily: C.M, fontSize: 10, letterSpacing: '0.15em', textTransform: 'uppercase' as const, color: 'transparent', background: `linear-gradient(90deg, ${C.text}, ${C.purple}, ${C.text})`, backgroundSize: '200% 100%', WebkitBackgroundClip: 'text', animation: phase >= 3 ? 'holoShift 3s linear infinite' : 'none' }}>
             Multi-chain financial automation
           </div>
         </div>
@@ -356,9 +282,9 @@ function NetworkTokenWidget({
             className="bf-blur-16"
             style={{
               display: 'flex', alignItems: 'center', gap: 8,
-              background: 'rgba(12,12,30,0.85)',
+              background: C.surface,
               borderRadius: 14, padding: '8px 14px',
-              border: '1px solid rgba(255,255,255,0.06)',
+              border: '1px solid rgba(10,10,10,0.12)',
             }}
           >
             <div style={{
@@ -399,23 +325,23 @@ function NetworkTokenWidget({
                 if (connecting) return
                 e.currentTarget.style.filter = 'brightness(1.15)'
                 e.currentTarget.style.transform = 'scale(1.03)'
-                e.currentTarget.style.boxShadow = '0 4px 18px rgba(99,102,241,0.45)'
+                e.currentTarget.style.boxShadow = '0 4px 18px rgba(200,81,44,0.45)'
               }}
               onMouseLeave={e => {
                 if (connecting) return
                 e.currentTarget.style.filter = 'brightness(1)'
                 e.currentTarget.style.transform = 'scale(1)'
-                e.currentTarget.style.boxShadow = '0 2px 12px rgba(99,102,241,0.30)'
+                e.currentTarget.style.boxShadow = '0 2px 12px rgba(200,81,44,0.30)'
               }}
               style={{
                 fontFamily: C.D, fontSize: 12, fontWeight: 700, color: '#fff',
                 letterSpacing: '0.02em',
-                background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                background: 'linear-gradient(135deg, #C8512C, #C8512C)',
                 border: 'none', borderRadius: 10,
                 padding: '8px 18px',
                 cursor: connecting ? 'default' : 'pointer',
                 opacity: connecting ? 0.7 : 1,
-                boxShadow: '0 2px 12px rgba(99,102,241,0.30)',
+                boxShadow: '0 2px 12px rgba(200,81,44,0.30)',
                 transition: 'filter 0.15s, transform 0.15s, box-shadow 0.15s, opacity 0.15s',
               }}
             >
@@ -430,9 +356,9 @@ function NetworkTokenWidget({
         className="bf-blur-16"
         style={{
           display: 'flex', alignItems: 'center',
-          background: 'rgba(12,12,30,0.85)',
+          background: C.surface,
           borderRadius: 14,
-          border: `1px solid ${openPanel ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.06)'}`,
+          border: `1px solid ${openPanel ? 'rgba(10,10,10,0.12)' : 'rgba(10,10,10,0.12)'}`,
           transition: 'border-color 0.2s ease',
           overflow: 'hidden',
         }}
@@ -443,9 +369,9 @@ function NetworkTokenWidget({
           style={{
             display: 'flex', alignItems: 'center', gap: 6,
             padding: '7px 10px',
-            background: openPanel === 'chain' ? 'rgba(255,255,255,0.04)' : 'transparent',
+            background: openPanel === 'chain' ? 'rgba(10,10,10,0.04)' : 'transparent',
             border: 'none', cursor: 'pointer', transition: 'background 0.15s',
-            borderRight: '1px solid rgba(255,255,255,0.06)',
+            borderRight: '1px solid rgba(10,10,10,0.06)',
           }}
         >
           <ChainLogo chainId={chain.id} size={20} />
@@ -497,13 +423,13 @@ function NetworkTokenWidget({
             transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
             style={{
               position: 'absolute', top: 'calc(100%)', right: 0, zIndex: 100,
-              minWidth: 220, maxHeight: 300, overflowY: 'auto' as const, background: '#111120',
-              border: '1px solid rgba(255,255,255,0.10)',
+              minWidth: 220, maxHeight: 300, overflowY: 'auto' as const, background: '#FFFFFF',
+              border: '1px solid rgba(10,10,10,0.10)',
               borderRadius: 14,
-              boxShadow: '0 16px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.03)',
+              boxShadow: '0 16px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(10,10,10,0.03)',
             }}
           >
-            <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid rgba(10,10,10,0.05)' }}>
               <span style={{ fontFamily: C.D, fontSize: 10, fontWeight: 700, color: C.dim, textTransform: 'uppercase' as const, letterSpacing: '0.08em' }}>Network</span>
             </div>
             {CHAINS.map(c => {
@@ -515,12 +441,12 @@ function NetworkTokenWidget({
                   onClick={() => { switchChain({ chainId: c.id }); onChainSelect?.(c.id); setOpenPanel(null) }}
                   style={{
                     width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '10px 14px', background: active ? 'rgba(255,255,255,0.04)' : 'transparent',
+                    padding: '10px 14px', background: active ? 'rgba(10,10,10,0.04)' : 'transparent',
                     border: 'none', cursor: 'pointer', transition: 'background 0.12s',
-                    borderBottom: '1px solid rgba(255,255,255,0.04)',
+                    borderBottom: '1px solid rgba(10,10,10,0.04)',
                     textAlign: 'left' as const,
                   }}
-                  onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.03)' }}
+                  onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(10,10,10,0.03)' }}
                   onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent' }}
                 >
                   <ChainLogo chainId={c.id} size={22} />
@@ -564,13 +490,13 @@ function NetworkTokenWidget({
             transition={{ duration: 0.15, ease: [0.4, 0, 0.2, 1] }}
             style={{
               position: 'absolute', top: 'calc(100%)', right: 0, zIndex: 100,
-              minWidth: 240, background: '#111120',
-              border: '1px solid rgba(255,255,255,0.10)',
+              minWidth: 240, background: '#FFFFFF',
+              border: '1px solid rgba(10,10,10,0.10)',
               borderRadius: 14, overflow: 'hidden',
-              boxShadow: '0 16px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.03)',
+              boxShadow: '0 16px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(10,10,10,0.03)',
             }}
           >
-            <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <div style={{ padding: '10px 14px 8px', borderBottom: '1px solid rgba(10,10,10,0.05)' }}>
               <span style={{ fontFamily: C.D, fontSize: 10, fontWeight: 700, color: C.dim, textTransform: 'uppercase' as const, letterSpacing: '0.08em' }}>Select Token</span>
             </div>
             <div style={{ maxHeight: 320, overflowY: 'auto' }}>
@@ -598,11 +524,9 @@ function NetworkTokenWidget({
 //  LIQUID GLASS NAVBAR
 // ═══════════════════════════════════════════════════════════
 function Navbar({
-  view, setView, activeOverlay, setActiveOverlay, sweeps24h, vol24h, unseenCount,
+  activeOverlay, setActiveOverlay, sweeps24h, vol24h, unseenCount,
   nonEvmWallet,
 }: {
-  view: View
-  setView: (v: View) => void
   activeOverlay: Overlay
   setActiveOverlay: (o: Overlay) => void
   sweeps24h: number
@@ -632,17 +556,17 @@ function Navbar({
   return (
     <>
     <nav className="bf-blur-24s" style={{
-      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1000,
+      position: 'fixed', top: 3, left: 0, right: 0, zIndex: 1000,
       height: isMobile ? 52 : 60,
       paddingTop: 'var(--sat, 0px)',
-      background: 'linear-gradient(180deg, rgba(10,10,15,0.8) 0%, rgba(10,10,15,0.7) 100%)',
-      borderBottom: '1px solid rgba(255,255,255,0.08)',
+      background: 'rgba(250,250,250,0.85)',
+      borderBottom: '1px solid rgba(10,10,10,0.08)',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: isMobile ? '0 12px' : '0 24px',
     }}>
         {/* Left: Logo */}
         <button
-          onClick={() => { setView('send'); setActiveOverlay(null) }}
+          onClick={() => { setActiveOverlay(null) }}
           style={{
             display: 'flex', alignItems: 'center', gap: 8,
             background: 'none', border: 'none', cursor: 'pointer',
@@ -688,9 +612,9 @@ function Navbar({
               style={{
                 padding: '7px 16px', borderRadius: 10, border: 'none',
                 background: activeOverlay === link.key
-                  ? 'rgba(255,255,255,0.08)'
+                  ? 'rgba(10,10,10,0.08)'
                   : hoveredLink === link.key
-                    ? 'rgba(255,255,255,0.04)'
+                    ? 'rgba(10,10,10,0.04)'
                     : 'transparent',
                 color: activeOverlay === link.key ? C.text : C.sub,
                 fontFamily: C.D, fontSize: 12, fontWeight: 500,
@@ -710,7 +634,7 @@ function Navbar({
             <div className="navbar-right-stats" style={{
               display: 'flex', alignItems: 'center', gap: 2,
               padding: '4px 6px', borderRadius: 10,
-              background: 'rgba(255,255,255,0.03)',
+              background: 'rgba(10,10,10,0.03)',
               border: `1px solid ${C.border}`,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 6px', borderRight: `1px solid ${C.border}` }}>
@@ -747,7 +671,7 @@ function Navbar({
             background: 'rgba(10,10,15,0.95)',
             backdropFilter: 'blur(24px) saturate(180%)',
             WebkitBackdropFilter: 'blur(24px) saturate(180%)',
-            borderBottom: '1px solid rgba(255,255,255,0.08)',
+            borderBottom: '1px solid rgba(10,10,10,0.08)',
             padding: '12px 16px',
             paddingTop: 'calc(12px + var(--sat, 0px))',
             display: 'flex', flexDirection: 'column', gap: 4,
@@ -762,7 +686,7 @@ function Navbar({
               }}
               style={{
                 padding: '14px 16px', borderRadius: 12, border: 'none',
-                background: activeOverlay === link.key ? 'rgba(255,255,255,0.08)' : 'transparent',
+                background: activeOverlay === link.key ? 'rgba(10,10,10,0.08)' : 'transparent',
                 color: activeOverlay === link.key ? C.text : C.sub,
                 fontFamily: C.D, fontSize: 14, fontWeight: 500,
                 cursor: 'pointer', textAlign: 'left',
@@ -788,7 +712,7 @@ function EngineStatus() {
     <div style={{
       display: 'flex', alignItems: 'center', gap: 6,
       padding: '5px 12px', borderRadius: 16,
-      background: 'rgba(255,255,255,0.04)',
+      background: 'rgba(10,10,10,0.04)',
       border: `1px solid ${C.border}`,
     }}>
       <div style={{ position: 'relative', width: 7, height: 7 }}>
@@ -871,7 +795,7 @@ function OverlayShell({ active, onClose, children, isMobile }: { active: boolean
                 width: isMobile ? 40 : 32,
                 height: isMobile ? 40 : 32,
                 borderRadius: 10,
-                background: 'rgba(255,255,255,0.04)',
+                background: 'rgba(10,10,10,0.04)',
                 border: `1px solid ${C.border}`, color: C.dim,
                 cursor: 'pointer', fontSize: isMobile ? 18 : 14,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -896,56 +820,174 @@ function OverlayShell({ active, onClose, children, isMobile }: { active: boolean
 //  HERO TITLE — AnimatePresence mode="wait" for no overlap
 // ═══════════════════════════════════════════════════════════
 
-function HeroTitle({ view, setView, isMobile }: { view: View; setView: (v: View) => void; isMobile?: boolean }) {
+function HeroTitle({ isMobile }: { isMobile?: boolean }) {
   return (
-    <div style={{ display: 'grid', placeItems: 'center', position: 'relative', width: '100%' }}>
-      {/* Tagline */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: EASE }}
-        className="hero-title text-[2rem] sm:text-5xl md:text-6xl lg:text-7xl leading-[1.1] px-4 md:px-0 text-balance"
-        style={{
-          fontFamily: C.D,
-          fontWeight: 700,
-          letterSpacing: '-0.02em',
-          textAlign: 'center',
-          width: '100%',
-          marginBottom: 8,
-          wordSpacing: '0.15em',
-        }}
-      >
-        <span style={{
-          background: 'linear-gradient(135deg, #FFFFFF 0%, #60A5FA 60%, #1D4ED8 100%)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-          backgroundClip: 'text',
-        }}>Crypto Payments. Fully Compliant.</span>
-      </motion.div>
+    <div style={{
+      maxWidth: 720,
+      width: '100%',
+      padding: isMobile ? '0 20px' : '0 24px',
+      margin: '0 auto',
+      textAlign: isMobile ? 'center' : 'left',
+    }}>
+      {/* Eyebrow */}
+      <div style={{
+        fontFamily: C.M,
+        fontSize: 13,
+        fontWeight: 500,
+        color: C.purple,
+        letterSpacing: '1.4px',
+        marginBottom: 14,
+        textTransform: 'uppercase' as const,
+      }}>
+        Multi-chain payment layer
+      </div>
 
-      {/* Subtitle — hidden on mobile */}
-      {!isMobile && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: EASE, delay: 0.1 }}
-          className="hero-subtitle"
+      {/* Title — Ink, NOT terracotta */}
+      <h1 style={{
+        fontFamily: C.D,
+        fontSize: isMobile ? 48 : 72,
+        fontWeight: 500,
+        color: C.text,
+        lineHeight: 1.02,
+        letterSpacing: isMobile ? '-1.2px' : '-2.5px',
+        margin: '0 0 18px',
+      }}>
+        Crypto Payments.<br/>Fully Compliant.
+      </h1>
+
+      {/* Subtitle — extended copy */}
+      <p style={{
+        fontFamily: C.D,
+        fontSize: 18,
+        color: C.sub,
+        lineHeight: 1.55,
+        margin: '0 0 28px',
+        maxWidth: 540,
+      }}>
+        Non-custodial payment infrastructure for European business. Double-entry ledger, 3-level AML screening, DAC8 reporting built into the primitives — not bolted on.
+      </p>
+
+      {/* CTAs */}
+      <div style={{
+        display: 'flex',
+        gap: 10,
+        alignItems: 'center',
+        marginBottom: 44,
+        flexWrap: 'wrap',
+        justifyContent: isMobile ? 'center' : 'flex-start',
+      }}>
+        <button
+          onClick={() => {}}
           style={{
-            fontFamily: C.S,
-            fontSize: 'clamp(12px, 1.5vw, 20px)',
-            fontWeight: 400,
-            letterSpacing: '0.02em',
-            textAlign: 'center',
-            width: '100%',
-            color: C.sub,
-            marginBottom: 2,
+            padding: '11px 20px',
+            background: C.text,
+            color: C.bg,
+            border: 'none',
+            borderRadius: 3,
+            fontFamily: C.D,
+            fontSize: 14,
+            fontWeight: 500,
+            cursor: 'pointer',
+            letterSpacing: 0,
           }}
         >
-          Built for European Businesses
-        </motion.div>
-      )}
+          Start building →
+        </button>
+        <button
+          onClick={() => {}}
+          style={{
+            padding: '11px 20px',
+            background: 'transparent',
+            color: C.text,
+            border: `1px solid ${C.border}`,
+            borderRadius: 3,
+            fontFamily: C.D,
+            fontSize: 14,
+            fontWeight: 500,
+            cursor: 'pointer',
+          }}
+        >
+          Read the spec
+        </button>
+      </div>
 
-      {/* CTA removed — wallet connection via navbar button */}
+      {/* Metrics row */}
+      <div style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: isMobile ? 24 : 52,
+        paddingTop: 22,
+        borderTop: `0.5px solid ${C.border}`,
+      }}>
+        <div>
+          <div style={{
+            fontFamily: C.D,
+            fontSize: 32,
+            fontWeight: 500,
+            color: C.text,
+            letterSpacing: '-0.5px',
+            marginBottom: 3,
+          }}>12</div>
+          <div style={{
+            fontFamily: C.M,
+            fontSize: 11,
+            color: C.sub,
+            letterSpacing: '0.8px',
+            textTransform: 'uppercase' as const,
+          }}>Chains live</div>
+        </div>
+        <div>
+          <div style={{
+            fontFamily: C.D,
+            fontSize: 32,
+            fontWeight: 500,
+            color: C.text,
+            letterSpacing: '-0.5px',
+            marginBottom: 3,
+          }}>3-level</div>
+          <div style={{
+            fontFamily: C.M,
+            fontSize: 11,
+            color: C.sub,
+            letterSpacing: '0.8px',
+            textTransform: 'uppercase' as const,
+          }}>AML screening</div>
+        </div>
+        <div>
+          <div style={{
+            fontFamily: C.D,
+            fontSize: 32,
+            fontWeight: 500,
+            color: C.text,
+            letterSpacing: '-0.5px',
+            marginBottom: 3,
+          }}>DAC8</div>
+          <div style={{
+            fontFamily: C.M,
+            fontSize: 11,
+            color: C.sub,
+            letterSpacing: '0.8px',
+            textTransform: 'uppercase' as const,
+          }}>EU-ready</div>
+        </div>
+        <div>
+          <div style={{
+            fontFamily: C.D,
+            fontSize: 32,
+            fontWeight: 500,
+            color: C.text,
+            letterSpacing: '-0.5px',
+            marginBottom: 3,
+          }}>0</div>
+          <div style={{
+            fontFamily: C.M,
+            fontSize: 11,
+            color: C.sub,
+            letterSpacing: '0.8px',
+            textTransform: 'uppercase' as const,
+          }}>Custodial risk</div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -955,49 +997,7 @@ function HeroTitle({ view, setView, isMobile }: { view: View; setView: (v: View)
 
 
 
-// ═══════════════════════════════════════════════════════════
-//  NON-EVM PLACEHOLDER (Tron / Solana — coming soon)
-// ═══════════════════════════════════════════════════════════
 
-function NonEvmPlaceholder({
-  family,
-}: {
-  family: string
-  address?: any
-  connections?: any
-}) {
-  const config: Record<string, { name: string; color: string }> = {
-    tron:   { name: 'TRON', color: '#FF0000' },
-    solana: { name: 'Solana', color: '#9945FF' },
-  }
-  const c = config[family] ?? { name: family, color: '#666' }
-
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: '40px 20px',
-    }}>
-      <div style={{
-        display: 'flex', alignItems: 'center', gap: 10,
-        padding: '14px 24px', borderRadius: 14,
-        background: `${c.color}08`,
-        border: `1px solid ${c.color}18`,
-      }}>
-        <div style={{
-          width: 8, height: 8, borderRadius: '50%',
-          background: c.color,
-          animation: 'pulse 2s ease-in-out infinite',
-        }} />
-        <span style={{
-          fontFamily: 'var(--font-display)', fontSize: 13,
-          fontWeight: 600, color: c.color,
-        }}>
-          {c.name} deploy coming soon
-        </span>
-      </div>
-    </div>
-  )
-}
 
 // ═══════════════════════════════════════════════════════════
 //  MAIN PAGE
@@ -1024,9 +1024,7 @@ export default function Home() {
       disconnect: activeFamily === 'tron' ? tron.disconnect : solanaDisconnect,
     }
   })()
-  const [view, setView] = useState<View>('send')
   const [activeOverlay, setActiveOverlay] = useState<Overlay>(null)
-  const [commandDeepLink, setCommandDeepLink] = useState<string | null>(null)
   const [showIntro, setShowIntro] = useState(false)
   const [ready, setReady] = useState(false)
   const [showAntiPhishing, setShowAntiPhishing] = useState(false)
@@ -1070,20 +1068,10 @@ export default function Home() {
   // Increment unseen when new events arrive and user isn't on command tab
   useEffect(() => {
     if (sweepEvents.length > lastSeenRef.current) {
-      if (view !== 'command') {
-        setUnseenCount(prev => prev + (sweepEvents.length - lastSeenRef.current))
-      }
+      setUnseenCount(prev => prev + (sweepEvents.length - lastSeenRef.current))
       lastSeenRef.current = sweepEvents.length
     }
-  }, [sweepEvents.length, view])
-
-  // Reset unseen count when switching to command view
-  useEffect(() => {
-    if (view === 'command') {
-      setUnseenCount(0)
-      lastSeenRef.current = sweepEvents.length
-    }
-  }, [view, sweepEvents.length])
+  }, [sweepEvents.length])
 
   useEffect(() => { setReady(true) }, [])
 
@@ -1131,8 +1119,19 @@ export default function Home() {
         <div className="rp-bg__noise" />
       </div>
 
+      {/* Top bar accent — ink line with terracotta segment left */}
+      <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0,
+        height: 3, background: C.text, zIndex: 1001,
+      }}>
+        <div style={{
+          position: 'absolute', top: 0, left: 0,
+          width: 96, height: 3, background: C.purple,
+        }} />
+      </div>
+
       {/* Navbar */}
-      <Navbar view={view} setView={setView} activeOverlay={activeOverlay} setActiveOverlay={setActiveOverlay} sweeps24h={sweeps24h} vol24h={vol24h} unseenCount={unseenCount} nonEvmWallet={nonEvmWallet} />
+      <Navbar activeOverlay={activeOverlay} setActiveOverlay={setActiveOverlay} sweeps24h={sweeps24h} vol24h={vol24h} unseenCount={unseenCount} nonEvmWallet={nonEvmWallet} />
 
       {/* Network + Token + Gas — fixed top-right below navbar */}
       {ready && !isMobileHome && (
@@ -1174,15 +1173,12 @@ export default function Home() {
       {activeOverlay === 'apidocs' && (
         <ApiDocsOverlay onClose={() => setActiveOverlay(null)} onGoToCommand={() => {
           setActiveOverlay(null)
-          setCommandDeepLink('apikeys')
-          setView('command')
           window.scrollTo({ top: 0, behavior: 'smooth' })
         }} />
       )}
       {activeOverlay === 'commandcenter' && (
         <CommandCenterOverlay onClose={() => setActiveOverlay(null)} onGoToCommand={() => {
           setActiveOverlay(null)
-          setView('command')
           window.scrollTo({ top: 0, behavior: 'smooth' })
         }} />
       )}
@@ -1191,146 +1187,14 @@ export default function Home() {
       <main className="main-content" style={{
         minHeight: '100dvh',
         paddingTop: isMobileHome ? '88px' : 'clamp(104px, 13vh, 160px)',
-        paddingBottom: `calc(60px + var(--sab, 0px))`, paddingLeft: 16, paddingRight: 16,
+        paddingBottom: isMobileHome ? '40px' : '80px', paddingLeft: 16, paddingRight: 16,
         display: 'flex', flexDirection: 'column', alignItems: 'center',
         opacity: ready ? 1 : 0, transition: 'opacity 0.9s ease',
       }}>
 
         {/* Hero */}
-        <div style={{ marginBottom: isMobileHome ? 6 : 20, width: '100%' }}>
-          <HeroTitle view={view} setView={setView} isMobile={isMobileHome} />
-        </div>
-
-        {/* === TAB SWITCHER — sliding pill indicator === */}
-        {ready && (
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: SPRING, delay: 0.15 }}
-            className="tab-switcher bf-blur-16"
-            style={{
-              zIndex: 2,
-              position: 'relative',
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.10)',
-              borderRadius: 18,
-              marginBottom: isMobileHome ? 6 : 20,
-              padding: isMobileHome ? '3px 4px' : '5px 6px',
-              boxShadow: '0 4px 24px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.06)',
-              display: 'flex',
-              gap: 2,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            {([
-              { key: 'send' as View, label: 'Send' },
-              { key: 'swap' as View, label: 'Swap' },
-              { key: 'command' as View, label: 'Command Center' },
-            ]).map((v) => (
-              <motion.button
-                key={v.key}
-                whileTap={{ scale: 0.96 }}
-                onClick={() => setView(v.key)}
-                style={{
-                  position: 'relative',
-                  padding: isMobileHome ? '7px 12px' : '10px 22px',
-                  borderRadius: 13,
-                  border: 'none',
-                  background: 'transparent',
-                  color: view === v.key ? '#fff' : 'rgba(255,255,255,0.45)',
-                  fontFamily: C.D,
-                  fontSize: isMobileHome ? 11 : 13,
-                  fontWeight: 700,
-                  letterSpacing: '-0.01em',
-                  cursor: 'pointer',
-                  outline: 'none',
-                  transition: 'color 0.22s ease',
-                  zIndex: 1,
-                }}
-              >
-                {view === v.key && (
-                  <motion.div
-                    layoutId="tab-pill"
-                    style={{
-                      position: 'absolute', inset: 0,
-                      background: 'linear-gradient(135deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.07) 100%)',
-                      borderRadius: 13,
-                      border: '1px solid rgba(255,255,255,0.16)',
-                      boxShadow: '0 2px 10px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.12)',
-                    }}
-                    transition={{ type: 'spring', stiffness: 420, damping: 38 }}
-                  />
-                )}
-                <span style={{ position: 'relative', zIndex: 1 }}>
-                  <span className="tab-label-full">{v.label}</span>
-                  <span className="tab-label-short">
-                    {v.key === 'send' ? 'SEND' : v.key === 'swap' ? 'SWAP' : 'CMD'}
-                  </span>
-                </span>
-                {/* Notification badge for Command Center */}
-                {v.key === 'command' && unseenCount > 0 && (
-                  <motion.span
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    style={{
-                      position: 'absolute', top: 4, right: 6,
-                      minWidth: 16, height: 16, borderRadius: 8,
-                      background: '#FF4C6A',
-                      color: '#fff', fontFamily: C.M, fontSize: 9, fontWeight: 700,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      padding: '0 4px',
-                      boxShadow: '0 0 8px rgba(255,76,106,0.5)',
-                      zIndex: 2,
-                    }}
-                  >
-                    {unseenCount > 99 ? '99+' : unseenCount}
-                  </motion.span>
-                )}
-              </motion.button>
-            ))}
-          </motion.div>
-        )}
-
-        {/* WidgetContainer — sempre montato, sfondo vetro fisso, cross-fade CSS puro */}
-        <div className="widget-container bf-blur-32s" style={{
-          width: '100%',
-          maxWidth: 480,
-          background: 'rgba(8,12,30,0.72)',
-          border: '1px solid rgba(255,255,255,0.18)',
-          borderRadius: isMobileHome ? 16 : 20,
-          boxShadow: '0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.15)',
-          overflow: 'hidden',
-          position: 'relative',
-        }}>
-          {/* Send — always mounted */}
-          <div style={view === 'send' ? panelActive : panelHidden}>
-            {wallet.activeFamily === 'evm' ? (
-              <ErrorBoundary module="TransferForm">
-                <TransferForm noCard externalToken={selectedToken} />
-              </ErrorBoundary>
-            ) : (
-              <NonEvmPlaceholder family={wallet.activeFamily} />
-            )}
-          </div>
-
-          {/* Swap — always mounted */}
-          <div style={view === 'swap' ? panelActive : panelHidden}>
-            {wallet.activeFamily === 'evm' ? (
-              <ErrorBoundary module="SwapModule">
-                <SwapModule noCard onSwapComplete={() => {}} />
-              </ErrorBoundary>
-            ) : (
-              <NonEvmPlaceholder family={wallet.activeFamily} />
-            )}
-          </div>
-
-          {/* Command Center — always mounted */}
-          <div style={view === 'command' ? panelActive : panelHidden}>
-            <ErrorBoundary module="CommandCenter">
-              <CommandCenter ownerAddress={address} chainId={chainId} isVisible={view === 'command'} deepLink={commandDeepLink} onDeepLinkConsumed={() => setCommandDeepLink(null)} />
-            </ErrorBoundary>
-          </div>
+        <div style={{ marginBottom: isMobileHome ? 24 : 48, width: '100%' }}>
+          <HeroTitle isMobile={isMobileHome} />
         </div>
 
       </main>
