@@ -28,6 +28,7 @@ import {SafeERC20}        from "@openzeppelin/contracts/token/ERC20/utils/SafeER
 import {ReentrancyGuard}  from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {ECDSA}            from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import {EIP712}           from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 
 // ── Uniswap V3 interfaces ──────────────────────────────────────────────────
 interface ISwapRouter {
@@ -77,7 +78,7 @@ error InsufficientLiquidity();
 error SameToken();
 error MEVGuard();           // amountOutMinimum == 0
 
-contract FeeRouterV4_1 is Ownable, ReentrancyGuard {
+contract FeeRouterV4_1 is Ownable, ReentrancyGuard, EIP712 {
     using SafeERC20 for IERC20;
     using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
@@ -107,8 +108,6 @@ contract FeeRouterV4_1 is Ownable, ReentrancyGuard {
     mapping(bytes32  => uint24)  public poolFeeOverride;
 
     // ── EIP-712 ────────────────────────────────────────────────────────────
-    bytes32 private immutable _DOMAIN_SEPARATOR;
-
     bytes32 private constant _ORACLE_TYPEHASH = keccak256(
         "OracleApproval(address sender,address recipient,"
         "address tokenIn,address tokenOut,uint256 amountIn,"
@@ -151,7 +150,7 @@ contract FeeRouterV4_1 is Ownable, ReentrancyGuard {
         address _weth,
         uint16  _feeBps,
         address _owner
-    ) Ownable(_owner) {
+    ) Ownable(_owner) EIP712("FeeRouterV4_1", "4.1") {
         if (_permit2      == address(0)) revert ZeroAddress();
         if (_treasury     == address(0)) revert ZeroAddress();
         if (_oracleSigner == address(0)) revert ZeroAddress();
@@ -165,14 +164,6 @@ contract FeeRouterV4_1 is Ownable, ReentrancyGuard {
         WETH          = IWETH(_weth);
         oracleSigner  = _oracleSigner;
         feeBps        = _feeBps;
-
-        _DOMAIN_SEPARATOR = keccak256(abi.encode(
-            keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
-            keccak256(bytes("FeeRouterV4_1")),
-            keccak256(bytes("4.1")),
-            block.chainid,
-            address(this)
-        ));
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -316,7 +307,7 @@ contract FeeRouterV4_1 is Ownable, ReentrancyGuard {
     }
 
     function domainSeparator() external view returns (bytes32) {
-        return _DOMAIN_SEPARATOR;
+        return _domainSeparatorV4();
     }
 
     // ── Owner ──────────────────────────────────────────────────────────────
@@ -442,7 +433,7 @@ contract FeeRouterV4_1 is Ownable, ReentrancyGuard {
             _ORACLE_TYPEHASH,
             sender, recipient, tokenIn, tokenOut, amountIn, nonce, deadline
         ));
-        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", _DOMAIN_SEPARATOR, structHash));
+        bytes32 digest = _hashTypedDataV4(structHash);
         address recovered = digest.recover(signature);
         if (recovered != oracleSigner) revert OracleSignatureInvalid();
     }

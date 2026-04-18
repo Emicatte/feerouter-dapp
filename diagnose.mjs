@@ -14,7 +14,7 @@ function loadEnv(path) {
       const key = trimmed.slice(0, eq).trim()
       const val = trimmed.slice(eq + 1).trim()
       if (!process.env[key]) process.env[key] = val
-    }
+    } 
   } catch {}
 }
 loadEnv('.env.local')

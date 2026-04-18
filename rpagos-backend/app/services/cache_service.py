@@ -42,6 +42,79 @@ _redis_cb = CircuitBreaker(
 
 
 # ═══════════════════════════════════════════════════════════
+#  Centralized Redis Circuit Breaker (gates get_redis)
+# ═══════════════════════════════════════════════════════════
+
+from enum import Enum as _Enum
+
+
+class _RedisCBState(_Enum):
+    CLOSED = "closed"
+    OPEN = "open"
+    HALF_OPEN = "half_open"
+
+
+_rcb_state: _RedisCBState = _RedisCBState.CLOSED
+_rcb_failure_count: int = 0
+_rcb_opened_at: float = 0.0
+_rcb_last_probe_at: float = 0.0
+
+RCB_FAILURE_THRESHOLD = 3
+RCB_OPEN_DURATION_S = 15
+RCB_HALF_OPEN_PROBE_INTERVAL_S = 5
+
+
+def _rcb_record_success() -> None:
+    global _rcb_state, _rcb_failure_count
+    if _rcb_state != _RedisCBState.CLOSED:
+        logger.info("Redis circuit breaker → CLOSED (recovered)")
+    _rcb_state = _RedisCBState.CLOSED
+    _rcb_failure_count = 0
+
+
+def _rcb_record_failure() -> None:
+    global _rcb_state, _rcb_failure_count, _rcb_opened_at
+    _rcb_failure_count += 1
+    if _rcb_failure_count >= RCB_FAILURE_THRESHOLD and _rcb_state != _RedisCBState.OPEN:
+        _rcb_state = _RedisCBState.OPEN
+        _rcb_opened_at = time.monotonic()
+        logger.warning(
+            "Redis circuit breaker OPEN after %d failures — "
+            "connections gated for %ds",
+            _rcb_failure_count, RCB_OPEN_DURATION_S,
+        )
+
+
+def _rcb_should_attempt() -> bool:
+    global _rcb_state, _rcb_last_probe_at
+    now = time.monotonic()
+
+    if _rcb_state == _RedisCBState.CLOSED:
+        return True
+
+    if _rcb_state == _RedisCBState.OPEN:
+        if now - _rcb_opened_at < RCB_OPEN_DURATION_S:
+            return False
+        _rcb_state = _RedisCBState.HALF_OPEN
+        _rcb_last_probe_at = 0.0
+        logger.info("Redis circuit breaker → HALF_OPEN (probing recovery)")
+
+    if now - _rcb_last_probe_at < RCB_HALF_OPEN_PROBE_INTERVAL_S:
+        return False
+    _rcb_last_probe_at = now
+    return True
+
+
+def get_redis_cb_state() -> dict:
+    """Return current CB state for health endpoints."""
+    return {
+        "state": _rcb_state.value,
+        "failure_count": _rcb_failure_count,
+        "opened_at": _rcb_opened_at if _rcb_state != _RedisCBState.CLOSED else None,
+    }
+
+
+# ═══════════════════════════════════════════════════════════
 #  In-Memory Fallback Cache (LRU, TTL-aware)
 # ═══════════════════════════════════════════════════════════
 
@@ -91,8 +164,16 @@ _redis_down_warned = False
 # ═══════════════════════════════════════════════════════════
 
 async def get_redis() -> Optional[redis.Redis]:
-    """Lazy-init Redis connection pool. Returns None if not configured."""
+    """Lazy-init Redis connection pool. Returns None if CB is open or connection fails.
+
+    Centralized circuit breaker prevents thundering-herd on Redis recovery:
+    when Redis is down, all callers get None immediately without retrying.
+    """
     global _pool
+
+    if not _rcb_should_attempt():
+        return None
+
     if _pool is None:
         settings = get_settings()
         url = getattr(settings, 'redis_url', None)
@@ -110,9 +191,22 @@ async def get_redis() -> Optional[redis.Redis]:
             )
             await _pool.ping()
             logger.info("Redis connected: %s", url)
+            _rcb_record_success()
         except Exception as e:
             logger.error("Redis connection failed: %s", e)
             _pool = None
+            _rcb_record_failure()
+            return None
+    else:
+        try:
+            await _pool.ping()
+            _rcb_record_success()
+        except Exception as e:
+            logger.debug("Redis ping failed: %s", e)
+            _rcb_record_failure()
+            _pool = None
+            return None
+
     return _pool
 
 

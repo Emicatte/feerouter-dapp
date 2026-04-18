@@ -228,4 +228,78 @@ contract FeeRouterV4_1Test is Test {
         assertTrue(ok);
         assertEq(address(router).balance, 1 ether);
     }
+
+    // ── EIP-712 fork replay protection ──────────────────────────────────
+
+    function test_domainSeparatorChangesOnFork() public {
+        bytes32 ds1 = router.domainSeparator();
+
+        // Simulate chain fork by changing chainid
+        vm.chainId(999999);
+
+        bytes32 ds2 = router.domainSeparator();
+        assertTrue(ds1 != ds2, "Domain separator must change after fork");
+    }
+
+    function test_domainSeparatorStableOnSameChain() public {
+        bytes32 ds1 = router.domainSeparator();
+        bytes32 ds2 = router.domainSeparator();
+        assertEq(ds1, ds2);
+    }
+
+    function test_forkRejectsOriginalChainSignature() public {
+        // Setup: create a valid oracle signature on the original chain
+        (address oracleSigner, uint256 oraclePk) = makeAddrAndKey("forkOracle");
+        vm.prank(owner);
+        router.setOracleSigner(oracleSigner);
+
+        address sender    = makeAddr("sender");
+        address recipient = makeAddr("recipient");
+        address token     = address(usdc);
+        uint256 amount    = 1000e18;
+        bytes32 nonce     = keccak256("fork-test-nonce");
+        uint256 deadline  = block.timestamp + 300;
+
+        // Build EIP-712 digest on current chain
+        bytes32 structHash = keccak256(abi.encode(
+            keccak256("OracleApproval(address sender,address recipient,address tokenIn,address tokenOut,uint256 amountIn,bytes32 nonce,uint256 deadline)"),
+            sender, recipient, token, token, amount, nonce, deadline
+        ));
+        bytes32 domainSep = router.domainSeparator();
+        bytes32 digest    = keccak256(abi.encodePacked("\x19\x01", domainSep, structHash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(oraclePk, digest);
+        bytes memory sig = abi.encodePacked(r, s, v);
+
+        // Fork: change chain id
+        vm.chainId(999999);
+
+        // Fund sender and approve
+        usdc.mint(sender, amount);
+        vm.prank(sender);
+        usdc.approve(address(router), amount);
+
+        // Attempt transfer with original-chain signature — must revert
+        vm.prank(sender);
+        vm.expectRevert(OracleSignatureInvalid.selector);
+        router.transferWithOracle(token, amount, recipient, nonce, deadline, sig);
+    }
+
+    // ── eip712Domain() introspection ────────────────────────────────────
+
+    function test_eip712DomainReturnsCorrectValues() public view {
+        (
+            bytes1 fields,
+            string memory name,
+            string memory version,
+            uint256 chainId,
+            address verifyingContract,
+            ,
+        ) = router.eip712Domain();
+
+        assertEq(uint8(fields), 0x0f); // name | version | chainId | verifyingContract
+        assertEq(keccak256(bytes(name)), keccak256(bytes("FeeRouterV4_1")));
+        assertEq(keccak256(bytes(version)), keccak256(bytes("4.1")));
+        assertEq(chainId, block.chainid);
+        assertEq(verifyingContract, address(router));
+    }
 }

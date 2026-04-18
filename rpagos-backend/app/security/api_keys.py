@@ -13,6 +13,7 @@ import bcrypt
 import hashlib
 import hmac
 import logging
+import os
 import secrets
 from datetime import datetime, timezone
 from functools import wraps
@@ -96,7 +97,10 @@ async def verify_api_key(request: Request) -> Optional[dict]:
     """
     settings = get_settings()
 
-    if settings.debug:
+    if (
+        os.getenv("RSEND_DEV_AUTH_BYPASS") == "1"
+        and not os.getenv("ENVIRONMENT", "").lower().startswith("prod")
+    ):
         return {"client_id": "debug", "name": "Debug Mode"}
 
     if is_exempt(request.url.path):

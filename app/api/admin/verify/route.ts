@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
 
   // Cookie-based auth (new flow)
   if (token) {
-    const { validateToken } = await import('../login/route')
+    const { validateToken } = await import('@/lib/auth/adminTokens')
     if (validateToken(token)) {
       return NextResponse.json({ status: 'ok', auth: 'cookie' })
     }

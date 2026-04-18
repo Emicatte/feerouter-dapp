@@ -189,6 +189,9 @@ async def health_deep():
 
     status_code = 200 if overall == "healthy" else 503 if overall == "unhealthy" else 200
 
+    from app.middleware.db_backpressure import get_db_semaphore_state
+    components["db_backpressure"] = get_db_semaphore_state()
+
     return JSONResponse(
         status_code=status_code,
         content={

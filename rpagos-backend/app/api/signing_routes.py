@@ -60,6 +60,7 @@ class SigningCheckRequest(BaseModel):
 class SigningCheckResponse(BaseModel):
     allowed: bool
     reason: Optional[str] = None
+    details: Optional[str] = None
 
 
 class SigningAuditRequest(BaseModel):
@@ -79,6 +80,28 @@ class SigningAuditRequest(BaseModel):
     ip_address: Optional[str] = None
     user_agent: Optional[str] = None
     correlation_id: Optional[str] = None
+
+
+async def _record_signing_denied(body: "SigningCheckRequest", *, reason: str) -> None:
+    """Record AML-denied signing attempt to the audit log (best-effort)."""
+    try:
+        from app.services.signing_audit import record_signing_event
+
+        await record_signing_event(
+            signer_address="",
+            chain_id=body.chain_id,
+            sender=body.wallet,
+            recipient=body.recipient,
+            token_in=body.token_in,
+            amount_in_wei=body.amount_in_wei,
+            nonce=body.nonce,
+            deadline=body.deadline,
+            approved=False,
+            denial_reason=reason,
+            risk_level="blocked",
+        )
+    except Exception as e:
+        logger.warning("Failed to record signing denial audit: %s", e)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -153,20 +176,89 @@ async def signing_check(body: SigningCheckRequest, request: Request):
             reason=f"deadline_too_far ({body.deadline - now}s > {MAX_DEADLINE_SECONDS}s)",
         )
 
-    # ── 5. Rate limiting (Redis) ─────────────────────────
+    # ── 5. AML screening (fail-closed) ─────────────────────
+    from app.services.aml_service import is_blacklisted, full_aml_check
+    from app.services.aml_exceptions import AMLBlockedError
+
+    try:
+        blocked, block_reason = await is_blacklisted(body.recipient)
+        if blocked:
+            logger.warning(
+                "Signing rejected: recipient blacklisted. addr=%s reason=%s",
+                body.recipient, block_reason,
+            )
+            await _record_signing_denied(body, reason="aml_recipient_blocked")
+            return SigningCheckResponse(
+                allowed=False,
+                reason="aml_recipient_blocked",
+                details=block_reason,
+            )
+
+        blocked_sender, sender_reason = await is_blacklisted(body.wallet)
+        if blocked_sender:
+            logger.warning(
+                "Signing rejected: sender blacklisted. addr=%s reason=%s",
+                body.wallet, sender_reason,
+            )
+            await _record_signing_denied(body, reason="aml_sender_blocked")
+            return SigningCheckResponse(
+                allowed=False,
+                reason="aml_sender_blocked",
+                details=sender_reason,
+            )
+
+        aml_result = await full_aml_check(
+            sender=body.wallet,
+            recipient=body.recipient,
+            amount_eur=0.0,
+            chain_id=body.chain_id,
+            tx_hash=None,
+            token_symbol=body.token_in or "ETH",
+        )
+
+        if not aml_result.approved or aml_result.risk_level == "high":
+            logger.warning(
+                "Signing rejected: AML high risk. sender=%s recipient=%s alerts=%s",
+                body.wallet, body.recipient, aml_result.alerts,
+            )
+            await _record_signing_denied(body, reason="aml_high_risk")
+            return SigningCheckResponse(
+                allowed=False,
+                reason="aml_high_risk",
+                details=f"Alerts: {','.join(aml_result.alerts)}",
+            )
+
+    except AMLBlockedError as e:
+        await _record_signing_denied(body, reason="aml_blocked")
+        return SigningCheckResponse(
+            allowed=False,
+            reason="aml_blocked",
+            details=str(e),
+        )
+    except Exception as e:
+        logger.error(
+            "Signing rejected: AML screening failed (fail-closed). sender=%s err=%s",
+            body.wallet, e,
+        )
+        await _record_signing_denied(body, reason="aml_screening_error")
+        return SigningCheckResponse(
+            allowed=False,
+            reason="aml_screening_error",
+            details="AML screening unavailable — retry later",
+        )
+
+    # ── 6. Rate limiting (Redis) ─────────────────────────
     from app.services.signing_rate_limit import check_signing_rate_limit
 
-    ip = body.ip_address or (
-        request.headers.get("X-Real-IP")
-        or request.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-        or (request.client.host if request.client else None)
-    )
+    from app.security.trusted_proxy import get_real_client_ip
+
+    ip = body.ip_address or get_real_client_ip(request)
 
     allowed, reason = await check_signing_rate_limit(body.wallet, ip)
     if not allowed:
         return SigningCheckResponse(allowed=False, reason=reason)
 
-    # ── 6. Nonce uniqueness (Redis) ──────────────────────
+    # ── 7. Nonce uniqueness (Redis) ──────────────────────
     from app.services.signing_rate_limit import check_nonce_uniqueness
 
     unique, nonce_reason = await check_nonce_uniqueness(body.nonce)

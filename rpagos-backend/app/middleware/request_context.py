@@ -53,17 +53,10 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
         else:
             req_id = uuid.uuid4()
 
-        # Estrai client IP (dietro reverse proxy)
-        client_ip = request.headers.get(
-            "X-Real-IP",
-            request.headers.get(
-                "X-Forwarded-For",
-                request.client.host if request.client else "unknown",
-            ),
-        )
-        # X-Forwarded-For può contenere una lista; prendi il primo
-        if "," in (client_ip or ""):
-            client_ip = client_ip.split(",")[0].strip()
+        # Estrai client IP (validato via trusted proxy)
+        from app.security.trusted_proxy import get_real_client_ip
+
+        client_ip = get_real_client_ip(request)
 
         user_agent = request.headers.get("User-Agent")
 

@@ -73,6 +73,15 @@ class ExecutionEngine:
         before starting any financial operation. Per-chain RPC is checked
         before steps that interact with a specific chain.
         """
+        # ── Kill switch check ───────────────────────────
+        from app.services.kill_switch import kill_switch as _ks
+
+        ks_allowed, ks_reason = await _ks.can_execute()
+        if not ks_allowed:
+            plan.status = StepStatus.FAILED
+            logger.error("[Engine] Plan %s BLOCKED by kill switch: %s", plan.id, ks_reason)
+            return plan
+
         # ── Fail-closed dependency check ────────────────
         try:
             from app.services.circuit_breaker import dependency_guard, SweepBlockedError

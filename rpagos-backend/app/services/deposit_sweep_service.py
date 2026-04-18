@@ -38,16 +38,30 @@ async def execute_sweep(
 
     Idempotente: se l'intent e' gia' settled o sweeping, non fa nulla.
     """
-    from app.services.sweep_service import acquire_sweep_lock, release_sweep_lock
+    from app.services.sweep_service import (
+        acquire_sweep_lock,
+        release_sweep_lock,
+        start_sweep_heartbeat,
+        stop_sweep_heartbeat,
+    )
+
+    from app.services.kill_switch import kill_switch
+
+    allowed, reason = await kill_switch.can_execute()
+    if not allowed:
+        logger.warning("Sweep blocked by kill switch: intent=%s reason=%s", intent_id, reason)
+        return
 
     lock_key = f"deposit:{intent_id}"
     if not await acquire_sweep_lock(lock_key, ttl=300):
         logger.info("Sweep already in progress for intent %s, skipping", intent_id)
         return
 
+    heartbeat = start_sweep_heartbeat(lock_key)
     try:
         await _execute_sweep_inner(intent_id, currency, chain)
     finally:
+        await stop_sweep_heartbeat(heartbeat)
         await release_sweep_lock(lock_key)
 
 

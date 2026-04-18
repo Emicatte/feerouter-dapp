@@ -42,35 +42,7 @@ def _wei_to_eur(amount_wei: int, token: str, decimals: int) -> float:
     return units  # fallback: treat as 1:1
 
 
-# ──────────────────────────────────────────────────────────────
-# Kill-switch shim (graceful fallback)
-#
-# `app.services.kill_switch` è previsto ma non ancora implementato.
-# Per evitare di bloccare l'import del modulo, fornisce no-op shims
-# che vengono sostituiti automaticamente quando il modulo reale
-# viene aggiunto al codebase.
-# ──────────────────────────────────────────────────────────────
-try:  # pragma: no cover — wiring dipendente dall'ambiente
-    from app.services.kill_switch import kill_switch, auto_stop  # type: ignore
-except Exception:  # ImportError o qualunque errore di setup
-    logger.warning(
-        "[split_exec] app.services.kill_switch non disponibile — uso shim no-op "
-        "(allow-all, no auto-stop). Sostituire appena il modulo è pronto."
-    )
-
-    class _KillSwitchShim:
-        def can_execute(self, client_id: str):
-            return True, "shim: allow"
-
-    class _AutoStopShim:
-        def record_success(self, client_id: str) -> None:
-            return None
-
-        def record_failure(self, client_id: str) -> None:
-            return None
-
-    kill_switch = _KillSwitchShim()   # type: ignore
-    auto_stop = _AutoStopShim()       # type: ignore
+from app.services.kill_switch import kill_switch, auto_stop
 
 
 class SplitExecutor:
@@ -110,7 +82,7 @@ class SplitExecutor:
         execution: Optional[SplitExecution] = None
         try:
             # ── Kill switch check ───────────────────────────
-            allowed, reason = kill_switch.can_execute(plan.client_id)
+            allowed, reason = await kill_switch.can_execute(plan.client_id)
             if not allowed:
                 raise RuntimeError(f"Blocked by kill switch: {reason}")
 

@@ -186,7 +186,9 @@ async def is_blacklisted(address: str) -> tuple[bool, Optional[str]]:
             if entry:
                 return True, f"Blacklisted: {entry.reason} (source: {entry.source})"
     except Exception as e:
-        logger.warning("AML DB check failed (fail-open): %s", e)
+        from app.services.aml_exceptions import AMLBlockedError
+        logger.error("AML DB check failed (fail-closed): %s", e)
+        raise AMLBlockedError(f"AML screening unavailable: {e}")
 
     return False, None
 
@@ -239,8 +241,9 @@ async def _get_daily_total_eur(sender: str) -> float:
                 )
             )
             return float(result.scalar_one())
-    except Exception:
-        return 0.0
+    except Exception as e:
+        from app.services.aml_exceptions import AMLDataUnavailableError
+        raise AMLDataUnavailableError(f"Daily total unavailable: {e}")
 
 
 async def _update_daily_total(sender: str, add_eur: float) -> float:
@@ -252,12 +255,16 @@ async def _update_daily_total(sender: str, add_eur: float) -> float:
     try:
         from app.services.cache_service import get_redis
         r = await get_redis()
-        if r:
-            result = await r.eval(_AML_DAILY_INCR_LUA, 1, redis_key, str(add_eur), "86400")
-            return float(result)
-    except Exception:
-        pass
-    return add_eur
+        if not r:
+            from app.services.aml_exceptions import AMLDataUnavailableError
+            raise AMLDataUnavailableError("Redis unavailable for daily total update")
+        result = await r.eval(_AML_DAILY_INCR_LUA, 1, redis_key, str(add_eur), "86400")
+        return float(result)
+    except AMLDataUnavailableError:
+        raise
+    except Exception as e:
+        from app.services.aml_exceptions import AMLDataUnavailableError
+        raise AMLDataUnavailableError(f"Daily total update failed: {e}")
 
 
 async def _get_monthly_total_eur(sender: str) -> float:
@@ -275,8 +282,8 @@ async def _get_monthly_total_eur(sender: str) -> float:
             )
             return float(result.scalar_one())
     except Exception as e:
-        logger.warning("Monthly total query failed: %s", e)
-        return 0.0
+        from app.services.aml_exceptions import AMLDataUnavailableError
+        raise AMLDataUnavailableError(f"Monthly total unavailable: {e}")
 
 
 async def _get_velocity_count(sender: str) -> int:
@@ -287,14 +294,18 @@ async def _get_velocity_count(sender: str) -> int:
     try:
         from app.services.cache_service import get_redis
         r = await get_redis()
-        if r:
-            count = await r.incr(redis_key)
-            if count == 1:
-                await r.expire(redis_key, 3600)  # 1 hour window
-            return int(count)
-    except Exception:
-        pass
-    return 1
+        if not r:
+            from app.services.aml_exceptions import AMLDataUnavailableError
+            raise AMLDataUnavailableError("Redis unavailable for velocity count")
+        count = await r.incr(redis_key)
+        if count == 1:
+            await r.expire(redis_key, 3600)
+        return int(count)
+    except AMLDataUnavailableError:
+        raise
+    except Exception as e:
+        from app.services.aml_exceptions import AMLDataUnavailableError
+        raise AMLDataUnavailableError(f"Velocity count unavailable: {e}")
 
 
 async def _check_structuring(
@@ -329,7 +340,7 @@ async def _check_structuring(
             count = result.scalar_one()
             return count >= cfg["structuring_min_count"]
     except Exception:
-        return False
+        return True
 
 
 async def monitor_transaction(
@@ -346,10 +357,15 @@ async def monitor_transaction(
     Does NOT block transactions (approved is always True unless sanctioned).
     Creates AMLAlert records for compliance review.
     """
+    from app.services.aml_exceptions import AMLDataUnavailableError
+
     alerts: list[str] = []
     risk = "low"
     requires_kyc = False
     requires_review = False
+    daily_total = 0.0
+    monthly_total = 0.0
+    velocity = 0
 
     cfg = await _get_thresholds()
 
@@ -360,24 +376,39 @@ async def monitor_transaction(
         requires_review = True
 
     # ── Daily cumulative ─────────────────────────────────
-    daily_total = await _update_daily_total(sender, amount_eur)
-    if daily_total > cfg["daily"]:
-        alerts.append(AlertType.threshold_daily.value)
+    try:
+        daily_total = await _update_daily_total(sender, amount_eur)
+        if daily_total > cfg["daily"]:
+            alerts.append(AlertType.threshold_daily.value)
+            risk = "high"
+            requires_review = True
+    except AMLDataUnavailableError:
+        logger.error("AML daily counter unavailable — forcing review (fail-closed)")
         risk = "high"
         requires_review = True
 
     # ── Monthly cumulative (DAC8: >€15K → KYC required) ──
-    monthly_total = await _get_monthly_total_eur(sender) + amount_eur
-    if monthly_total > cfg["monthly"]:
-        alerts.append(AlertType.threshold_monthly.value)
+    try:
+        monthly_total = await _get_monthly_total_eur(sender) + amount_eur
+        if monthly_total > cfg["monthly"]:
+            alerts.append(AlertType.threshold_monthly.value)
+            risk = "high"
+            requires_kyc = True
+            requires_review = True
+    except AMLDataUnavailableError:
+        logger.error("AML monthly counter unavailable — forcing review (fail-closed)")
         risk = "high"
-        requires_kyc = True
         requires_review = True
 
     # ── Velocity check ───────────────────────────────────
-    velocity = await _get_velocity_count(sender)
-    if velocity > cfg["velocity"]:
-        alerts.append(AlertType.velocity.value)
+    try:
+        velocity = await _get_velocity_count(sender)
+        if velocity > cfg["velocity"]:
+            alerts.append(AlertType.velocity.value)
+            risk = "high"
+            requires_review = True
+    except AMLDataUnavailableError:
+        logger.error("AML velocity counter unavailable — forcing review (fail-closed)")
         risk = "high"
         requires_review = True
 
@@ -408,7 +439,7 @@ async def monitor_transaction(
             )
 
     return AMLCheckResult(
-        approved=True,  # monitoring never blocks, only flags
+        approved=True,
         risk_level=risk,
         alerts=alerts,
         details=(

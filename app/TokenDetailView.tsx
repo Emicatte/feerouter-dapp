@@ -8,6 +8,7 @@
 
 import { useMemo, useRef, useState } from 'react'
 import { TOKEN_LIST, SUPPORTED_CHAINS, type ChainId } from './tokens/tokenRegistry'
+import type { TokenMarket } from '@/lib/types/tokenMarket'
 
 const C = {
   bg: '#0a0a0f',
@@ -43,15 +44,6 @@ const CHAIN_ICONS: Record<number, string> = {
   81457: 'https://assets.coingecko.com/asset_platforms/images/177/small/blast.jpeg',
   84532: 'https://assets.coingecko.com/asset_platforms/images/131/small/base.jpeg',
   728126428: 'https://assets.coingecko.com/coins/images/1094/small/tron-logo.png',
-}
-
-export interface TokenMarket {
-  price: number | null
-  change24h: number | null
-  sparkline: number[]
-  image: string | null
-  marketCap: number | null
-  volume: number | null
 }
 
 interface Props {

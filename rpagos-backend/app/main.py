@@ -240,6 +240,10 @@ app.add_middleware(IdempotencyMiddleware)
 from app.middleware.request_timeout import RequestTimeoutMiddleware
 app.add_middleware(RequestTimeoutMiddleware)
 
+# ── DB Backpressure Middleware ────────────────────────
+from app.middleware.db_backpressure import DBBackpressureMiddleware
+app.add_middleware(DBBackpressureMiddleware)
+
 # ── Global Error Handler ───────────────────────────────
 from app.middleware.error_handler import ErrorHandlerMiddleware
 app.add_middleware(ErrorHandlerMiddleware)

@@ -218,14 +218,9 @@ async def _redis_ban(key: str, duration: int) -> None:
 
 def _get_client_ip(request: Request) -> str:
     """Estrai il client IP reale (dietro reverse proxy)."""
-    ip = request.headers.get("X-Real-IP")
-    if not ip:
-        forwarded = request.headers.get("X-Forwarded-For")
-        if forwarded:
-            ip = forwarded.split(",")[0].strip()
-    if not ip:
-        ip = request.client.host if request.client else "unknown"
-    return ip
+    from app.security.trusted_proxy import get_real_client_ip
+
+    return get_real_client_ip(request)
 
 
 def _get_api_key_id(request: Request) -> str | None:

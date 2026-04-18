@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   const token = match ? decodeURIComponent(match[1]) : ''
 
   if (token) {
-    const { revokeToken } = await import('../login/route')
+    const { revokeToken } = await import('@/lib/auth/adminTokens')
     revokeToken(token)
   }
 

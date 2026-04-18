@@ -30,13 +30,9 @@ class InputSanitizationMiddleware(BaseHTTPMiddleware):
             body = await request.body()
 
             if declared_oversize or len(body) > MAX_PAYLOAD_BYTES:
-                client_ip = request.headers.get(
-                    "X-Real-IP",
-                    request.headers.get(
-                        "X-Forwarded-For",
-                        request.client.host if request.client else "unknown",
-                    ),
-                )
+                from app.security.trusted_proxy import get_real_client_ip
+
+                client_ip = get_real_client_ip(request)
                 logger.warning(
                     "Oversized payload rejected: %s bytes from %s on %s",
                     len(body) if not declared_oversize else content_length,

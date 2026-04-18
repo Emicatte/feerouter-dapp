@@ -47,9 +47,9 @@ else:
         settings.database_url,
         echo=settings.debug,
         # ── Connection Pool (CRITICO per produzione) ──
-        pool_size=20,            # connessioni permanenti
+        pool_size=20,            # connessioni permanenti (invariato)
         max_overflow=30,         # connessioni extra sotto carico (totale max: 50)
-        pool_timeout=30,         # secondi attesa per una connessione libera
+        pool_timeout=5,          # fast-fail: meglio un 503 rapido di una attesa di 30s
         pool_recycle=1800,       # ricicla connessioni ogni 30min (evita timeout PostgreSQL)
         pool_pre_ping=True,      # verifica connessione prima di usarla
     )

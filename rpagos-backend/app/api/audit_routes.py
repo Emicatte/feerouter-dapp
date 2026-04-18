@@ -120,3 +120,50 @@ async def get_audit_log(
         next_cursor=next_cursor,
         has_more=has_more,
     )
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Kill Switch Admin Endpoints (Wave 8.4)
+# ═══════════════════════════════════════════════════════════════
+
+
+class KillSwitchToggle(BaseModel):
+    active: bool
+
+
+@audit_router.get("/kill-switch/status")
+async def kill_switch_status(_admin: str = Depends(require_admin)):
+    from app.services.kill_switch import get_status
+
+    return await get_status()
+
+
+@audit_router.post("/kill-switch/global")
+async def toggle_global_kill_switch(
+    body: KillSwitchToggle,
+    _admin: str = Depends(require_admin),
+):
+    from app.services.kill_switch import set_global_stop
+
+    await set_global_stop(body.active)
+    return {"global_stopped": body.active}
+
+
+@audit_router.post("/kill-switch/client/{client_id}")
+async def toggle_client_kill_switch(
+    client_id: str,
+    body: KillSwitchToggle,
+    _admin: str = Depends(require_admin),
+):
+    from app.services.kill_switch import set_client_stop
+
+    await set_client_stop(client_id, body.active)
+    return {"client_id": client_id, "stopped": body.active}
+
+
+@audit_router.post("/kill-switch/clear-auto-stop")
+async def clear_auto_stop_endpoint(_admin: str = Depends(require_admin)):
+    from app.services.kill_switch import clear_auto_stop
+
+    await clear_auto_stop()
+    return {"auto_stop": None}

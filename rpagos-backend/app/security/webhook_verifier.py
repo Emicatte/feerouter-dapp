@@ -186,17 +186,10 @@ async def check_rate_limit(source: str) -> bool:
 # ═══════════════════════════════════════════════════════════════
 
 def _extract_client_ip(request: Request) -> str:
-    """Extract the real client IP from proxy headers."""
-    ip = request.headers.get(
-        "X-Real-IP",
-        request.headers.get(
-            "X-Forwarded-For",
-            request.client.host if request.client else "unknown",
-        ),
-    )
-    if "," in ip:
-        ip = ip.split(",")[0].strip()
-    return ip
+    """Extract the real client IP (validated via trusted proxy)."""
+    from app.security.trusted_proxy import get_real_client_ip
+
+    return get_real_client_ip(request)
 
 
 async def verify_webhook(request: Request) -> dict:

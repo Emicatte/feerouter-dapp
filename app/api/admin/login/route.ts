@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
+import { generateToken, TOKEN_TTL_SECONDS } from '@/lib/auth/adminTokens'
 
 // ── Config ──────────────────────────────────────────────────
 
 const COOKIE_NAME = 'admin_session'
-const TOKEN_TTL = 8 * 60 * 60 // 8 hours in seconds
 
 function getAdminSecret(): string {
   return process.env.ADMIN_SECRET || ''
@@ -86,31 +86,6 @@ function recordFailure(ip: string): void {
   }
 }
 
-// ── Token store (in-memory with TTL) ────────────────────────
-
-// TODO: For multi-instance deployments, move token store to Redis
-const tokenStore = new Map<string, { expiresAt: number }>()
-
-function generateToken(): string {
-  const token = crypto.randomBytes(32).toString('hex')
-  tokenStore.set(token, { expiresAt: Date.now() + TOKEN_TTL * 1000 })
-  return token
-}
-
-export function validateToken(token: string): boolean {
-  const entry = tokenStore.get(token)
-  if (!entry) return false
-  if (entry.expiresAt < Date.now()) {
-    tokenStore.delete(token)
-    return false
-  }
-  return true
-}
-
-export function revokeToken(token: string): void {
-  tokenStore.delete(token)
-}
-
 // ── POST /api/admin/login ───────────────────────────────────
 
 // TODO: Add TOTP-based 2FA here — after password verification,
@@ -175,7 +150,7 @@ export async function POST(req: NextRequest) {
     secure: isSecure,
     sameSite: 'strict',
     path: '/',
-    maxAge: TOKEN_TTL,
+    maxAge: TOKEN_TTL_SECONDS,
   })
 
   return res

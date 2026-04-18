@@ -159,6 +159,56 @@ async def release_sweep_lock(key: str) -> None:
 _release_lock = release_sweep_lock
 
 
+HEARTBEAT_INTERVAL_S = 60
+HEARTBEAT_EXTEND_TTL_S = 300
+
+
+async def _heartbeat_loop(key: str) -> None:
+    """Extend the sweep lock TTL periodically until cancelled."""
+    while True:
+        try:
+            await asyncio.sleep(HEARTBEAT_INTERVAL_S)
+            r = await get_redis()
+            if r is not None:
+                await r.expire(f"sweep_lock:{key}", HEARTBEAT_EXTEND_TTL_S)
+                logger.debug(
+                    "Sweep heartbeat extended: key=%s ttl=%ds",
+                    key, HEARTBEAT_EXTEND_TTL_S,
+                )
+        except asyncio.CancelledError:
+            logger.debug("Sweep heartbeat cancelled: key=%s", key)
+            raise
+        except Exception as e:
+            logger.warning(
+                "Sweep heartbeat error (will retry): key=%s err=%s", key, e,
+            )
+
+
+def start_sweep_heartbeat(key: str) -> asyncio.Task:
+    """Start a background heartbeat task for the given lock key.
+
+    Returns the Task handle — caller MUST cancel it when the
+    protected work completes, regardless of success/failure.
+    """
+    return asyncio.create_task(
+        _heartbeat_loop(key),
+        name=f"sweep_heartbeat:{key}",
+    )
+
+
+async def stop_sweep_heartbeat(task: asyncio.Task) -> None:
+    """Cancel a heartbeat task and wait for it to exit cleanly."""
+    if task.done():
+        return
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    except Exception as e:
+        logger.warning("Sweep heartbeat task ended with error: %s", e)
+
+
 # ═══════════════════════════════════════════════════════════════
 #  VALIDATION HELPERS
 # ═══════════════════════════════════════════════════════════════

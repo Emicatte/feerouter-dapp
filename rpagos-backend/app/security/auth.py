@@ -198,10 +198,9 @@ def require_wallet_auth(func: Callable) -> Callable:
         try:
             wallet_address = await authenticate_request(request)
         except AuthError as exc:
-            client_ip = request.headers.get(
-                "X-Real-IP",
-                request.client.host if request.client else "unknown",
-            )
+            from app.security.trusted_proxy import get_real_client_ip
+
+            client_ip = get_real_client_ip(request)
             logger.warning(
                 "Auth failure: %s (ip=%s, addr=%s)",
                 exc.reason,

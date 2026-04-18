@@ -464,6 +464,13 @@ async def _process_alchemy_activity(activity: list, network: str = "") -> None:
         if not to_addr or value <= 0:
             continue
 
+        # Per-TX dedup: protects against Alchemy retrying with different webhook_id
+        if tx_hash:
+            from app.services.idempotency_service import is_tx_processed, mark_tx_processed
+            if await is_tx_processed(tx_hash):
+                logger.info("[webhook] TX %s already processed, skipping", tx_hash[:16])
+                continue
+
         # ERC-20: extract contract address and decimals from rawContract
         raw_contract = tx.get("rawContract") or {}
         token_address = (raw_contract.get("address") or "").lower() or None
@@ -534,6 +541,8 @@ async def _process_alchemy_activity(activity: list, network: str = "") -> None:
                 split_result.get("status"),
                 " (duplicate)" if split_result.get("duplicate") else "",
             )
+            if tx_hash:
+                await mark_tx_processed(tx_hash)
             continue  # Skip forwarding rules for this TX
 
         # Fast path: Celery via thread pool (non-blocking, 2s timeout)
@@ -560,6 +569,9 @@ async def _process_alchemy_activity(activity: list, network: str = "") -> None:
                     "[webhook] process_incoming_tx failed for TX %s: %s",
                     tx_hash[:16] if tx_hash else "?", e,
                 )
+
+        if tx_hash:
+            await mark_tx_processed(tx_hash)
 
 
 # ═══════════════════════════════════════════════════════════

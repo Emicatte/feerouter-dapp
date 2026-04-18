@@ -14,7 +14,7 @@ async function isAuthorized(req: NextRequest): Promise<boolean> {
   // 1. Cookie-based auth (new httpOnly session)
   const cookie = req.cookies.get(COOKIE_NAME)?.value
   if (cookie) {
-    const { validateToken } = await import('../login/route')
+    const { validateToken } = await import('@/lib/auth/adminTokens')
     return validateToken(cookie)
   }
 

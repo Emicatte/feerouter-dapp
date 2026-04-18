@@ -532,3 +532,53 @@ async def test_process_incoming_tx_token_mismatch(rule_in_db):
             )
 
     assert count == 0
+
+
+# ═══════════════════════════════════════════════════════════
+#  7. Per-TX Dedup (tx_hash-based idempotency)
+# ═══════════════════════════════════════════════════════════
+
+
+@pytest.mark.asyncio
+async def test_webhook_per_tx_dedup_skips_already_processed(client: AsyncClient, rule_in_db):
+    """If tx_hash was already processed, activity is skipped even with a new webhook_id."""
+    tx_hash = "0x" + "de" * 32
+    payload = _alchemy_payload(tx_hash=tx_hash)
+
+    with patch("app.api.sweeper_routes.verify_webhook", new_callable=AsyncMock, return_value=payload):
+        with patch("app.services.idempotency_service.is_tx_processed", new_callable=AsyncMock, return_value=True) as mock_check:
+            with patch("app.services.sweep_service.process_incoming_tx", new_callable=AsyncMock) as mock_process:
+                r = await client.post(
+                    "/api/v1/webhooks/alchemy",
+                    content=json.dumps(payload),
+                    headers={"content-type": "application/json"},
+                )
+                import asyncio
+                await asyncio.sleep(0.1)
+
+    assert r.status_code == 200
+    mock_check.assert_called_once_with(tx_hash)
+    mock_process.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_webhook_per_tx_dedup_marks_after_processing(client: AsyncClient, rule_in_db):
+    """After successful processing, tx_hash is marked as processed."""
+    tx_hash = "0x" + "ef" * 32
+    payload = _alchemy_payload(tx_hash=tx_hash)
+
+    with patch("app.api.sweeper_routes.verify_webhook", new_callable=AsyncMock, return_value=payload):
+        with patch("app.services.idempotency_service.is_tx_processed", new_callable=AsyncMock, return_value=False):
+            with patch("app.services.idempotency_service.mark_tx_processed", new_callable=AsyncMock) as mock_mark:
+                with patch("app.services.split_webhook_bridge.maybe_execute_split", new_callable=AsyncMock, return_value=None):
+                    with patch("app.api.sweeper_routes.process_incoming_tx", new_callable=AsyncMock):
+                        r = await client.post(
+                            "/api/v1/webhooks/alchemy",
+                            content=json.dumps(payload),
+                            headers={"content-type": "application/json"},
+                        )
+                        import asyncio
+                        await asyncio.sleep(0.2)
+
+    assert r.status_code == 200
+    mock_mark.assert_called_with(tx_hash)

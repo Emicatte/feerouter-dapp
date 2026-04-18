@@ -65,6 +65,19 @@ export function useBackendCallback() {
         },
         body: JSON.stringify(payload),
       })
+      // 409 Conflict is an idempotent-success condition, not an error.
+      // The backend returns 409 when this tx_hash has already been processed
+      // (Wave 2.1 UNIQUE constraint on payment_intents.matched_tx_hash, or
+      // Wave 2.3 idempotency middleware hit). From the user's perspective the
+      // transaction is already registered — treat it as success.
+      if (res.status === 409) {
+        logger.info('BackendCallback', 'TX already registered (idempotent)', {
+          fiscalRef: String(payload.fiscal_ref),
+          txHash: String(payload.tx_hash),
+        })
+        return { success: true, data: { status: 'already_processed' } }
+      }
+
       if (!res.ok) {
         const errMsg = await parseRSendError(res)
         logger.error('BackendCallback', 'Callback failed', { status: String(res.status), error: errMsg })

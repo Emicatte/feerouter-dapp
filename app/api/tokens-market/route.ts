@@ -11,14 +11,7 @@ import { getAllCoingeckoIds } from '../../tokens/tokenRegistry'
  * is unreachable, so the UI degrades gracefully rather than 502-ing.
  */
 
-export type TokenMarket = {
-  price: number | null
-  change24h: number | null
-  sparkline: number[]
-  image: string | null
-  marketCap: number | null
-  volume: number | null
-}
+import type { TokenMarket } from '@/lib/types/tokenMarket'
 
 const TTL = 5 * 60 * 1000
 let cache: { data: Record<string, TokenMarket>; ts: number } | null = null

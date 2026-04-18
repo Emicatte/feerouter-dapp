@@ -70,6 +70,18 @@ async def get_dependency_summary() -> dict:
     """
     services = await check_all_dependencies()
 
+    from app.services.cache_service import get_redis_cb_state
+    rcb = get_redis_cb_state()
+    services["redis_connection"] = {
+        "status": (
+            "healthy" if rcb["state"] == "closed"
+            else "degraded" if rcb["state"] == "half_open"
+            else "down"
+        ),
+        "circuit_state": rcb["state"],
+        "failures": rcb["failure_count"],
+    }
+
     if not services:
         return {"overall": "healthy", "services": {}}
 
