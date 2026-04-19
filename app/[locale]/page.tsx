@@ -9,37 +9,44 @@ import { motion, AnimatePresence } from 'framer-motion'
 import type { Variants, Transition } from 'framer-motion'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
+import { useTranslations } from 'next-intl'
+import LanguageSwitcher from '@/components/LanguageSwitcher'
 
 // STATIC IMPORTS
-import AccountHeader from './AccountHeader'
+import AccountHeader from '../AccountHeader'
 // Overlays — lazy loaded (only when user opens menu)
-const AboutOverlay = dynamic(() => import('./overlays/AboutOverlay'), { ssr: false })
-const HowOverlay = dynamic(() => import('./overlays/HowOverlay'), { ssr: false })
-const SecurityOverlay = dynamic(() => import('./overlays/SecurityOverlay'), { ssr: false })
-const ComplianceOverlay = dynamic(() => import('./overlays/ComplianceOverlay'), { ssr: false })
-const DevelopersOverlay = dynamic(() => import('./overlays/DevelopersOverlay'), { ssr: false })
-const PricingOverlay = dynamic(() => import('./overlays/PricingOverlay'), { ssr: false })
-const ApiDocsOverlay = dynamic(() => import('./overlays/ApiDocsOverlay'), { ssr: false })
-const CommandCenterOverlay = dynamic(() => import('./overlays/CommandCenterOverlay'), { ssr: false })
-import { useSweepWebSocket } from '../lib/useSweepWebSocket'
-import { useSweepStats } from '../lib/useSweepStats'
-import AntiPhishingSetup from './AntiPhishingSetup'
-import { TokenRow } from './TokenSelector'
-import { getNativeToken, getTokensForChain, type TokenInfo } from './tokens/tokenRegistry'
-import { ChainLogo } from '../src/components/ChainLogo'
-import { useTokenBalance } from './hooks/useTokenBalance'
-import { useTokenPrices } from './hooks/useTokenPrices'
-import { ChainFamilySwitch } from '../components/shared/ChainFamilySwitch'
-import { useUniversalWallet } from '../hooks/useUniversalWallet'
-import type { ChainFamily } from '../lib/chain-adapters/types'
+const AboutOverlay = dynamic(() => import('../overlays/AboutOverlay'), { ssr: false })
+const HowOverlay = dynamic(() => import('../overlays/HowOverlay'), { ssr: false })
+const SecurityOverlay = dynamic(() => import('../overlays/SecurityOverlay'), { ssr: false })
+const ComplianceOverlay = dynamic(() => import('../overlays/ComplianceOverlay'), { ssr: false })
+const DevelopersOverlay = dynamic(() => import('../overlays/DevelopersOverlay'), { ssr: false })
+const PricingOverlay = dynamic(() => import('../overlays/PricingOverlay'), { ssr: false })
+const ApiDocsOverlay = dynamic(() => import('../overlays/ApiDocsOverlay'), { ssr: false })
+const CommandCenterOverlay = dynamic(() => import('../overlays/CommandCenterOverlay'), { ssr: false })
+const HeroWireframe = dynamic(() => import('@/components/HeroWireframe'), { ssr: false })
+import { useSweepWebSocket } from '../../lib/useSweepWebSocket'
+import { useSweepStats } from '../../lib/useSweepStats'
+import AntiPhishingSetup from '../AntiPhishingSetup'
+import { TokenRow } from '../TokenSelector'
+import { getNativeToken, getTokensForChain, type TokenInfo } from '../tokens/tokenRegistry'
+import { ChainLogo } from '../../src/components/ChainLogo'
+import { useTokenBalance } from '../hooks/useTokenBalance'
+import { useTokenPrices } from '../hooks/useTokenPrices'
+import { ChainFamilySwitch } from '../../components/shared/ChainFamilySwitch'
+import { useUniversalWallet } from '../../hooks/useUniversalWallet'
+import type { ChainFamily } from '../../lib/chain-adapters/types'
 import { useWallet as useSolanaWallet } from '@solana/wallet-adapter-react'
 import { useWalletModal } from '@solana/wallet-adapter-react-ui'
-import { useTron } from './providers-tron'
-import type { NonEvmWalletProps } from './AccountHeader'
-import { ToastContainer } from '../components/shared/Toast'
-import ExploreTokens from './ExploreTokens'
-import LandingSections from './LandingSections'
+import { useTron } from '../providers-tron'
+import type { NonEvmWalletProps } from '../AccountHeader'
+import { ToastContainer } from '../../components/shared/Toast'
+import ExploreTokens from '../ExploreTokens'
+import LandingSections from '../LandingSections'
 import { C, EASE } from '@/app/designTokens'
+import SplitText from '@/components/motion/SplitText'
+import SmoothScroll from '@/components/SmoothScroll'
+import FadeIn from '@/components/motion/FadeIn'
+import { StaggerContainer, StaggerItem } from '@/components/motion/Stagger'
 
 
 
@@ -525,16 +532,14 @@ function NetworkTokenWidget({
 //  LIQUID GLASS NAVBAR
 // ═══════════════════════════════════════════════════════════
 function Navbar({
-  activeOverlay, setActiveOverlay, sweeps24h, vol24h, unseenCount,
-  nonEvmWallet,
+  activeOverlay, setActiveOverlay, sweeps24h, vol24h,
 }: {
   activeOverlay: Overlay
   setActiveOverlay: (o: Overlay) => void
   sweeps24h: number
   vol24h: number
-  unseenCount: number
-  nonEvmWallet?: NonEvmWalletProps
 }) {
+  const tNav = useTranslations('nav')
   const [hoveredLink, setHoveredLink] = useState<string | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
@@ -546,12 +551,12 @@ function Navbar({
   }, [])
 
   const links: { key: Overlay; label: string }[] = [
-    { key: 'about',      label: 'About' },
-    { key: 'how',        label: 'How It Works' },
-    { key: 'security',   label: 'Security' },
-    { key: 'compliance', label: 'Compliance' },
-    { key: 'developers', label: 'Developers' },
-    { key: 'pricing',    label: 'Pricing' },
+    { key: 'about',      label: tNav('about') },
+    { key: 'how',        label: tNav('howItWorks') },
+    { key: 'security',   label: tNav('security') },
+    { key: 'compliance', label: tNav('compliance') },
+    { key: 'developers', label: tNav('developers') },
+    { key: 'pricing',    label: tNav('pricing') },
   ]
 
   return (
@@ -628,8 +633,9 @@ function Navbar({
           ))}
         </div>
 
-        {/* Right: Stats + Wallet */}
+        {/* Right: Stats + Language */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <LanguageSwitcher />
           {/* Live stats pills */}
           {(sweeps24h > 0 || vol24h > 0) && (
             <div className="navbar-right-stats" style={{
@@ -651,8 +657,6 @@ function Navbar({
               </div>
             </div>
           )}
-          <EngineStatus />
-          <AccountHeader nonEvmWallet={nonEvmWallet} />
         </div>
     </nav>
 
@@ -822,174 +826,176 @@ function OverlayShell({ active, onClose, children, isMobile }: { active: boolean
 // ═══════════════════════════════════════════════════════════
 
 function HeroTitle({ isMobile }: { isMobile?: boolean }) {
+  const t = useTranslations('hero')
+  const HERO_EASE = [0.22, 1, 0.36, 1] as [number, number, number, number]
+  const metrics = [
+    { value: '12', label: t('metrics.chainsLive') },
+    { value: '3-level', label: t('metrics.amlScreening') },
+    { value: 'DAC8', label: t('metrics.euReady') },
+    { value: '0', label: t('metrics.custodialRisk') },
+  ]
+
   return (
     <div style={{
-      maxWidth: 720,
       width: '100%',
-      padding: isMobile ? '0 20px' : '0 24px',
+      maxWidth: 1440,
       margin: '0 auto',
+      padding: isMobile ? '0 20px' : '0 96px',
       textAlign: isMobile ? 'center' : 'left',
     }}>
-      {/* Eyebrow */}
-      <div style={{
-        fontFamily: C.M,
-        fontSize: 13,
-        fontWeight: 500,
-        color: C.purple,
-        letterSpacing: '1.4px',
-        marginBottom: 14,
-        textTransform: 'uppercase' as const,
-      }}>
-        Multi-chain payment layer
-      </div>
+      {/* Eyebrow — 0.0s */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.6, ease: HERO_EASE }}
+        style={{
+          fontFamily: C.M,
+          fontSize: 16,
+          fontWeight: 500,
+          color: C.purple,
+          letterSpacing: '0.18em',
+          marginBottom: 8,
+          textTransform: 'uppercase' as const,
+        }}
+      >
+        {t('eyebrow')}
+      </motion.div>
 
-      {/* Title — Ink, NOT terracotta */}
+      {/* Title — split reveal 0.15s / 0.55s */}
       <h1 style={{
         fontFamily: C.D,
-        fontSize: isMobile ? 48 : 72,
-        fontWeight: 500,
+        fontSize: isMobile ? 56 : 'clamp(74px, 8vw, 96px)',
+        fontWeight: 600,
         color: C.text,
-        lineHeight: 1.02,
-        letterSpacing: isMobile ? '-1.2px' : '-2.5px',
-        margin: '0 0 18px',
+        lineHeight: 1.05,
+        letterSpacing: '-0.03em',
+        margin: '0 0 16px',
+        maxWidth: 880,
       }}>
-        Crypto Payments.<br/>Fully Compliant.
+        <SplitText text={t('titleLine1')} delay={0.15} style={{ fontFamily: C.D }} />
+        <br/>
+        <SplitText text={t('titleLine2')} delay={0.55} style={{ fontFamily: C.D }} />
       </h1>
 
-      {/* Subtitle — extended copy */}
-      <p style={{
-        fontFamily: C.D,
-        fontSize: 18,
-        color: C.sub,
-        lineHeight: 1.55,
-        margin: '0 0 28px',
-        maxWidth: 540,
-      }}>
-        Non-custodial payment infrastructure for European business. Double-entry ledger, 3-level AML screening, DAC8 reporting built into the primitives — not bolted on.
-      </p>
+      {/* Subtitle — 0.95s */}
+      <motion.p
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8, delay: 0.95, ease: HERO_EASE }}
+        style={{
+          fontFamily: C.D,
+          fontSize: isMobile ? 17 : 19,
+          color: 'rgba(10,10,10,0.70)',
+          lineHeight: 1.5,
+          margin: '0 0 20px',
+          maxWidth: 760,
+        }}
+      >
+        {t('subtitle')}
+      </motion.p>
 
-      {/* CTAs */}
-      <div style={{
-        display: 'flex',
-        gap: 10,
-        alignItems: 'center',
-        marginBottom: 44,
-        flexWrap: 'wrap',
-        justifyContent: isMobile ? 'center' : 'flex-start',
-      }}>
+      {/* CTAs — 1.15s, hover lift */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.7, delay: 1.15, ease: HERO_EASE }}
+        style={{
+          display: 'flex',
+          gap: 16,
+          alignItems: 'center',
+          marginBottom: 32,
+          flexWrap: 'wrap',
+          justifyContent: isMobile ? 'center' : 'flex-start',
+        }}
+      >
         <Link href="/app" style={{ textDecoration: 'none' }}>
-          <button
+          <motion.button
+            whileHover={{ y: -2 }}
+            whileTap={{ y: 0, scale: 0.98 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 28 }}
             style={{
-              padding: '11px 20px',
+              padding: '14px 28px',
               background: C.text,
               color: C.bg,
               border: 'none',
               borderRadius: 3,
               fontFamily: C.D,
-              fontSize: 14,
+              fontSize: 16,
               fontWeight: 500,
               cursor: 'pointer',
               letterSpacing: 0,
             }}
           >
-            Start building →
-          </button>
+            {t('ctaPrimary')}
+          </motion.button>
         </Link>
-        <button
+        <motion.button
+          whileHover={{ y: -2 }}
+          whileTap={{ y: 0, scale: 0.98 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 28 }}
           onClick={() => {}}
           style={{
-            padding: '11px 20px',
+            padding: '14px 28px',
             background: 'transparent',
             color: C.text,
             border: `1px solid ${C.border}`,
             borderRadius: 3,
             fontFamily: C.D,
-            fontSize: 14,
+            fontSize: 16,
             fontWeight: 500,
             cursor: 'pointer',
           }}
         >
-          Read the spec
-        </button>
-      </div>
+          {t('ctaSecondary')}
+        </motion.button>
+      </motion.div>
 
-      {/* Metrics row */}
-      <div style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: isMobile ? 24 : 52,
-        paddingTop: 22,
-        borderTop: `0.5px solid ${C.border}`,
-      }}>
-        <div>
-          <div style={{
-            fontFamily: C.D,
-            fontSize: 32,
-            fontWeight: 500,
-            color: C.text,
-            letterSpacing: '-0.5px',
-            marginBottom: 3,
-          }}>12</div>
-          <div style={{
-            fontFamily: C.M,
-            fontSize: 11,
-            color: C.sub,
-            letterSpacing: '0.8px',
-            textTransform: 'uppercase' as const,
-          }}>Chains live</div>
-        </div>
-        <div>
-          <div style={{
-            fontFamily: C.D,
-            fontSize: 32,
-            fontWeight: 500,
-            color: C.text,
-            letterSpacing: '-0.5px',
-            marginBottom: 3,
-          }}>3-level</div>
-          <div style={{
-            fontFamily: C.M,
-            fontSize: 11,
-            color: C.sub,
-            letterSpacing: '0.8px',
-            textTransform: 'uppercase' as const,
-          }}>AML screening</div>
-        </div>
-        <div>
-          <div style={{
-            fontFamily: C.D,
-            fontSize: 32,
-            fontWeight: 500,
-            color: C.text,
-            letterSpacing: '-0.5px',
-            marginBottom: 3,
-          }}>DAC8</div>
-          <div style={{
-            fontFamily: C.M,
-            fontSize: 11,
-            color: C.sub,
-            letterSpacing: '0.8px',
-            textTransform: 'uppercase' as const,
-          }}>EU-ready</div>
-        </div>
-        <div>
-          <div style={{
-            fontFamily: C.D,
-            fontSize: 32,
-            fontWeight: 500,
-            color: C.text,
-            letterSpacing: '-0.5px',
-            marginBottom: 3,
-          }}>0</div>
-          <div style={{
-            fontFamily: C.M,
-            fontSize: 11,
-            color: C.sub,
-            letterSpacing: '0.8px',
-            textTransform: 'uppercase' as const,
-          }}>Custodial risk</div>
-        </div>
-      </div>
+      {/* Divider — scaleX reveal 1.35s */}
+      <motion.div
+        initial={{ scaleX: 0 }}
+        animate={{ scaleX: 1 }}
+        transition={{ duration: 1.2, delay: 1.35, ease: HERO_EASE }}
+        style={{
+          transformOrigin: 'left',
+          height: '0.5px',
+          background: C.border,
+          maxWidth: 1600,
+          marginTop: 50,
+          marginBottom: 32,
+        }}
+      />
+
+      {/* Metrics — stagger 1.5s */}
+      <StaggerContainer
+        staggerDelay={0.12}
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: isMobile ? 24 : 56,
+          maxWidth: 1100,
+        }}
+      >
+        {metrics.map((m) => (
+          <StaggerItem key={m.label}>
+            <div style={{
+              fontFamily: C.D,
+              fontSize: isMobile ? 32 : 44,
+              fontWeight: 600,
+              color: C.text,
+              letterSpacing: '-0.02em',
+              lineHeight: 1,
+              marginBottom: 8,
+            }}>{m.value}</div>
+            <div style={{
+              fontFamily: C.M,
+              fontSize: 12,
+              color: C.sub,
+              letterSpacing: '0.14em',
+              textTransform: 'uppercase' as const,
+            }}>{m.label}</div>
+          </StaggerItem>
+        ))}
+      </StaggerContainer>
     </div>
   )
 }
@@ -1062,7 +1068,7 @@ export default function Home() {
   const sweeps24h = today?.sweep_count ?? 0
   const vol24h = today?.volume_eth ?? 0
 
-  // Track unseen sweep events for Command Center badge
+  // Track unseen sweep events for Flow badge
   const { events: sweepEvents } = useSweepWebSocket(address)
   const [unseenCount, setUnseenCount] = useState(0)
   const lastSeenRef = useRef(0)
@@ -1102,7 +1108,7 @@ export default function Home() {
   }, [])
 
   return (
-    <>
+    <SmoothScroll>
       <ToastContainer />
       {/* Background */}
       <div className="rp-bg" aria-hidden="true">
@@ -1133,25 +1139,7 @@ export default function Home() {
       </div>
 
       {/* Navbar */}
-      <Navbar activeOverlay={activeOverlay} setActiveOverlay={setActiveOverlay} sweeps24h={sweeps24h} vol24h={vol24h} unseenCount={unseenCount} nonEvmWallet={nonEvmWallet} />
-
-      {/* Network + Token + Gas — fixed top-right below navbar */}
-      {ready && !isMobileHome && (
-        <NetworkTokenWidget
-          onFamilyChange={(family) => setActiveFamily(family)}
-          onChainSelect={(cid) => {
-            setSelectedChainId(cid)
-            setSelectedToken(getNativeToken(cid) ?? null)
-          }}
-          selectedToken={selectedToken}
-          onTokenSelect={setSelectedToken}
-          selectedChainId={selectedChainId}
-          walletAddress={address}
-          tokenBalanceFmt={selTokenFmt}
-          tokenBalanceEur={selTokenEur}
-          tokenBalanceLoading={selTokenLoading}
-        />
-      )}
+      <Navbar activeOverlay={activeOverlay} setActiveOverlay={setActiveOverlay} sweeps24h={sweeps24h} vol24h={vol24h} />
 
       {/* Overlays */}
       <OverlayShell isMobile={isMobileHome} active={activeOverlay === 'about'} onClose={() => setActiveOverlay(null)}>
@@ -1188,15 +1176,33 @@ export default function Home() {
       {/* Main content — padded below navbar */}
       <main className="main-content" style={{
         minHeight: '100dvh',
-        paddingTop: isMobileHome ? '88px' : 'clamp(104px, 13vh, 160px)',
-        paddingBottom: isMobileHome ? '40px' : '80px', paddingLeft: 16, paddingRight: 16,
-        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        paddingTop: isMobileHome ? '88px' : 'clamp(100px, 10vh, 140px)',
+        paddingBottom: isMobileHome ? '40px' : '120px',
+        display: 'flex', flexDirection: 'column', alignItems: 'stretch',
         opacity: ready ? 1 : 0, transition: 'opacity 0.9s ease',
       }}>
 
         {/* Hero */}
-        <div style={{ marginBottom: isMobileHome ? 24 : 48, width: '100%' }}>
+        <div style={{ width: '100%', position: 'relative' }}>
           <HeroTitle isMobile={isMobileHome} />
+          {!isMobileHome && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: '-50%' }}
+              animate={{ opacity: 1, scale: 1, y: '-50%' }}
+              transition={{ duration: 1.2, delay: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              style={{
+                position: 'absolute',
+                right: '4%',
+                top: '50%',
+                width: 540,
+                height: 540,
+                zIndex: 1,
+                pointerEvents: 'none',
+              }}
+            >
+              <HeroWireframe />
+            </motion.div>
+          )}
         </div>
 
       </main>
@@ -1208,11 +1214,11 @@ export default function Home() {
       />
 
       {/* ── Explore Tokens Section ──── */}
-      <section className="w-full flex justify-center px-4 md:px-8 py-16 md:py-24">
-        <div className="w-full max-w-5xl">
+      <FadeIn y={40} duration={1}>
+        <section style={{ padding: isMobileHome ? '64px 24px' : '96px 96px', maxWidth: 1440 }}>
           <ExploreTokens />
-        </div>
-      </section>
+        </section>
+      </FadeIn>
 
       
 
@@ -1232,6 +1238,6 @@ export default function Home() {
         @keyframes rsSpin{100%{transform:rotate(360deg)}}
         @keyframes rpCtaPulse{0%,100%{transform:scale(1);box-shadow:0 4px 24px rgba(59,130,246,0.3)}50%{transform:scale(1.02);box-shadow:0 6px 32px rgba(59,130,246,0.45)}}
       `}</style>
-    </>
+    </SmoothScroll>
   )
 }

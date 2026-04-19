@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useTranslations } from 'next-intl'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useWriteContract } from 'wagmi'
 import { parseEther, parseUnits, formatUnits, getAddress } from 'viem'
@@ -75,6 +76,7 @@ function RouteWizard({
   distLists: any[]
   isMobile?: boolean
 }) {
+  const t = useTranslations('commandCenter.wizard')
   const [step, setStep] = useState<WizardStep>(1)
   const [direction, setDirection] = useState(1)
 
@@ -208,7 +210,7 @@ function RouteWizard({
         // Re-check here so the user gets a clear client error instead of a 422.
         const lowered = dests.map(d => d.address.toLowerCase())
         if (new Set(lowered).size !== lowered.length) {
-          throw new Error('Duplicate recipient addresses not allowed in a split')
+          throw new Error(t('duplicateAddressError'))
         }
 
         const splitPayload: CreateSplitContractPayload = {
@@ -261,9 +263,9 @@ function RouteWizard({
         }),
         signal: AbortSignal.timeout(5000),
       })
-      if (!oracleRes.ok) throw new Error('Oracle signature request failed')
+      if (!oracleRes.ok) throw new Error(t('oracleRequestFailed'))
       const oracle = await oracleRes.json()
-      if (!oracle.approved) throw new Error(oracle.rejectionReason || 'Oracle denied transaction')
+      if (!oracle.approved) throw new Error(oracle.rejectionReason || t('oracleDenied'))
 
       // ── Step 2: On-chain tx via MetaMask ──────────────────
       const recipientAddr = getAddress(primaryDest.address) as `0x${string}`
@@ -342,7 +344,7 @@ function RouteWizard({
         e?.code === 'ACTION_REJECTED' ||
         /user (rejected|denied|cancelled)/i.test(e?.message ?? '')
       if (!isUserRejection) {
-        setError(e instanceof Error ? e.message : 'Failed to create route')
+        setError(e instanceof Error ? e.message : t('failedToCreateRoute'))
       }
     } finally {
       savingRef.current = false
@@ -482,7 +484,7 @@ function RouteWizard({
                 onClick={goBack}
                 style={{
                   padding: '12px 20px', borderRadius: 12,
-                  background: 'rgba(255,255,255,0.06)', border: `1px solid ${C.border}`,
+                  background: 'rgba(10,10,10,0.08)', border: `1px solid ${C.border}`,
                   color: C.sub, fontFamily: C.D, fontSize: 13, fontWeight: 600,
                   cursor: 'pointer', transition: 'all 0.15s',
                 }}
@@ -499,9 +501,9 @@ function RouteWizard({
                 style={{
                   padding: '12px 28px', borderRadius: 12, border: 'none',
                   background: (step === 2 && !canNext2)
-                    ? 'rgba(255,255,255,0.04)'
+                    ? 'rgba(10,10,10,0.04)'
                     : `linear-gradient(135deg, ${C.red}, ${C.purple})`,
-                  color: (step === 2 && !canNext2) ? 'rgba(255,255,255,0.35)' : '#fff',
+                  color: (step === 2 && !canNext2) ? 'rgba(10,10,10,0.35)' : '#fff',
                   fontFamily: C.D, fontSize: 13, fontWeight: 700,
                   cursor: (step === 2 && !canNext2) ? 'not-allowed' : 'pointer',
                   boxShadow: (step === 2 && !canNext2) ? 'none' : `0 4px 20px ${C.purple}25`,
@@ -518,16 +520,16 @@ function RouteWizard({
                 style={{
                   padding: '12px 28px', borderRadius: 12, border: 'none',
                   background: (!confirmed || saving)
-                    ? 'rgba(255,255,255,0.04)'
+                    ? 'rgba(10,10,10,0.04)'
                     : `linear-gradient(135deg, ${C.red}, ${C.purple})`,
-                  color: (!confirmed || saving) ? 'rgba(255,255,255,0.35)' : '#fff',
+                  color: (!confirmed || saving) ? 'rgba(10,10,10,0.35)' : '#fff',
                   fontFamily: C.D, fontSize: 13, fontWeight: 700,
                   cursor: (!confirmed || saving) ? 'not-allowed' : 'pointer',
                   boxShadow: (!confirmed || saving) ? 'none' : `0 4px 20px ${C.purple}25`,
                   transition: 'all 0.2s',
                 }}
               >
-                {saving ? 'Check wallet to sign...' : 'Sign & Create Route'}
+                {saving ? t('checkWalletToSign') : t('signAndCreateRoute')}
               </motion.button>
             )}
           </div>
@@ -544,10 +546,11 @@ function RouteWizard({
 // ═══════════════════════════════════════════════════════════
 
 function WizardStepBar({ step }: { step: WizardStep }) {
+  const t = useTranslations('commandCenter.wizard')
   const steps = [
-    { n: 1, label: 'Source' },
-    { n: 2, label: 'Destinations' },
-    { n: 3, label: 'Review' },
+    { n: 1, label: t('source') },
+    { n: 2, label: t('destinations') },
+    { n: 3, label: t('review') },
   ]
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 28 }}>
@@ -556,7 +559,7 @@ function WizardStepBar({ step }: { step: WizardStep }) {
           <div style={{
             width: 28, height: 28, borderRadius: '50%',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            background: step >= s.n ? `linear-gradient(135deg, ${C.red}, ${C.purple})` : 'rgba(255,255,255,0.06)',
+            background: step >= s.n ? `linear-gradient(135deg, ${C.red}, ${C.purple})` : 'rgba(10,10,10,0.08)',
             color: step >= s.n ? '#fff' : C.dim,
             fontFamily: C.D, fontSize: 11, fontWeight: 700,
             transition: 'all 0.3s',
@@ -575,7 +578,7 @@ function WizardStepBar({ step }: { step: WizardStep }) {
               flex: 1, height: 2, marginLeft: 8, marginRight: 8, borderRadius: 1,
               background: step > s.n
                 ? `linear-gradient(90deg, ${C.red}, ${C.purple})`
-                : 'rgba(255,255,255,0.06)',
+                : 'rgba(10,10,10,0.08)',
               transition: 'background 0.3s',
             }} />
           )}
@@ -608,7 +611,7 @@ function Step1Source({
       </div>
 
       <div style={{
-        background: 'rgba(255,255,255,0.03)',
+        background: 'rgba(10,10,10,0.03)',
         border: `1px solid ${C.purple}20`,
         borderRadius: 16, padding: '20px 18px',
       }}>
@@ -637,7 +640,7 @@ function Step1Source({
         {/* Balance + Chain */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <div style={{
-            background: 'rgba(255,255,255,0.03)', borderRadius: 10, padding: '10px 12px',
+            background: 'rgba(10,10,10,0.03)', borderRadius: 10, padding: '10px 12px',
             border: `1px solid ${C.border}`,
           }}>
             <div style={{ fontFamily: C.M, fontSize: 8, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
@@ -651,7 +654,7 @@ function Step1Source({
             </div>
           </div>
           <div style={{
-            background: 'rgba(255,255,255,0.03)', borderRadius: 10, padding: '10px 12px',
+            background: 'rgba(10,10,10,0.03)', borderRadius: 10, padding: '10px 12px',
             border: `1px solid ${C.border}`,
           }}>
             <div style={{ fontFamily: C.M, fontSize: 8, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>
@@ -690,6 +693,7 @@ function Step2Destinations({
   ethPrice: number
   distLists: any[]; loadGroup: (entries: DistributionEntry[]) => void
 }) {
+  const t = useTranslations('commandCenter.wizard')
   // BPS-aware totals (canonical) — exact to 0.01%
   const totalBps = destinations.reduce((s, d) => s + (d.shareBps || Math.round(d.percent * 100)), 0)
   const bpsExact = totalBps === 10000
@@ -749,14 +753,14 @@ function Step2Destinations({
             onClick={() => setDestMode(m)}
             style={{
               flex: 1, padding: '8px 0', borderRadius: 10,
-              background: destMode === m ? `${C.purple}12` : 'rgba(255,255,255,0.03)',
+              background: destMode === m ? `${C.purple}12` : 'rgba(10,10,10,0.03)',
               border: `1px solid ${destMode === m ? `${C.purple}30` : C.border}`,
               color: destMode === m ? C.purple : C.dim,
               fontFamily: C.D, fontSize: 11, fontWeight: 600, cursor: 'pointer',
               transition: 'all 0.15s',
             }}
           >
-            {m === 'quick' ? 'Quick Setup' : 'CSV Import'}
+            {m === 'quick' ? t('quickSetup') : t('csvImport')}
           </button>
         ))}
       </div>
@@ -791,7 +795,7 @@ function Step2Destinations({
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05, duration: 0.3, ease: EASE }}
               style={{
-                background: 'rgba(255,255,255,0.03)',
+                background: 'rgba(10,10,10,0.03)',
                 border: `1px solid ${d.address && !isValidAddr(d.address) ? `${C.red}30` : C.border}`,
                 borderRadius: 14, padding: '12px 14px', marginBottom: 8,
               }}
@@ -854,7 +858,7 @@ function Step2Destinations({
                     display: 'flex', alignItems: 'center', gap: 2,
                     width: 72,
                     padding: '4px 6px', borderRadius: 8,
-                    background: 'rgba(255,255,255,0.04)',
+                    background: 'rgba(10,10,10,0.04)',
                     border: `1px solid ${C.border}`,
                   }}>
                     <input
@@ -954,7 +958,7 @@ function Step2Destinations({
             disabled={!csvText.trim()}
             style={{
               marginTop: 8, padding: '8px 16px', borderRadius: 10,
-              background: csvText.trim() ? `${C.blue}12` : 'rgba(255,255,255,0.03)',
+              background: csvText.trim() ? `${C.blue}12` : 'rgba(10,10,10,0.03)',
               border: `1px solid ${csvText.trim() ? `${C.blue}25` : C.border}`,
               color: csvText.trim() ? C.blue : C.dim,
               fontFamily: C.D, fontSize: 11, fontWeight: 600, cursor: csvText.trim() ? 'pointer' : 'not-allowed',
@@ -967,14 +971,14 @@ function Step2Destinations({
           {/* Preview table */}
           {csvParsed.length > 0 && (
             <div style={{
-              marginTop: 10, background: 'rgba(255,255,255,0.03)',
+              marginTop: 10, background: 'rgba(10,10,10,0.03)',
               border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden',
             }}>
               <div style={{
                 display: 'grid', gridTemplateColumns: '24px 1fr 1fr',
                 gap: 6, padding: '6px 10px',
                 borderBottom: `1px solid ${C.border}`,
-                background: 'rgba(255,255,255,0.02)',
+                background: 'rgba(10,10,10,0.04)',
               }}>
                 <span style={{ fontFamily: C.M, fontSize: 8, color: C.dim }}></span>
                 <span style={{ fontFamily: C.M, fontSize: 8, color: C.dim, textTransform: 'uppercase' }}>Address</span>
@@ -997,7 +1001,7 @@ function Step2Destinations({
                   </span>
                 </div>
               ))}
-              <div style={{ padding: '6px 10px', background: 'rgba(255,255,255,0.02)' }}>
+              <div style={{ padding: '6px 10px', background: 'rgba(10,10,10,0.04)' }}>
                 <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>
                   {csvParsed.filter(r => r.valid).length} valid / {csvParsed.length} total
                 </span>
@@ -1013,7 +1017,7 @@ function Step2Destinations({
           onClick={() => setShowAdvanced((v: boolean) => !v)}
           style={{
             width: '100%', padding: '10px 14px', borderRadius: 12,
-            background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`,
+            background: 'rgba(10,10,10,0.03)', border: `1px solid ${C.border}`,
             color: C.sub, fontFamily: C.D, fontSize: 11, fontWeight: 600,
             cursor: 'pointer', textAlign: 'left',
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -1054,19 +1058,20 @@ function AdvancedAccordion({
   onChange: (fn: (s: AdvancedSettings) => AdvancedSettings) => void
   ethPrice: number
 }) {
+  const t = useTranslations('commandCenter.wizard')
   const upd = (field: keyof AdvancedSettings, value: any) =>
     onChange(s => ({ ...s, [field]: value }))
 
   return (
     <div style={{
       padding: '14px', marginTop: 6,
-      background: 'rgba(255,255,255,0.02)',
+      background: 'rgba(10,10,10,0.04)',
       border: `1px solid ${C.border}`,
       borderRadius: 12,
     }}>
       {/* Threshold */}
       <div style={{ marginBottom: 10 }}>
-        <Tip text="Minimum amount to trigger auto-forwarding">
+        <Tip text={t('tipMinAmount')}>
           <label style={labelStyle}>Minimum Amount (ETH)</label>
         </Tip>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1084,7 +1089,7 @@ function AdvancedAccordion({
 
       {/* Token filter */}
       <div style={{ marginBottom: 10 }}>
-        <Tip text="Only forward these tokens (leave empty for all)">
+        <Tip text={t('tipTokenFilter')}>
           <label style={labelStyle}>Token Filter</label>
         </Tip>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -1099,7 +1104,7 @@ function AdvancedAccordion({
                 }))}
                 style={{
                   padding: '4px 10px', borderRadius: 8,
-                  background: on ? `${C.purple}15` : 'rgba(255,255,255,0.03)',
+                  background: on ? `${C.purple}15` : 'rgba(10,10,10,0.03)',
                   border: `1px solid ${on ? `${C.purple}30` : C.border}`,
                   color: on ? C.purple : C.dim,
                   fontFamily: C.M, fontSize: 10, fontWeight: 600, cursor: 'pointer',
@@ -1115,21 +1120,21 @@ function AdvancedAccordion({
 
       {/* Speed */}
       <div style={{ marginBottom: 10 }}>
-        <Tip text="Gas price strategy — Economy saves fees, Fast prioritizes speed">
+        <Tip text={t('tipGasStrategy')}>
           <label style={labelStyle}>Speed</label>
         </Tip>
         <div style={{ display: 'flex', gap: 6 }}>
           {[
-            { key: 'economy' as const, label: 'Economy', desc: 'Lower fees' },
-            { key: 'normal' as const, label: 'Normal', desc: 'Balanced' },
-            { key: 'fast' as const, label: 'Fast', desc: 'Priority' },
+            { key: 'economy' as const, label: t('economy'), desc: t('lowerFees') },
+            { key: 'normal' as const, label: t('normal'), desc: t('balanced') },
+            { key: 'fast' as const, label: t('fast'), desc: t('priority') },
           ].map(opt => (
             <button
               key={opt.key}
               onClick={() => upd('speed', opt.key)}
               style={{
                 flex: 1, padding: '8px 6px', borderRadius: 10,
-                background: settings.speed === opt.key ? `${C.purple}12` : 'rgba(255,255,255,0.03)',
+                background: settings.speed === opt.key ? `${C.purple}12` : 'rgba(10,10,10,0.03)',
                 border: `1px solid ${settings.speed === opt.key ? `${C.purple}30` : C.border}`,
                 color: settings.speed === opt.key ? C.purple : C.sub,
                 fontFamily: C.D, fontSize: 10, fontWeight: 600, cursor: 'pointer',
@@ -1146,13 +1151,13 @@ function AdvancedAccordion({
       {/* Max Gas + Cooldown */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 10 }}>
         <div>
-          <Tip text="Maximum gas price in gwei">
+          <Tip text={t('tipMaxGas')}>
             <label style={labelStyle}>Max Gas (gwei)</label>
           </Tip>
           <input type="number" value={settings.maxGas} onChange={e => upd('maxGas', e.target.value)} style={inp} />
         </div>
         <div>
-          <Tip text="Minimum wait time between forwards (seconds)">
+          <Tip text={t('tipCooldown')}>
             <label style={labelStyle}>Wait Time (sec)</label>
           </Tip>
           <input type="number" value={settings.cooldown} onChange={e => upd('cooldown', e.target.value)} style={inp} />
@@ -1161,7 +1166,7 @@ function AdvancedAccordion({
 
       {/* Daily limit */}
       <div style={{ marginBottom: 10 }}>
-        <Tip text="Maximum daily forwarding volume">
+        <Tip text={t('tipDailyLimit')}>
           <label style={labelStyle}>Daily Limit (ETH)</label>
         </Tip>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1182,7 +1187,7 @@ function AdvancedAccordion({
 
       {/* Auto-swap */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: settings.autoSwap ? 8 : 10 }}>
-        <Tip text="Automatically swap received tokens before forwarding">
+        <Tip text={t('tipAutoSwap')}>
           <span style={{ fontFamily: C.D, fontSize: 11, color: C.sub }}>Auto-Swap</span>
         </Tip>
         <ToggleSwitch value={settings.autoSwap} onChange={v => upd('autoSwap', v)} />
@@ -1196,7 +1201,7 @@ function AdvancedAccordion({
 
       {/* Schedule */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: settings.scheduleEnabled ? 8 : 10 }}>
-        <Tip text="Only forward during specific days and times">
+        <Tip text={t('tipSchedule')}>
           <span style={{ fontFamily: C.D, fontSize: 11, color: C.sub }}>Schedule</span>
         </Tip>
         <ToggleSwitch value={settings.scheduleEnabled} onChange={v => upd('scheduleEnabled', v)} />
@@ -1215,7 +1220,7 @@ function AdvancedAccordion({
                   }))}
                   style={{
                     padding: '4px 8px', borderRadius: 6,
-                    background: on ? `${C.blue}15` : 'rgba(255,255,255,0.03)',
+                    background: on ? `${C.blue}15` : 'rgba(10,10,10,0.03)',
                     border: `1px solid ${on ? `${C.blue}30` : C.border}`,
                     color: on ? C.blue : C.dim,
                     fontFamily: C.M, fontSize: 9, fontWeight: 600, cursor: 'pointer',
@@ -1241,7 +1246,7 @@ function AdvancedAccordion({
 
       {/* Notifications */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: settings.notifyEnabled ? 8 : 0 }}>
-        <Tip text="Get notified when funds are forwarded">
+        <Tip text={t('tipNotifications')}>
           <span style={{ fontFamily: C.D, fontSize: 11, color: C.sub }}>Notifications</span>
         </Tip>
         <ToggleSwitch value={settings.notifyEnabled} onChange={v => upd('notifyEnabled', v)} />
@@ -1287,6 +1292,7 @@ function Step3Review({
   setConfirmed: (v: boolean) => void
   onSimulateSplit?: (p: SimulateSplitPayload) => Promise<SimulationResult>
 }) {
+  const t = useTranslations('commandCenter.wizard')
   const userBal = balance ? parseFloat(balance.formatted) : 0
   const exampleEth = userBal > 0 ? userBal : 1
   const fee = exampleEth * RSEND_FEE_PCT / 100
@@ -1407,7 +1413,7 @@ function Step3Review({
       {destinations.length > 1 && (
         <div style={{
           padding: 12, borderRadius: 12,
-          background: 'rgba(255,255,255,0.02)',
+          background: 'rgba(10,10,10,0.04)',
           border: `1px solid ${C.border}`,
           marginBottom: 10,
         }}>
@@ -1476,7 +1482,7 @@ function Step3Review({
                       <span style={{
                         fontFamily: C.M, fontSize: 7, color: C.dim,
                         padding: '1px 4px', borderRadius: 4,
-                        background: 'rgba(255,255,255,0.04)',
+                        background: 'rgba(10,10,10,0.04)',
                       }}>
                         {r.role}
                       </span>
@@ -1513,7 +1519,7 @@ function Step3Review({
                         <span style={{
                           fontFamily: C.M, fontSize: 7, color: C.dim,
                           padding: '1px 4px', borderRadius: 4,
-                          background: 'rgba(255,255,255,0.04)',
+                          background: 'rgba(10,10,10,0.04)',
                         }}>
                           {d.role}
                         </span>
@@ -1560,7 +1566,7 @@ function Step3Review({
 
       {/* ── Calculation Table ──────────────────────── */}
       <div style={{
-        background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`,
+        background: 'rgba(10,10,10,0.03)', border: `1px solid ${C.border}`,
         borderRadius: 14, padding: '14px 16px', marginBottom: 16,
       }}>
         <div style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 10 }}>
@@ -1623,13 +1629,13 @@ function Step3Review({
       }}>
         {[
           `${advanced.threshold} ETH min`,
-          advanced.speed === 'economy' ? 'Economy speed' : advanced.speed === 'fast' ? 'Fast speed' : 'Normal speed',
+          advanced.speed === 'economy' ? t('economySpeed') : advanced.speed === 'fast' ? t('fastSpeed') : t('normalSpeed'),
           `${advanced.maxGas} gwei max`,
           `${advanced.cooldown}s cooldown`,
           ...(advanced.dailyLimit ? [`${advanced.dailyLimit} ETH/day`] : []),
           ...(advanced.tokenFilter.length > 0 ? [`Tokens: ${advanced.tokenFilter.join(', ')}`] : []),
-          ...(advanced.autoSwap ? ['Auto-swap'] : []),
-          ...(advanced.scheduleEnabled ? ['Scheduled'] : []),
+          ...(advanced.autoSwap ? [t('autoSwap')] : []),
+          ...(advanced.scheduleEnabled ? [t('scheduled')] : []),
           ...(advanced.notifyEnabled ? [advanced.notifyChannel] : []),
         ].map(tag => (
           <span key={tag} style={{
@@ -1645,7 +1651,7 @@ function Step3Review({
       <label style={{
         display: 'flex', alignItems: 'flex-start', gap: 10,
         padding: '12px 14px', borderRadius: 12, cursor: 'pointer',
-        background: confirmed ? `${C.green}06` : 'rgba(255,255,255,0.02)',
+        background: confirmed ? `${C.green}06` : 'rgba(10,10,10,0.04)',
         border: `1px solid ${confirmed ? `${C.green}20` : C.border}`,
         transition: 'all 0.2s',
       }}>
@@ -1680,7 +1686,7 @@ function FlowDiagram({ address, destinations }: { address: string; destinations:
 
   return (
     <div style={{
-      background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}`,
+      background: 'rgba(10,10,10,0.04)', border: `1px solid ${C.border}`,
       borderRadius: 14, padding: '14px 8px', marginBottom: 16,
     }}>
       <svg width="100%" viewBox={`0 0 480 ${h}`} style={{ display: 'block' }}>

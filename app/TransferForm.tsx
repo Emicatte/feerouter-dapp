@@ -41,22 +41,20 @@ import { useKeyboardShortcuts } from '../lib/useKeyboardShortcuts'
 import { useClipboardDetection } from '../lib/useClipboardDetection'
 import { logger } from '../lib/logger'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { useTranslations } from 'next-intl'
+import { useLocale } from 'next-intl'
 
 // ── Theme ──────────────────────────────────────────────────────────────────
+import { C } from '@/app/designTokens'
 const T = {
-  bg:      '#080810',
-  surface: '#0d0d1a',
-  card:    '#0c0c1e',
-  border:  'rgba(255,255,255,0.06)',
-  emerald: '#00ffa3',
-  red:     '#ff2d55',
-  amber:   '#ffb800',
-  pink:    '#ff007a',
-  purple:  '#a78bfa',
-  muted:   'rgba(255,255,255,0.90)',
-  text:    '#ffffff',
-  D:       'var(--font-display)',
-  M:       'var(--font-mono)',
+  ...C,
+  // Semantic status colors — mature, low-saturation palette coherent with terracotta brand
+  emerald: '#16A34A',   // Success (deep forest green, non-fluo)
+  red:     '#B84242',   // Danger (terracotta-adjacent, consistent with brand warmth)
+  amber:   '#A07C11',   // Warning (ochre, sober)
+  // Aliases
+  muted:   C.sub,       // Alias for secondary text color (keeps existing API)
+  pink:    C.purple,    // Alias for brand accent terracotta (keeps existing API)
 }
 
 // ── ABI FeeRouterV3/V4 ─────────────────────────────────────────────────────
@@ -188,7 +186,7 @@ function TokenLogo({ token, size = 24 }: {
   }
   const color = colorMap[token.symbol] ?? '#4a4a6a'
   return (
-    <div style={{ width:size, height:size, borderRadius:'50%', overflow:'hidden', flexShrink:0, background:err?color:'transparent', display:'flex', alignItems:'center', justifyContent:'center', border:'1.5px solid rgba(255,255,255,0.1)' }}>
+    <div style={{ width:size, height:size, borderRadius:'50%', overflow:'hidden', flexShrink:0, background:err?color:'transparent', display:'flex', alignItems:'center', justifyContent:'center', border:'1.5px solid rgba(10,10,10,0.1)' }}>
       {!err
         ? <img src={token.logoURI} alt={token.symbol} width={size} height={size}
             style={{ width:'100%', height:'100%', objectFit:'cover' }}
@@ -219,8 +217,8 @@ function TokenPill({ token, onClick, accentColor, busy }: {
       style={{
         display: 'flex', alignItems: 'center', gap: 8,
         padding: '9px 13px 9px 9px', borderRadius: 18,
-        background: hovered && !busy ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.07)',
-        border: `1px solid ${hovered && !busy ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.1)'}`,
+        background: hovered && !busy ? 'rgba(10,10,10,0.12)' : 'rgba(10,10,10,0.08)',
+        border: `1px solid ${hovered && !busy ? 'rgba(10,10,10,0.18)' : 'rgba(10,10,10,0.1)'}`,
         cursor: busy ? 'default' : 'pointer',
         transition: 'all 0.15s ease',
         flexShrink: 0,
@@ -250,6 +248,7 @@ function TokenSelectorModal({ tokens, onSelect, onClose, title, isMobile, multiC
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const [search, setSearch] = useState('')
+  const tr = useTranslations('send')
 
   // Chiudi cliccando fuori
   useEffect(() => {
@@ -306,10 +305,10 @@ function TokenSelectorModal({ tokens, onSelect, onClose, title, isMobile, multiC
         style={{
           width: '100%', maxWidth: isMobile ? '100%' : 380,
           ...(isMobile ? { height: '85dvh' } : {}),
-          background: '#111120',
-          border: '1px solid rgba(255,255,255,0.10)',
+          background: '#FFFFFF',
+          border: '1px solid rgba(10,10,10,0.10)',
           borderRadius: isMobile ? '20px 20px 0 0' : 20,
-          boxShadow: '0 24px 80px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.04)',
+          boxShadow: '0 24px 80px rgba(0,0,0,0.9), 0 0 0 1px rgba(10,10,10,0.04)',
           overflow: 'hidden',
           display: 'flex', flexDirection: 'column' as const,
           animation: 'rpFadeUp 0.2s var(--ease-spring) both',
@@ -319,16 +318,16 @@ function TokenSelectorModal({ tokens, onSelect, onClose, title, isMobile, multiC
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           padding: '16px 18px 12px',
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          borderBottom: '1px solid rgba(10,10,10,0.08)',
         }}>
           <span style={{ fontFamily:T.D, fontSize:15, fontWeight:800, color:T.text, letterSpacing:'-0.01em' }}>
             {title}
           </span>
           <button
             onClick={onClose}
-            style={{ width:30, height:30, borderRadius:8, background:'rgba(255,255,255,0.06)', border:'none', color:T.muted, cursor:'pointer', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.15s' }}
-            onMouseEnter={e => e.currentTarget.style.background='rgba(255,255,255,0.12)'}
-            onMouseLeave={e => e.currentTarget.style.background='rgba(255,255,255,0.06)'}
+            style={{ width:30, height:30, borderRadius:8, background:'rgba(10,10,10,0.08)', border:'none', color:T.muted, cursor:'pointer', fontSize:16, display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.15s' }}
+            onMouseEnter={e => e.currentTarget.style.background='rgba(10,10,10,0.12)'}
+            onMouseLeave={e => e.currentTarget.style.background='rgba(10,10,10,0.08)'}
           >&#x2715;</button>
         </div>
 
@@ -337,14 +336,14 @@ function TokenSelectorModal({ tokens, onSelect, onClose, title, isMobile, multiC
           <div style={{ padding: '8px 18px 4px' }}>
             <input
               type="text"
-              placeholder="Search token or chain..."
+              placeholder={tr('searchPlaceholder')}
               value={search}
               onChange={e => setSearch(e.target.value)}
               autoFocus
               style={{
                 width: '100%', padding: '10px 14px', borderRadius: 12,
-                border: '1px solid rgba(255,255,255,0.1)',
-                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(10,10,10,0.1)',
+                background: 'rgba(10,10,10,0.04)',
                 color: T.text, fontFamily: T.M, fontSize: 13, outline: 'none',
               }}
             />
@@ -358,7 +357,7 @@ function TokenSelectorModal({ tokens, onSelect, onClose, title, isMobile, multiC
             <>
               {multiChainTokens && (
                 <div style={{ padding: '10px 18px 4px', fontFamily: T.D, fontSize: 10, fontWeight: 700, color: T.muted, letterSpacing: '0.08em', textTransform: 'uppercase' as const }}>
-                  {CHAIN_NAMES[currentChainId ?? 0] ?? 'Current chain'}
+                  {CHAIN_NAMES[currentChainId ?? 0] ?? tr('currentChain')}
                 </div>
               )}
               {filteredLocal.map((t, i) => (
@@ -370,11 +369,11 @@ function TokenSelectorModal({ tokens, onSelect, onClose, title, isMobile, multiC
                     width: '100%', display: 'flex', alignItems: 'center', gap: 14,
                     padding: '13px 18px',
                     background: 'transparent', border: 'none',
-                    borderBottom: i < filteredLocal.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                    borderBottom: i < filteredLocal.length - 1 ? '1px solid rgba(10,10,10,0.05)' : 'none',
                     cursor: 'pointer', transition: 'background 0.12s ease',
                     textAlign: 'left' as const,
                   }}
-                  onMouseEnter={e => e.currentTarget.style.background='rgba(255,255,255,0.05)'}
+                  onMouseEnter={e => e.currentTarget.style.background='rgba(10,10,10,0.05)'}
                   onMouseLeave={e => e.currentTarget.style.background='transparent'}
                 >
                   <TokenLogo token={t} size={36} />
@@ -414,7 +413,7 @@ function TokenSelectorModal({ tokens, onSelect, onClose, title, isMobile, multiC
           {/* Cross-chain tokens */}
           {filteredMultiChain && filteredMultiChain.length > 0 && onSelectMultiChain && (
             <>
-              <div style={{ padding: '12px 18px 4px', fontFamily: T.D, fontSize: 10, fontWeight: 700, color: T.muted, letterSpacing: '0.08em', textTransform: 'uppercase' as const, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ padding: '12px 18px 4px', fontFamily: T.D, fontSize: 10, fontWeight: 700, color: T.muted, letterSpacing: '0.08em', textTransform: 'uppercase' as const, borderTop: '1px solid rgba(10,10,10,0.08)' }}>
                 Cross-chain (CCIP)
               </div>
               {filteredMultiChain.map((t, i) => {
@@ -429,27 +428,27 @@ function TokenSelectorModal({ tokens, onSelect, onClose, title, isMobile, multiC
                       width: '100%', display: 'flex', alignItems: 'center', gap: 14,
                       padding: '13px 18px',
                       background: 'transparent', border: 'none',
-                      borderBottom: i < filteredMultiChain.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                      borderBottom: i < filteredMultiChain.length - 1 ? '1px solid rgba(10,10,10,0.05)' : 'none',
                       cursor: available ? 'pointer' : 'default',
                       opacity: available ? 1 : 0.35,
                       transition: 'background 0.12s ease',
                       textAlign: 'left' as const,
                     }}
-                    onMouseEnter={e => { if (available) e.currentTarget.style.background='rgba(255,255,255,0.05)' }}
+                    onMouseEnter={e => { if (available) e.currentTarget.style.background='rgba(10,10,10,0.05)' }}
                     onMouseLeave={e => e.currentTarget.style.background='transparent'}
                   >
                     {/* Token icon with chain logo badge */}
                     <div style={{ position: 'relative', width: 36, height: 36, flexShrink: 0 }}>
                       <img
                         src={t.logoUrl} alt={t.symbol}
-                        style={{ width: 36, height: 36, borderRadius: '50%', border: '1.5px solid rgba(255,255,255,0.1)' }}
+                        style={{ width: 36, height: 36, borderRadius: '50%', border: '1.5px solid rgba(10,10,10,0.1)' }}
                         onError={e => { e.currentTarget.style.display = 'none' }}
                       />
                       <div style={{
                         position: 'absolute', bottom: -3, right: -3,
                         width: 18, height: 18, borderRadius: '50%',
-                        border: '2px solid #111120',
-                        overflow: 'hidden', background: '#111120',
+                        border: '2px solid #FFFFFF',
+                        overflow: 'hidden', background: '#FFFFFF',
                       }}>
                         <ChainLogo chainId={t.chainId} size={18} />
                       </div>
@@ -506,13 +505,15 @@ function QuotePanel({ quote, tokenOut, isSwap }: {
   tokenOut: TokenConfig | null
   isSwap: boolean
 }) {
+  const t = useTranslations('send')
+
   if (!quote || !isSwap) return null
   const { status, netAmountFmt, feeFmt, minAmountOut, poolFee, errorMessage, gasEstimate } = quote
 
   if (status === 'loading') return (
     <div style={{ padding:'12px 14px', borderRadius:12, background:'rgba(167,139,250,0.06)', border:`1px solid rgba(167,139,250,0.2)`, display:'flex', alignItems:'center', gap:10 }}>
       <div className="rp-spinner" style={{ width:14, height:14, border:`2px solid ${T.purple}30`, borderTopColor:'transparent', borderRadius:'50%' }} />
-      <span style={{ fontFamily:T.D, fontSize:13, color:T.purple }}>Calcolando quotazione Uniswap V3…</span>
+      <span style={{ fontFamily:T.D, fontSize:13, color:T.purple }}>{t('calculatingQuote')}</span>
     </div>
   )
 
@@ -521,7 +522,7 @@ function QuotePanel({ quote, tokenOut, isSwap }: {
       <div style={{ display:'flex', alignItems:'center', gap:8 }}>
         <span>⚠️</span>
         <span style={{ fontFamily:T.D, fontSize:12, fontWeight:700, color:T.amber }}>
-          {status === 'error_liquidity' ? 'Pool con liquidità insufficiente' : 'Quotazione non disponibile'}
+          {status === 'error_liquidity' ? t('poolInsufficient') : t('quoteUnavailable')}
         </span>
       </div>
       <div style={{ fontFamily:T.D, fontSize:11, color:T.muted, marginTop:4, paddingLeft:20 }}>{errorMessage}</div>
@@ -538,10 +539,10 @@ function QuotePanel({ quote, tokenOut, isSwap }: {
         ⚡ Uniswap V3 Quote · Pool {poolFeeLabel}
       </div>
       {[
-        { l: 'Il destinatario riceverà ~', v: `${netAmountFmt} ${tokenOut.symbol}`, h: true },
-        { l: 'Slippage minimo garantito',  v: `${formatUnits(minAmountOut, tokenOut.decimals).slice(0,10)} ${tokenOut.symbol} (0.5%)`, h: false },
-        { l: 'Gateway fee (0.5%)',          v: `${feeFmt} ${tokenOut.symbol}`, h: false },
-        ...(gasEstimate ? [{ l: 'Gas stimato swap', v: `~${gasEstimate.toString()} units`, h: false }] : []),
+        { l: t('recipientReceives'), v: `${netAmountFmt} ${tokenOut.symbol}`, h: true },
+        { l: t('minSlippage'),  v: `${formatUnits(minAmountOut, tokenOut.decimals).slice(0,10)} ${tokenOut.symbol} (0.5%)`, h: false },
+        { l: t('gatewayFee'),          v: `${feeFmt} ${tokenOut.symbol}`, h: false },
+        ...(gasEstimate ? [{ l: t('estimatedGas'), v: `~${gasEstimate.toString()} units`, h: false }] : []),
       ].map((r, i, arr) => (
         <div key={i} style={{ display:'flex', borderLeft:`2px dashed rgba(167,139,250,0.15)` }}>
           <div style={{ width:'45%', padding:'7px 0 7px 14px', fontFamily:T.D, fontSize:11, fontWeight:500, color:T.muted, borderBottom:i<arr.length-1?`1px solid ${T.border}`:'none' }}>{r.l}</div>
@@ -565,6 +566,8 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
   const { generateKey: generateIdempotencyKey, getKey: getIdempotencyKey } = useIdempotencyKey()
   const { clipboardAddress, dismiss: dismissClipboard } = useClipboardDetection()
   const isMobile = useIsMobile()
+  const t = useTranslations('send')
+  const locale = useLocale()
 
   useKeyboardShortcuts({
     onEscape: () => { if (showConfirmation) setShowConfirmation(false) },
@@ -610,10 +613,10 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
   })()
 
   const routeLabels: Record<RouteType, { label: string; icon: string; color: string }> = {
-    direct:        { label: 'Direct Transfer', icon: '\u2192', color: T.emerald },
-    swap:          { label: 'Swap', icon: '\u26A1', color: T.purple },
-    bridge:        { label: 'Bridge via Chainlink CCIP', icon: '\u{1F309}', color: '#3B82F6' },
-    swapAndBridge: { label: 'Swap & Bridge', icon: '\u26A1\u{1F309}', color: T.amber },
+    direct:        { label: t('routeDirect'), icon: '\u2192', color: T.emerald },
+    swap:          { label: t('routeSwap'), icon: '\u26A1', color: T.purple },
+    bridge:        { label: t('routeBridge'), icon: '\u{1F309}', color: '#3B82F6' },
+    swapAndBridge: { label: t('routeSwapAndBridge'), icon: '\u26A1\u{1F309}', color: T.amber },
   }
 
   // ── Token selector modal ───────────────────────────────────────────────
@@ -760,7 +763,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
   const execSwap = useCallback(async (oracle: OracleResponse) => {
     const r = parseAmtIn(); if (!r || !tokenIn || !tokenOut || !registry) return
     if (!swapQuote || swapQuote.status !== 'success') {
-      setTxError('Quotazione non disponibile.'); setPhase('error'); return
+      setTxError(t('quoteUnavailableDot')); setPhase('error'); return
     }
     const minOut = swapQuote.minAmountOut
     if (minOut === 0n) { setTxError('MEV Guard: slippage non configurato.'); setPhase('error'); return }
@@ -785,7 +788,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
   const execSwapDirect = useCallback(async () => {
     const r = parseAmtIn(); if (!r || !tokenIn || !tokenOut || !registry) return
     if (!swapQuote || swapQuote.status !== 'success') {
-      setTxError('Quotazione non disponibile.'); setPhase('error'); return
+      setTxError(t('quoteUnavailableDot')); setPhase('error'); return
     }
     const minOut = swapQuote.minAmountOut
     if (minOut === 0n) { setTxError('MEV Guard: slippage non configurato.'); setPhase('error'); return }
@@ -873,7 +876,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
     const ccipConfig = getCCIPConfig(chainId)
     const destSelector = getCCIPChainSelector(destChainId)
     if (!ccipConfig || !destSelector) {
-      setTxError('Cross-chain non disponibile per questa rotta'); setPhase('error'); return
+      setTxError(t('crossChainUnavailable')); setPhase('error'); return
     }
     if (ccipConfig.senderContract === '0x0000000000000000000000000000000000000000') {
       setTxError('CCIP Sender non deployato. Aggiorna ccipRegistry.ts.'); setPhase('error'); return
@@ -900,13 +903,13 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
     const ccipConfig = getCCIPConfig(chainId)
     const destSelector = getCCIPChainSelector(destChainId)
     if (!ccipConfig || !destSelector) {
-      setTxError('Cross-chain non disponibile per questa rotta'); setPhase('error'); return
+      setTxError(t('crossChainUnavailable')); setPhase('error'); return
     }
     if (ccipConfig.senderContract === '0x0000000000000000000000000000000000000000') {
       setTxError('CCIP Sender non deployato. Aggiorna ccipRegistry.ts.'); setPhase('error'); return
     }
     if (!swapQuote || swapQuote.status !== 'success') {
-      setTxError('Quotazione non disponibile.'); setPhase('error'); return
+      setTxError(t('quoteUnavailableDot')); setPhase('error'); return
     }
     setPhase('signing')
     try {
@@ -917,7 +920,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
       // The swap happens on source chain, then the output token is bridged
       const tokenOutAddr = crossChainOut.address as `0x${string}` | null
       if (!tokenOutAddr) {
-        setTxError('Token out address non disponibile.'); setPhase('error'); return
+        setTxError(t('tokenOutUnavailable')); setPhase('error'); return
       }
 
       if (tokenIn.isNative) {
@@ -986,7 +989,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
     }).then(async rec => {
       setCompRec(rec)
       const api = await complianceApi.submitAfterFinality(rec, 2500)
-      if (api.queued) setTimeout(() => setToast({ msg: 'Compliance in queue.', color: T.amber }), 3000)
+      if (api.queued) setTimeout(() => setToast({ msg: t('complianceInQueue'), color: T.amber }), 3000)
 
       // ── Invia al backend RPagos ─────────────────────────────
       sendBackend({
@@ -1049,23 +1052,23 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
     const m    = e instanceof Error ? e.message : String(e)
     const code = (e as { code?: number })?.code
     if (code === 4001 || m.includes('rejected') || m.includes('denied') || m.includes('cancel')) {
-      setToast({ msg: 'Transazione annullata.', color: T.amber }); setPhase('idle')
-    } else if (m.includes('OracleSignatureInvalid')){ setTxError('Firma Oracle non valida: il signer on-chain non corrisponde. Verifica ORACLE_PRIVATE_KEY.'); setPhase('error') }
-    else if (m.includes('DeadlineExpired'))       { setTxError('Deadline scaduto. Riprova.'); setPhase('error') }
-    else if (m.includes('NonceAlreadyUsed'))      { setTxError('Nonce già usato. Riprova.'); setPhase('error') }
+      setToast({ msg: t('transactionCancelled'), color: T.amber }); setPhase('idle')
+    } else if (m.includes('OracleSignatureInvalid')){ setTxError(t('oracleSignatureInvalid')); setPhase('error') }
+    else if (m.includes('DeadlineExpired'))       { setTxError(t('deadlineExpired')); setPhase('error') }
+    else if (m.includes('NonceAlreadyUsed'))      { setTxError(t('nonceAlreadyUsed')); setPhase('error') }
     else if (m.includes('MEVGuard'))              { setTxError('MEV Guard: slippage non configurato.'); setPhase('error') }
-    else if (m.includes('InsufficientLiquidity')) { setTxError('Liquidità insufficiente nel pool. Riduci l\'importo.'); setPhase('error') }
-    else if (m.includes('SlippageExceeded'))      { setTxError('Slippage superato. Riprova.'); setPhase('error') }
+    else if (m.includes('InsufficientLiquidity')) { setTxError(t('insufficientLiquidity')); setPhase('error') }
+    else if (m.includes('SlippageExceeded'))      { setTxError(t('slippageExceeded')); setPhase('error') }
     // ── ERC-20 specific errors ─────────────────────────────────────────
     else if (m.includes('insufficient') && m.includes('balance'))
-      { setTxError(`Saldo ${externalToken?.symbol ?? 'token'} insufficiente.`); setPhase('error') }
+      { setTxError(t('error', { message: m.slice(0, 200) })); setPhase('error') }
     else if (m.includes('insufficient') && m.includes('allowance'))
-      { setTxError(`Approva prima la spesa di ${externalToken?.symbol ?? 'token'}.`); setPhase('error') }
+      { setTxError(t('error', { message: m.slice(0, 200) })); setPhase('error') }
     else if (m.includes('blacklisted') || m.includes('Blacklistable'))
-      { setTxError(`Transfer ${externalToken?.symbol ?? 'token'} fallito. Il destinatario potrebbe essere in blacklist.`); setPhase('error') }
+      { setTxError(t('error', { message: m.slice(0, 200) })); setPhase('error') }
     else if (m.includes('transfer amount exceeds balance'))
-      { setTxError(`Saldo ${externalToken?.symbol ?? 'token'} insufficiente per questo importo.`); setPhase('error') }
-    else                                          { setTxError('Errore: ' + m.slice(0, 200)); setPhase('error') }
+      { setTxError(t('error', { message: m.slice(0, 200) })); setPhase('error') }
+    else                                          { setTxError(t('error', { message: m.slice(0, 200) })); setPhase('error') }
   }
 
   const handleTransfer = async () => {
@@ -1073,7 +1076,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
     if (isExtERC20 && externalToken?.address) {
       if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) return
       if (!validateAddr(recipient)) return
-      if (isLocked) { setToast({ msg: "Transazione in corso su un'altra scheda", color: T.amber }); return }
+      if (isLocked) { setToast({ msg: t('transactionInProgress'), color: T.amber }); return }
       acquireLock()
 
       const amountWei = parseUnits(amount, externalToken.decimals)
@@ -1082,7 +1085,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
 
       // Balance guard
       if (extTokenBalance < amountWei) {
-        setToast({ msg: `Saldo ${externalToken.symbol} insufficiente`, color: T.red })
+        setToast({ msg: t('error', { message: `${externalToken.symbol} insufficient balance` }), color: T.red })
         releaseLock(); return
       }
 
@@ -1110,7 +1113,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
 
     // ── GUARD: tab lock — TX in corso su altra scheda ─────────────────────
     if (isLocked) {
-      setToast({ msg: "Transazione in corso su un'altra scheda", color: T.amber })
+      setToast({ msg: t('transactionInProgress'), color: T.amber })
       return
     }
     acquireLock()
@@ -1130,7 +1133,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
         })
         const checkData = await checkRes.json()
         if (!checkData.approved) {
-          setTxError('Transazione bloccata dal controllo compliance')
+          setTxError(t('transactionBlocked'))
           setPhase('error'); releaseLock(); return
         }
       } catch {
@@ -1191,7 +1194,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
       if (!tokenChains.includes(chainId)) {
         const targetChain = tokenChains[0]
         if (targetChain) {
-          setToast({ msg: `${tokenIn.symbol} non disponibile su questa rete. Cambio rete…`, color: T.amber })
+          setToast({ msg: t('networkUnavailable', { chain: tokenIn.symbol }), color: T.amber })
           switchChain({ chainId: targetChain as 1 | 8453 | 84532 | 11155111 })
           releaseLock()
           return
@@ -1392,7 +1395,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
   }
   const validateAddr = (addr: string) => {
     if (!addr) { setAddrError(''); return false }
-    if (!isAddress(addr)) { setAddrError('Indirizzo non valido'); return false }
+    if (!isAddress(addr)) { setAddrError(t('invalidAddress')); return false }
     setAddrError(''); return true
   }
   const handleMax = async () => {
@@ -1434,11 +1437,11 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
     :                                         'ready'
 
   const C = {
-    card:  { borderRadius:20, background:'rgba(8,12,30,0.72)', border:'1px solid rgba(255,255,255,0.18)', overflow:'hidden' as const, boxShadow:'0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.15)' } satisfies React.CSSProperties,
-    box:   { borderRadius:14, background:focused?'rgba(255,255,255,0.08)':'rgba(255,255,255,0.04)', padding:'10px 14px', border:'1.5px solid', borderColor:focused?`${T.emerald}60`:'rgba(255,255,255,0.14)', transition:'all 0.2s ease', cursor:'text', boxShadow:focused?`0 0 0 3px ${T.emerald}12`:'inset 0 1px 0 rgba(255,255,255,0.07)' } satisfies React.CSSProperties,
-    box2:  { borderRadius:14, background:'rgba(255,255,255,0.04)', padding:'10px 14px', border:'1.5px solid rgba(255,255,255,0.12)' } satisfies React.CSSProperties,
+    card:  { borderRadius:20, background:'rgba(8,12,30,0.72)', border:'1px solid rgba(10,10,10,0.18)', overflow:'hidden' as const, boxShadow:'0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(10,10,10,0.15)' } satisfies React.CSSProperties,
+    box:   { borderRadius:14, background:focused?'rgba(10,10,10,0.08)':'rgba(10,10,10,0.04)', padding:'10px 14px', border:'1.5px solid', borderColor:focused?`${T.emerald}60`:'rgba(10,10,10,0.14)', transition:'all 0.2s ease', cursor:'text', boxShadow:focused?`0 0 0 3px ${T.emerald}12`:'inset 0 1px 0 rgba(10,10,10,0.08)' } satisfies React.CSSProperties,
+    box2:  { borderRadius:14, background:'rgba(10,10,10,0.04)', padding:'10px 14px', border:'1.5px solid rgba(10,10,10,0.12)' } satisfies React.CSSProperties,
     row:   { display:'flex', alignItems:'center', justifyContent:'space-between' } satisfies React.CSSProperties,
-    input: { width:'100%', background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:10, padding:'10px 12px', color:T.text, fontSize:13, outline:'none', transition:'border-color 0.2s ease, box-shadow 0.2s ease', fontFamily:T.M, boxSizing:'border-box' as const, backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)' } satisfies React.CSSProperties,
+    input: { width:'100%', background:'rgba(10,10,10,0.08)', border:'1px solid rgba(10,10,10,0.12)', borderRadius:10, padding:'10px 12px', color:T.text, fontSize:13, outline:'none', transition:'border-color 0.2s ease, box-shadow 0.2s ease', fontFamily:T.M, boxSizing:'border-box' as const, backdropFilter:'blur(8px)', WebkitBackdropFilter:'blur(8px)' } satisfies React.CSSProperties,
   }
 
   // ── SUCCESS ───────────────────────────────────────────────────────────
@@ -1447,14 +1450,14 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
       <div style={noCard ? {} : C.card} className={`rp-anim-0${noCard ? '' : ' bf-blur-32s'}`}>
         <div style={{ padding:'18px 20px 16px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', gap:10 }}>
           <div style={{ width:9, height:9, borderRadius:'50%', background:T.emerald, boxShadow:`0 0 12px ${T.emerald}` }} />
-          <span style={{ fontFamily:T.D, color:T.emerald, fontSize:13, fontWeight:700, textTransform:'uppercase' as const, letterSpacing:'0.06em' }}>Pagamento Confermato</span>
+          <span style={{ fontFamily:T.D, color:T.emerald, fontSize:13, fontWeight:700, textTransform:'uppercase' as const, letterSpacing:'0.06em' }}>{t('paymentConfirmed')}</span>
           {oracleData?.isSwap && (
             <span style={{ fontFamily:T.D, fontSize:10, color:T.purple, background:`${T.purple}15`, padding:'2px 7px', borderRadius:5, border:`1px solid ${T.purple}30` }}>
               ⚡ Swap V3
             </span>
           )}
           <span style={{ fontFamily:T.M, fontSize:11, color:T.muted, marginLeft:'auto' }}>
-            {new Date(report.timestamp).toLocaleString('it-IT')}
+            {new Date(report.timestamp).toLocaleString(locale)}
           </span>
         </div>
         <div style={{ padding:'20px' }}>
@@ -1536,16 +1539,16 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
               className="bf-blur-16"
               style={{
                 width:34, height:34, borderRadius:10,
-                background: 'rgba(255,255,255,0.08)',
-                border:'1.5px solid rgba(255,255,255,0.14)',
+                background: 'rgba(10,10,10,0.08)',
+                border:'1.5px solid rgba(10,10,10,0.14)',
                 color: T.muted, fontSize:16,
                 cursor: isSwapMode ? 'pointer' : 'default',
                 display:'flex', alignItems:'center', justifyContent:'center',
                 transition:'background 0.2s ease, color 0.2s ease',
-                boxShadow:'0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.10)',
+                boxShadow:'0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(10,10,10,0.10)',
               }}
-              onMouseEnter={e => { if (isSwapMode) { e.currentTarget.style.background='rgba(255,255,255,0.14)'; e.currentTarget.style.color=T.text } }}
-              onMouseLeave={e => { e.currentTarget.style.background='rgba(255,255,255,0.08)'; e.currentTarget.style.color=T.muted }}
+              onMouseEnter={e => { if (isSwapMode) { e.currentTarget.style.background='rgba(10,10,10,0.14)'; e.currentTarget.style.color=T.text } }}
+              onMouseLeave={e => { e.currentTarget.style.background='rgba(10,10,10,0.08)'; e.currentTarget.style.color=T.muted }}
             >
               ⇅
             </button>
@@ -1557,7 +1560,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
               {/* Top row: label + balance */}
               <div style={{ ...C.row, marginBottom:6 }}>
                 <span style={{ fontFamily:T.D, fontSize:13, fontWeight:600, color:T.muted }}>
-                  Receive
+                  {t('receive')}
                 </span>
                 {isConnected && !crossChainOut && (isSwapMode ? tokenOut : tokenIn) && (
                   <span style={{ fontFamily:T.M, fontSize:12, color:T.muted }}>
@@ -1621,7 +1624,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
             <div style={{
               display: 'flex', alignItems: 'center', gap: 8,
               padding: '8px 12px', borderRadius: 10,
-              background: 'rgba(255,255,255,0.03)',
+              background: 'rgba(10,10,10,0.03)',
               border: `1px solid ${routeLabels[routeType].color}20`,
               marginTop: 6,
             }}>
@@ -1642,20 +1645,20 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
 
           {/* ── RECIPIENT ────────────────────────────────────────── */}
           <div className="rp-anim-3" style={{ marginTop:6 }}>
-            <div style={{ padding:'10px 14px 6px', borderRadius:14, background:'rgba(255,255,255,0.025)', border:`1px solid ${T.border}` }}>
+            <div style={{ padding:'10px 14px 6px', borderRadius:14, background:'rgba(10,10,10,0.025)', border:`1px solid ${T.border}` }}>
               <div style={{ ...C.row, marginBottom:6 }}>
                 <span style={{ fontFamily:T.D, fontSize:11, fontWeight:700, textTransform:'uppercase' as const, letterSpacing:'0.08em', color:T.muted }}>
-                  To
+                  {t('to')}
                 </span>
               </div>
               {clipboardAddress && clipboardAddress.toLowerCase() !== recipient.toLowerCase() && (
                 <div style={{
                   padding: '8px 12px', borderRadius: 10, marginBottom: 8,
-                  background: 'rgba(59,130,246,0.08)',
-                  border: '1px solid rgba(59,130,246,0.2)',
+                  background: `${T.purple}10`,
+                  border: `1px solid ${T.purple}30`,
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 }}>
-                  <span style={{ fontFamily: T.M, fontSize: 11, color: '#3B82F6' }}>
+                  <span style={{ fontFamily: T.M, fontSize: 11, color: T.purple }}>
                     📋 {clipboardAddress.slice(0, 8)}...{clipboardAddress.slice(-6)}
                   </span>
                   <div style={{ display: 'flex', gap: 6 }}>
@@ -1663,15 +1666,15 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
                       onClick={() => { setRecipient(clipboardAddress); validateAddr(clipboardAddress); setOracleData(null); setOracleDenied(false); dismissClipboard() }}
                       style={{
                         padding: '4px 10px', borderRadius: 6, border: 'none',
-                        background: 'rgba(59,130,246,0.15)', color: '#3B82F6',
+                        background: `${T.purple}20`, color: T.purple,
                         fontFamily: T.D, fontSize: 10, fontWeight: 700, cursor: 'pointer',
                       }}
-                    >Usa</button>
+                    >{t('useAddress')}</button>
                     <button
                       onClick={dismissClipboard}
                       style={{
                         padding: '4px 8px', borderRadius: 6, border: 'none',
-                        background: 'rgba(255,255,255,0.06)', color: T.muted,
+                        background: 'rgba(10,10,10,0.08)', color: T.muted,
                         fontFamily: T.M, fontSize: 11, cursor: 'pointer',
                       }}
                     >✕</button>
@@ -1695,7 +1698,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
             <div style={{ marginTop:6, padding:'10px 12px', borderRadius:12, background:`${T.amber}0d`, border:`1px solid ${T.amber}30`, display:'flex', alignItems:'center', gap:8 }}>
               <span style={{ fontSize:14 }}>🔒</span>
               <span style={{ fontFamily:T.D, fontSize:11, fontWeight:700, color:T.amber }}>
-                Transazione in corso su un&apos;altra scheda
+                {t('transactionInProgress')}
               </span>
             </div>
           )}
@@ -1705,7 +1708,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
             <div style={{ marginTop:6, padding:'10px 12px', borderRadius:12, background:`${T.red}0d`, border:`1px solid ${T.red}30` }}>
               <div style={{ display:'flex', alignItems:'center', gap:6 }}>
                 <span style={{ fontFamily:T.D, fontSize:11, fontWeight:700, color:T.red }}>
-                  🚫 Bloccata — AML
+                  🚫 {t('blockedAml')}
                 </span>
               </div>
               {oracleData.rejectionReason && (
@@ -1718,14 +1721,14 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
 
           {/* Extras DAC8 — collapsed by default */}
           {showExtras && (
-            <div style={{ marginTop:6, padding:'12px 14px', borderRadius:14, background:'rgba(255,255,255,0.025)', border:`1px solid ${T.border}`, animation:'rpFadeUp 0.2s var(--ease-spring) both' }}>
+            <div style={{ marginTop:6, padding:'12px 14px', borderRadius:14, background:'rgba(10,10,10,0.025)', border:`1px solid ${T.border}`, animation:'rpFadeUp 0.2s var(--ease-spring) both' }}>
               <div style={{ fontFamily:T.D, fontSize:10, fontWeight:700, textTransform:'uppercase' as const, letterSpacing:'0.08em', color:T.muted, marginBottom:8 }}>
                 MiCA/DAC8
               </div>
-              <input type="text" placeholder="Rif. pagamento (es. INV-001)" autoComplete="off" autoCorrect="off" spellCheck={false} value={paymentRef} onChange={e => setPaymentRef(e.target.value)} disabled={busy} style={{ ...C.input, fontSize:16, marginBottom:6 }} />
-              <input type="text" placeholder="ID Fiscale" autoComplete="off" autoCorrect="off" spellCheck={false} value={fiscalRef} onChange={e => setFiscalRef(e.target.value)} disabled={busy} style={{ ...C.input, fontSize:16 }} />
+              <input type="text" placeholder={t('paymentRefPlaceholder')} autoComplete="off" autoCorrect="off" spellCheck={false} value={paymentRef} onChange={e => setPaymentRef(e.target.value)} disabled={busy} style={{ ...C.input, fontSize:16, marginBottom:6 }} />
+              <input type="text" placeholder={t('fiscalId')} autoComplete="off" autoCorrect="off" spellCheck={false} value={fiscalRef} onChange={e => setFiscalRef(e.target.value)} disabled={busy} style={{ ...C.input, fontSize:16 }} />
               {oracleData?.dac8Reportable && (
-                <div style={{ fontFamily:T.D, fontSize:10, color:T.amber, marginTop:5 }}>⚠ DAC8 reportable (≥ €1.000)</div>
+                <div style={{ fontFamily:T.D, fontSize:10, color:T.amber, marginTop:5 }}>⚠ {t('dac8Reportable')}</div>
               )}
             </div>
           )}
@@ -1763,9 +1766,9 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
                   <button
                     onClick={openConnectModal}
                     className="rp-btn-primary"
-                    style={{ width:'100%', padding:'18px', borderRadius:14, border:'none', fontFamily:T.D, fontSize:16, fontWeight:700, letterSpacing:'-0.01em', background:'rgba(255,255,255,0.06)', color:T.text, cursor:'pointer', transition:'all 0.15s' }}
+                    style={{ width:'100%', padding:'18px', borderRadius:14, border:'none', fontFamily:T.D, fontSize:16, fontWeight:700, letterSpacing:'-0.01em', background:'rgba(10,10,10,0.08)', color:T.text, cursor:'pointer', transition:'all 0.15s' }}
                   >
-                    Connetti wallet
+                    {t('connectWallet')}
                   </button>
                 )}
               </ConnectButton.Custom>
@@ -1788,39 +1791,39 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
                     : ctaState==='wrong_network'      ? `linear-gradient(135deg, ${T.amber}, #ffcc00)`
                     : ctaState==='oracle_denied'      ? `${T.red}15`
                     : ctaState==='insufficient'       ? `${T.red}15`
-                    :                                   'rgba(255,255,255,0.04)',
+                    :                                   'rgba(10,10,10,0.04)',
                   color:
                     ctaState==='ready'                ? (isSwapMode ? '#fff' : '#000')
                     : ctaState==='wrong_network'      ? '#000'
                     : ctaState==='oracle_denied'      ? `${T.red}60`
                     : ctaState==='insufficient'       ? `${T.red}60`
-                    :                                   'rgba(255,255,255,0.35)',
+                    :                                   'rgba(10,10,10,0.35)',
                   boxShadow: ctaState==='ready' ? `0 4px 20px ${isSwapMode?T.purple:T.emerald}25` : 'none',
                   transition:'all 0.2s ease',
                 }}
               >
                 {busy ? (
                   <span style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
-                    <span className="rp-spinner" style={{ width:14, height:14, border:`2px solid rgba(255,255,255,0.2)`, borderTopColor:'transparent', borderRadius:'50%', display:'inline-block' }} />
+                    <span className="rp-spinner" style={{ width:14, height:14, border:`2px solid rgba(10,10,10,0.2)`, borderTopColor:'transparent', borderRadius:'50%', display:'inline-block' }} />
                     <span>
                       {phase==='preflight'               ? 'AML Check…'
-                       : phase==='approving'||phase==='wait_approve' ? 'Approvazione…'
-                       :                                   'Finalizzazione…'}
+                       : phase==='approving'||phase==='wait_approve' ? t('approving')
+                       :                                   t('finalizing')}
                     </span>
                   </span>
-                ) : ctaState==='oracle_denied'  ? 'Transazione Bloccata'
-                  : ctaState==='no_liquidity'   ? 'Liquidità insufficiente'
-                  : ctaState==='wrong_network'  ? (noContract ? `${regChain?.chainName ?? 'Rete'} non disponibile` : 'Cambia rete')
-                  : ctaState==='insufficient'   ? `Saldo ${displaySym} insufficiente`
-                  : ctaState==='no_recipient'   ? 'Inserisci destinatario'
-                  : ctaState==='no_amount'      ? 'Inserisci un importo'
-                  : needsApproval && !tokenIn?.isNative ? `Approva ${displaySym}`
-                  : routeType === 'bridge'            ? `Bridge ${sym} \u2192 ${CHAIN_NAMES[destChainId] ?? 'Dest'}`
-                  : routeType === 'swapAndBridge'     ? `Swap & Bridge ${sym} \u2192 ${crossChainOut?.symbol ?? symOut} (${CHAIN_NAMES[destChainId] ?? 'Dest'})`
-                  : isSwapMode && feeRouterAvailable  ? `Swap & Invia ${sym} \u2192 ${symOut}`
-                  : isSwapMode                        ? `Swap Direct ${sym} \u2192 ${symOut}`
-                  : feeRouterAvailable                ? `Invia ${displaySym}`
-                  :                                     `Invia Direct ${displaySym}`}
+                ) : ctaState==='oracle_denied'  ? t('transactionBlockedCta')
+                  : ctaState==='no_liquidity'   ? t('insufficientLiquidityCta')
+                  : ctaState==='wrong_network'  ? (noContract ? t('networkUnavailable', { chain: regChain?.chainName ?? 'Network' }) : t('switchNetwork'))
+                  : ctaState==='insufficient'   ? t('ctaInsufficient', { symbol: displaySym })
+                  : ctaState==='no_recipient'   ? t('enterRecipient')
+                  : ctaState==='no_amount'      ? t('enterAmount')
+                  : needsApproval && !tokenIn?.isNative ? t('ctaApprove', { symbol: displaySym })
+                  : routeType === 'bridge'            ? t('ctaBridge', { from: sym, to: CHAIN_NAMES[destChainId] ?? 'Dest' })
+                  : routeType === 'swapAndBridge'     ? t('ctaSwapBridge', { from: sym, to: crossChainOut?.symbol ?? symOut, dest: CHAIN_NAMES[destChainId] ?? 'Dest' })
+                  : isSwapMode && feeRouterAvailable  ? t('ctaSwapSend', { from: sym, to: symOut })
+                  : isSwapMode                        ? t('ctaSwapDirect', { from: sym, to: symOut })
+                  : feeRouterAvailable                ? t('ctaSend', { symbol: displaySym })
+                  :                                     t('ctaSendDirect', { symbol: displaySym })}
               </button>
             )}
           </div>
@@ -1830,7 +1833,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
       {/* Token Selector Modal */}
       {selectingToken && createPortal(
         <TokenSelectorModal
-          title={selectingToken === 'in' ? 'Seleziona token di input' : 'Seleziona token di output'}
+          title={selectingToken === 'in' ? t('selectInputToken') : t('selectOutputToken')}
           tokens={tokenList}
           onClose={() => setSelectingToken(null)}
           isMobile={isMobile}
@@ -1925,7 +1928,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
               ? { name: chainInfo.name, iconUrl: chainInfo.iconUrl }
               : { name: regChain?.chainName ?? 'Base', iconUrl: '/chains/base.svg' }
             }
-            estimatedTime={isL2 ? '~4 secondi' : '~15 secondi'}
+            estimatedTime={isL2 ? t('estimatedTimeL2') : t('estimatedTimeL1')}
             isHighValue={fiatNum >= 1000}
             isNewRecipient={recipient ? !isKnownRecipient(recipient) : false}
             antiPhishingCode={(() => { try { return localStorage.getItem('rsend_antiphishing_code') || undefined } catch { return undefined } })()}

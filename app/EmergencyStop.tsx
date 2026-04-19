@@ -2,12 +2,7 @@
 
 import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-
-const C = {
-  text: '#E2E2F0', sub: '#8A8FA8', dim: '#4A4E64',
-  red: '#FF4C6A', border: 'rgba(255,255,255,0.06)',
-  D: 'var(--font-display)', M: 'var(--font-mono)',
-}
+import { C } from '@/app/designTokens'
 
 interface Props {
   onStop: () => Promise<any>
@@ -62,7 +57,7 @@ export default function EmergencyStop({ onStop, activeCount }: Props) {
                 onClick={() => setShowConfirm(false)}
                 style={{
                   flex: 1, padding: '10px 0', borderRadius: 10,
-                  background: 'rgba(255,255,255,0.04)',
+                  background: 'rgba(10,10,10,0.04)',
                   border: `1px solid ${C.border}`,
                   color: C.sub, fontFamily: C.D, fontSize: 12,
                   fontWeight: 600, cursor: 'pointer',
@@ -108,7 +103,7 @@ export default function EmergencyStop({ onStop, activeCount }: Props) {
                 disabled={activeCount === 0}
                 style={{
                   width: '100%', padding: '12px 0', borderRadius: 12,
-                  background: activeCount > 0 ? `${C.red}12` : 'rgba(255,255,255,0.02)',
+                  background: activeCount > 0 ? `${C.red}12` : 'rgba(10,10,10,0.02)',
                   border: `1px solid ${activeCount > 0 ? `${C.red}25` : C.border}`,
                   color: activeCount > 0 ? C.red : C.dim,
                   fontFamily: C.D, fontSize: 12, fontWeight: 700,

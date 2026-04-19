@@ -16,6 +16,7 @@ import { getRegistry, type TokenConfig } from '../lib/contractRegistry'
 import { useSwapQuote } from '../lib/useSwapQuote'
 import { mutationHeaders } from '../lib/rsendFetch'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { useTranslations } from 'next-intl'
 
 // Same-origin proxy → see app/api/backend/[...path]/route.ts
 const BACKEND = '/api/backend'
@@ -23,24 +24,8 @@ const BACKEND = '/api/backend'
 // ═══════════════════════════════════════════════════════════
 //  PALETTE
 // ═══════════════════════════════════════════════════════════
-const C = {
-  bg:      '#080810',
-  surface: '#0d0d1a',
-  card:    '#0c0c1e',
-  input:   '#080810',
-  border:  'rgba(255,255,255,0.06)',
-  text:    '#ffffff',
-  sub:     'rgba(255,255,255,0.80)',
-  dim:     'rgba(255,255,255,0.90)',
-  pink:    '#ff007a',
-  green:   '#00ffa3',
-  red:     '#ff2d55',
-  blue:    '#3B82F6',
-  purple:  '#a78bfa',
-  amber:   '#ffb800',
-  D:       'var(--font-display)',
-  M:       'var(--font-mono)',
-}
+import { C as BaseC } from '@/app/designTokens'
+const C = { ...BaseC, input: '#FAFAFA', pink: '#C8512C', green: '#00ffa3', red: '#ff2d55', amber: '#ffb800' }
 
 // ═══════════════════════════════════════════════════════════
 //  TOKEN ICON
@@ -66,12 +51,12 @@ function TIcon({ symbol, size = 28 }: { symbol: string; size?: number }) {
   const logo = LOGOS[symbol]
   const c = TK[symbol] ?? '#5E5E5E'
   if (logo && !err) return (
-    <div style={{ width:size, height:size, borderRadius:'50%', border:'1px solid rgba(255,255,255,0.08)', overflow:'hidden', flexShrink:0, background:C.surface }}>
+    <div style={{ width:size, height:size, borderRadius:'50%', border:'1px solid rgba(10,10,10,0.08)', overflow:'hidden', flexShrink:0, background:C.surface }}>
       <img src={logo} alt={symbol} width={size} height={size} style={{ width:'100%', height:'100%', objectFit:'cover' }} onError={() => setErr(true)} />
     </div>
   )
   return (
-    <div style={{ width:size, height:size, borderRadius:'50%', background:`${c}18`, border:'1px solid rgba(255,255,255,0.06)', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:C.D, fontSize:size*0.36, fontWeight:700, color:`${c}aa`, flexShrink:0 }}>
+    <div style={{ width:size, height:size, borderRadius:'50%', background:`${c}18`, border:'1px solid rgba(10,10,10,0.08)', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:C.D, fontSize:size*0.36, fontWeight:700, color:`${c}aa`, flexShrink:0 }}>
       {symbol.slice(0,2)}
     </div>
   )
@@ -109,6 +94,7 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
   const publicClient = usePublicClient()
   const reg = getRegistry(chainId)
   const isMobile = useIsMobile()
+  const t = useTranslations('swap')
 
   // Token state
   const tokens = useMemo(() => {
@@ -253,7 +239,7 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
       })
       const oracle = await oracleRes.json()
       if (!oracle?.approved) {
-        setError(oracle?.rejectionReason ?? 'Oracle ha rifiutato la transazione')
+        setError(oracle?.rejectionReason ?? t('oracleRejected'))
         setPhase('error'); return
       }
 
@@ -348,7 +334,7 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
 
   if (!reg) return null
 
-  const cardStyle = noCard ? {} : { background: 'rgba(8,12,30,0.72)', border: '1px solid rgba(255,255,255,0.18)', borderRadius: isMobile ? 12 : 20, overflow: 'hidden', boxShadow: '0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.15)' }
+  const cardStyle = noCard ? {} : { background: 'rgba(8,12,30,0.72)', border: '1px solid rgba(10,10,10,0.18)', borderRadius: isMobile ? 12 : 20, overflow: 'hidden', boxShadow: '0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(10,10,10,0.15)' }
   return (
     <div className={noCard ? '' : 'bf-blur-32s'} style={cardStyle}>
       <div style={{ padding: isMobile ? '16px' : '10px 10px 10px' }}>
@@ -356,12 +342,12 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
         {/* ── SELL ─────────────────────────────────────────────── */}
         <div className="rp-anim-1">
           <div style={{
-            borderRadius: 14, background: 'rgba(255,255,255,0.05)', padding: '14px',
-            border: '1.5px solid rgba(255,255,255,0.14)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.07)',
+            borderRadius: 14, background: 'rgba(10,10,10,0.05)', padding: '14px',
+            border: '1.5px solid rgba(10,10,10,0.14)', boxShadow: 'inset 0 1px 0 rgba(10,10,10,0.08)',
           }}>
             {/* Top row: label + balance */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <span style={{ fontFamily: C.D, fontSize: 13, fontWeight: 600, color: C.dim }}>Pay</span>
+              <span style={{ fontFamily: C.D, fontSize: 13, fontWeight: 600, color: C.dim }}>{t('pay')}</span>
               {tokenIn && (
                 <span style={{ fontFamily: C.M, fontSize: 12, color: C.dim }}>
                   {inBalFmt.toFixed(4)} {tokenIn.symbol}
@@ -373,11 +359,11 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
               <button onClick={() => setSelectingFor('in')} style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 padding: '9px 13px 9px 9px', borderRadius: 18,
-                background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)',
+                background: 'rgba(10,10,10,0.08)', border: '1px solid rgba(10,10,10,0.1)',
                 cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0,
               }}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.07)'}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(10,10,10,0.12)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(10,10,10,0.08)'}
               >
                 {tokenIn && <TIcon symbol={tokenIn.symbol} size={22} />}
                 <span style={{ fontFamily: C.D, fontSize: 15, fontWeight: 700, color: C.text }}>{tokenIn?.symbol ?? '—'}</span>
@@ -402,13 +388,13 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
                 <button key={p} onClick={() => setPercentage(p)} style={{
                   flex: isMobile ? '1 1 calc(50% - 2px)' : '1 1 0%',
                   padding: '4px 10px', borderRadius: 8,
-                  background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`,
+                  background: 'rgba(10,10,10,0.03)', border: `1px solid ${C.border}`,
                   color: C.dim, fontFamily: C.M, fontSize: 10, fontWeight: 600,
                   cursor: 'pointer', transition: 'all 0.15s',
                 }}
-                  onMouseEnter={e => { e.currentTarget.style.color = C.text; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)' }}
+                  onMouseEnter={e => { e.currentTarget.style.color = C.text; e.currentTarget.style.borderColor = 'rgba(10,10,10,0.15)' }}
                   onMouseLeave={e => { e.currentTarget.style.color = C.dim; e.currentTarget.style.borderColor = C.border }}
-                >{p === 100 ? 'Max' : `${p}%`}</button>
+                >{p === 100 ? t('max') : `${p}%`}</button>
               ))}
             </div>
           </div>
@@ -418,26 +404,26 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
         <div className="rp-anim-2" style={{ display: 'flex', justifyContent: 'center', margin: '-4px 0', position: 'relative', zIndex: 2 }}>
           <button onClick={flip} disabled={busy} className="bf-blur-16" style={{
             width: 34, height: 34, borderRadius: 10,
-            background: 'rgba(255,255,255,0.08)',
-            border: '1.5px solid rgba(255,255,255,0.18)',
+            background: 'rgba(10,10,10,0.08)',
+            border: '1.5px solid rgba(10,10,10,0.18)',
             color: C.dim, fontSize: 16, cursor: busy ? 'default' : 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'background 0.2s ease, color 0.2s ease', boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.10)',
+            transition: 'background 0.2s ease, color 0.2s ease', boxShadow: '0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(10,10,10,0.10)',
           }}
-            onMouseEnter={e => { if (!busy) { e.currentTarget.style.background = 'rgba(255,255,255,0.14)'; e.currentTarget.style.color = C.text } }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = C.dim }}
+            onMouseEnter={e => { if (!busy) { e.currentTarget.style.background = 'rgba(10,10,10,0.14)'; e.currentTarget.style.color = C.text } }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(10,10,10,0.08)'; e.currentTarget.style.color = C.dim }}
           >⇅</button>
         </div>
 
         {/* ── BUY / RECEIVE ────────────────────────────────────── */}
         <div className="rp-anim-2">
           <div style={{
-            borderRadius: 14, background: 'rgba(255,255,255,0.05)', padding: '14px',
-            border: '1.5px solid rgba(255,255,255,0.14)', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.07)',
+            borderRadius: 14, background: 'rgba(10,10,10,0.05)', padding: '14px',
+            border: '1.5px solid rgba(10,10,10,0.14)', boxShadow: 'inset 0 1px 0 rgba(10,10,10,0.08)',
           }}>
             {/* Top row: label + pool fee */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-              <span style={{ fontFamily: C.D, fontSize: 13, fontWeight: 600, color: C.dim }}>Receive</span>
+              <span style={{ fontFamily: C.D, fontSize: 13, fontWeight: 600, color: C.dim }}>{t('receive')}</span>
               {quote?.poolFee && (
                 <span style={{ fontFamily: C.M, fontSize: 10, color: C.dim }}>
                   Pool: {quote.poolFee === 100 ? '0.01%' : quote.poolFee === 500 ? '0.05%' : quote.poolFee === 3000 ? '0.3%' : '1%'}
@@ -449,11 +435,11 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
               <button onClick={() => setSelectingFor('out')} style={{
                 display: 'flex', alignItems: 'center', gap: 8,
                 padding: '9px 13px 9px 9px', borderRadius: 18,
-                background: 'rgba(255,255,255,0.07)', border: '1px solid rgba(255,255,255,0.1)',
+                background: 'rgba(10,10,10,0.08)', border: '1px solid rgba(10,10,10,0.1)',
                 cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0,
               }}
-                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.12)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.07)'}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(10,10,10,0.12)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(10,10,10,0.08)'}
               >
                 {tokenOut && <TIcon symbol={tokenOut.symbol} size={22} />}
                 <span style={{ fontFamily: C.D, fontSize: 15, fontWeight: 700, color: C.text }}>{tokenOut?.symbol ?? '—'}</span>
@@ -477,15 +463,15 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
         {isMobile && quote?.status === 'success' && tokenIn && tokenOut && (
           <div style={{
             margin: '8px 0', padding: '10px 14px',
-            background: 'rgba(255,255,255,0.02)', borderRadius: 12,
+            background: 'rgba(10,10,10,0.04)', borderRadius: 12,
             border: `1px solid ${C.border}`,
           }}>
-            <div style={{ fontFamily: C.D, fontSize: 9, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: C.dim, marginBottom: 8 }}>Route</div>
+            <div style={{ fontFamily: C.D, fontSize: 9, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: C.dim, marginBottom: 8 }}>{t('route')}</div>
             {[
-              { label: tokenIn.symbol, sub: 'Input', color: C.text },
+              { label: tokenIn.symbol, sub: t('input'), color: C.text },
               { label: 'Fee 0.5%', sub: `${quote.feeFmt} ${tokenOut.symbol}`, color: C.amber },
               { label: `Pool ${quote.poolFee === 100 ? '0.01%' : quote.poolFee === 500 ? '0.05%' : quote.poolFee === 3000 ? '0.3%' : '1%'}`, sub: 'Uniswap V3', color: C.purple },
-              { label: tokenOut.symbol, sub: 'Output', color: C.green },
+              { label: tokenOut.symbol, sub: t('output'), color: C.green },
             ].map((s, i, arr) => (
               <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: i < arr.length - 1 ? 6 : 0 }}>
                 <div style={{ width: 6, height: 6, borderRadius: '50%', background: s.color, boxShadow: `0 0 6px ${s.color}40`, flexShrink: 0 }} />
@@ -500,17 +486,17 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
 
         {/* ── Quote details (collapsible) ────────────────────── */}
         {quote?.status === 'success' && tokenOut && (
-          <div className="rp-anim-3" style={{ marginTop: 6, padding: '10px 14px', background: 'rgba(255,255,255,0.02)', borderRadius: 12, border: `1px solid ${C.border}` }}>
+          <div className="rp-anim-3" style={{ marginTop: 6, padding: '10px 14px', background: 'rgba(10,10,10,0.04)', borderRadius: 12, border: `1px solid ${C.border}` }}>
             {[
-              { l: 'Fee (0.5%)', v: `${quote.feeFmt} ${tokenOut.symbol}` },
-              { l: 'Min. received', v: `${formatUnits(quote.minAmountOut, tokenOut.decimals).slice(0, 10)} ${tokenOut.symbol}` },
-              { l: 'Slippage', v: `${slippage}%` },
-              ...(priceImpact !== null && priceImpact > 1 ? [{ l: 'Price impact', v: `~${priceImpact.toFixed(2)}%` }] : []),
-              ...(quote.gasEstimate ? [{ l: 'Gas estimate', v: `~${quote.gasEstimate.toString()} units` }] : []),
+              { l: t('fee'), v: `${quote.feeFmt} ${tokenOut.symbol}` },
+              { l: t('minReceived'), v: `${formatUnits(quote.minAmountOut, tokenOut.decimals).slice(0, 10)} ${tokenOut.symbol}` },
+              { l: t('slippage'), v: `${slippage}%` },
+              ...(priceImpact !== null && priceImpact > 1 ? [{ l: t('priceImpact'), v: `~${priceImpact.toFixed(2)}%` }] : []),
+              ...(quote.gasEstimate ? [{ l: t('gasEstimate'), v: `~${quote.gasEstimate.toString()} units` }] : []),
             ].map((r, i) => (
               <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: i < 4 ? 4 : 0 }}>
-                <span style={{ fontFamily: C.M, fontSize: 10, color: r.l === 'Price impact' && priceImpact && priceImpact > 5 ? C.red : C.dim }}>{r.l}</span>
-                <span style={{ fontFamily: C.M, fontSize: 10, color: r.l === 'Price impact' && priceImpact && priceImpact > 5 ? C.red : C.sub }}>{r.v}</span>
+                <span style={{ fontFamily: C.M, fontSize: 10, color: r.l === t('priceImpact') && priceImpact && priceImpact > 5 ? C.red : C.dim }}>{r.l}</span>
+                <span style={{ fontFamily: C.M, fontSize: 10, color: r.l === t('priceImpact') && priceImpact && priceImpact > 5 ? C.red : C.sub }}>{r.v}</span>
               </div>
             ))}
           </div>
@@ -518,13 +504,13 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
 
         {/* ── Slippage settings (inline, toggled) ────────────── */}
         {showSettings && (
-          <div className="rp-anim-3" style={{ marginTop: 6, padding: '12px 14px', background: 'rgba(255,255,255,0.025)', borderRadius: 14, border: `1px solid ${C.border}` }}>
-            <div style={{ fontFamily: C.D, fontSize: 10, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: C.dim, marginBottom: 8 }}>Slippage</div>
+          <div className="rp-anim-3" style={{ marginTop: 6, padding: '12px 14px', background: 'rgba(10,10,10,0.04)', borderRadius: 14, border: `1px solid ${C.border}` }}>
+            <div style={{ fontFamily: C.D, fontSize: 10, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '0.08em', color: C.dim, marginBottom: 8 }}>{t('slippage')}</div>
             <div style={{ display: 'flex', gap: 6 }}>
               {[0.1, 0.5, 1.0].map(s => (
                 <button key={s} onClick={() => setSlippage(s)} style={{
                   padding: '6px 14px', borderRadius: 10,
-                  background: slippage === s ? `${C.purple}15` : 'rgba(255,255,255,0.03)',
+                  background: slippage === s ? `${C.purple}15` : 'rgba(10,10,10,0.03)',
                   border: `1px solid ${slippage === s ? `${C.purple}30` : C.border}`,
                   color: slippage === s ? C.purple : C.sub,
                   fontFamily: C.M, fontSize: 12, fontWeight: 600, cursor: 'pointer',
@@ -538,7 +524,7 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
         {/* ── Errors / warnings ──────────────────────────────── */}
         {noLiquidity && (
           <div style={{ marginTop: 6, padding: '10px 12px', borderRadius: 12, background: `${C.red}08`, border: `1px solid ${C.red}20` }}>
-            <span style={{ fontFamily: C.D, fontSize: 11, color: C.red }}>{quote?.errorMessage ?? 'Liquidità insufficiente'}</span>
+            <span style={{ fontFamily: C.D, fontSize: 11, color: C.red }}>{quote?.errorMessage ?? t('insufficientLiquidity')}</span>
           </div>
         )}
         {phase === 'error' && error && (
@@ -550,23 +536,23 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
         {/* ── Success ────────────────────────────────────────── */}
         {phase === 'success' && txHash && (
           <div style={{ marginTop: 6, padding: '14px', borderRadius: 14, background: `${C.green}08`, border: `1px solid ${C.green}20`, textAlign: 'center' as const }}>
-            <div style={{ fontFamily: C.D, fontSize: 13, fontWeight: 600, color: C.green, marginBottom: 6 }}>Swap completato ✓</div>
+            <div style={{ fontFamily: C.D, fontSize: 13, fontWeight: 600, color: C.green, marginBottom: 6 }}>{t('swapCompleted')}</div>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 6, background: `${C.purple}08`, border: `1px solid ${C.purple}15`, marginBottom: 8 }}>
-              <span style={{ fontFamily: C.M, fontSize: 9, color: C.purple }}>DAC8 — Registrato nel report fiscale</span>
+              <span style={{ fontFamily: C.M, fontSize: 9, color: C.purple }}>{t('dac8Recorded')}</span>
             </div>
             <div>
               <a href={`${reg?.blockExplorer ?? 'https://basescan.org'}/tx/${txHash}`} target="_blank" rel="noopener noreferrer"
                 style={{ fontFamily: C.M, fontSize: 10, color: C.sub, textDecoration: 'underline' }}>
-                Vedi su Explorer ↗
+                {t('viewOnExplorer')}
               </a>
             </div>
             <div style={{ marginTop: 8 }}>
               <button onClick={reset} style={{
                 padding: '8px 20px', borderRadius: 12,
-                background: 'rgba(255,255,255,0.04)', border: `1px solid ${C.border}`,
+                background: 'rgba(10,10,10,0.04)', border: `1px solid ${C.border}`,
                 color: C.text, fontFamily: C.D, fontSize: 12, fontWeight: 600, cursor: 'pointer',
                 transition: 'all 0.15s',
-              }}>Nuovo Swap</button>
+              }}>{t('newSwap')}</button>
             </div>
           </div>
         )}
@@ -578,7 +564,7 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
             borderRadius: 14, border: 'none',
             background: canSwap
               ? `linear-gradient(135deg, ${C.purple}, #c084fc)`
-              : 'rgba(255,255,255,0.04)',
+              : 'rgba(10,10,10,0.04)',
             color: canSwap ? '#fff' : `${C.dim}80`,
             fontFamily: C.D, fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em',
             cursor: canSwap ? 'pointer' : 'not-allowed',
@@ -587,15 +573,15 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
           }}>
             {busy ? (
               <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                <span className="rp-spinner" style={{ width: 14, height: 14, border: '2px solid rgba(255,255,255,0.2)', borderTopColor: '#fff', borderRadius: '50%' }} />
-                {phase === 'signing_oracle' ? 'AML Check…'
-                  : phase === 'approving' ? 'Approvazione…'
-                  : 'Swapping…'}
+                <span className="rp-spinner" style={{ width: 14, height: 14, border: '2px solid rgba(10,10,10,0.2)', borderTopColor: '#fff', borderRadius: '50%' }} />
+                {phase === 'signing_oracle' ? t('amlCheck')
+                  : phase === 'approving' ? t('approving')
+                  : t('swapping')}
               </span>
-            ) : insufficient ? 'Saldo insufficiente'
-              : sameToken ? 'Seleziona token diversi'
-              : noLiquidity ? 'Liquidità insufficiente'
-              : !parsedAmount ? 'Inserisci importo'
+            ) : insufficient ? t('insufficientBalance')
+              : sameToken ? t('selectDifferentTokens')
+              : noLiquidity ? t('insufficientLiquidity')
+              : !parsedAmount ? t('enterAmount')
               : `Swap ${tokenIn?.symbol} → ${tokenOut?.symbol}`}
           </button>
         )}
@@ -611,7 +597,7 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
             onMouseEnter={e => e.currentTarget.style.color = C.text}
             onMouseLeave={e => e.currentTarget.style.color = showSettings ? C.purple : C.dim}
           >
-            ⚙ {slippage}% slippage
+            ⚙ {slippage}% {t('slippage')}
           </button>
         </div>
       </div>
@@ -623,17 +609,17 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
           <div style={{
             position: 'relative',
             ...(isMobile ? { width: '100%', maxHeight: '85dvh', borderRadius: '20px 20px 0 0' } : { width: 380, maxHeight: 420, borderRadius: 20 }),
-            background: '#111120', border: '1px solid rgba(255,255,255,0.10)',
-            boxShadow: '0 24px 80px rgba(0,0,0,0.9), 0 0 0 1px rgba(255,255,255,0.04)',
+            background: '#FFFFFF', border: '1px solid rgba(10,10,10,0.10)',
+            boxShadow: '0 24px 80px rgba(0,0,0,0.9), 0 0 0 1px rgba(10,10,10,0.04)',
             overflow: 'hidden', display: 'flex', flexDirection: 'column' as const,
           }}>
             <div style={{
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '16px 18px 12px', borderBottom: '1px solid rgba(255,255,255,0.06)',
+              padding: '16px 18px 12px', borderBottom: '1px solid rgba(10,10,10,0.08)',
             }}>
-              <span style={{ fontFamily: C.D, fontSize: 15, fontWeight: 800, color: C.text }}>Seleziona token</span>
+              <span style={{ fontFamily: C.D, fontSize: 15, fontWeight: 800, color: C.text }}>{t('selectToken')}</span>
               <button onClick={() => setSelectingFor(null)} style={{
-                width: 30, height: 30, borderRadius: 8, background: 'rgba(255,255,255,0.06)',
+                width: 30, height: 30, borderRadius: 8, background: 'rgba(10,10,10,0.08)',
                 border: 'none', color: C.dim, cursor: 'pointer', fontSize: 16,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>✕</button>
@@ -657,11 +643,11 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
                     }} style={{
                       width: '100%', display: 'flex', alignItems: 'center', gap: 14,
                       padding: '13px 18px', background: 'transparent', border: 'none',
-                      borderBottom: i < arr.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                      borderBottom: i < arr.length - 1 ? '1px solid rgba(10,10,10,0.05)' : 'none',
                       cursor: 'pointer', transition: 'background 0.12s', textAlign: 'left' as const,
                       opacity: balFmt > 0 ? 1 : 0.5,
                     }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(10,10,10,0.05)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
                       <TIcon symbol={t.symbol} size={36} />

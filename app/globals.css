@@ -32,8 +32,8 @@ html {
 }
 
 body {
-  background-color: #050510;
-  color: #e2e2f0;
+  background-color: var(--rs-paper);
+  color: var(--rs-ink);
   overflow-x: hidden;
   min-height: 100vh;
   position: relative;
@@ -43,7 +43,7 @@ body {
 
 /* ── Theme variables ──────────────────────────────────────── */
 :root {
-  /* --font-display and --font-mono are set by next/font classes on <html> */
+  --font-display: 'General Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
   /* Colori tema */
   --c-bg:      #050510;
@@ -61,6 +61,28 @@ body {
   --ease-spring:  cubic-bezier(0.16, 1, 0.3, 1);
   --ease-out:     cubic-bezier(0.0, 0.0, 0.2, 1);
   --ease-in-out:  cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* ============================================================
+     RSends — Design Tokens (Light theme)
+     ============================================================
+     Centralized palette. All components reference these variables.
+     Changing values here cascades globally.
+     Do not introduce hardcoded hex colors in components — use
+     Tailwind classes (bg-paper, text-ink, etc.) which read from here.
+     ============================================================ */
+  --rs-ink: #0A0A0A;
+  --rs-terracotta: #C8512C;
+  --rs-paper: #FAFAFA;
+  --rs-surface: #FFFFFF;
+  --rs-wash: #F5E8E0;
+
+  /* Opacity helpers — for semi-transparent fills that must match palette */
+  --rs-ink-12: rgba(10, 10, 10, 0.12);
+  --rs-ink-20: rgba(10, 10, 10, 0.20);
+  --rs-ink-55: rgba(10, 10, 10, 0.55);
+  --rs-ink-70: rgba(10, 10, 10, 0.70);
+
+  --rs-terracotta-15: rgba(200, 81, 44, 0.15);
 }
 
 /* ============================================================
@@ -69,6 +91,8 @@ body {
 
 /* Wrapper fisso che NON partecipa al layout — rigorosamente dietro tutto */
 .rp-bg {
+  /* Hidden for light theme — orb redesign deferred to Phase 4-6 */
+  display: none;
   position: fixed;
   top: 0;
   left: 0;
@@ -90,7 +114,7 @@ body {
 .rp-bg__base {
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: #050510;
+  background: var(--rs-paper);
 }
 
 /* Layer contenitore orbs — absolute, zero impatto su layout */
@@ -497,9 +521,9 @@ body {
   transform: translate3d(0, -2px, 0) scale3d(1.02, 1.02, 1);
 }
 
-/* ── Glow rosa per "Connetti wallet" ──────────────────────── */
+/* ── Glow terracotta per "Connetti wallet" ───────────────── */
 .rp-btn-glow-pink {
-  box-shadow: 0 4px 28px rgba(255, 0, 122, 0.4);
+  box-shadow: 0 4px 28px rgba(200, 81, 44, 0.25);
   transition:
     transform  0.18s var(--ease-spring),
     box-shadow 0.25s var(--ease-out);
@@ -507,8 +531,8 @@ body {
 
 .rp-btn-glow-pink:not(:disabled):hover {
   box-shadow:
-    0 6px 36px rgba(255, 0, 122, 0.55),
-    0 0 60px  rgba(255, 0, 122, 0.15);
+    0 6px 36px rgba(200, 81, 44, 0.35),
+    0 0 60px  rgba(200, 81, 44, 0.10);
   transform: translate3d(0, -2px, 0) scale3d(1.02, 1.02, 1);
 }
 
@@ -708,7 +732,7 @@ body {
   font-weight: 700 !important;
   font-size:   13px;
   letter-spacing: -0.01em;
-  color: var(--c-muted);
+  color: var(--rs-ink-55);
 }
 
 .rp-title {
@@ -716,7 +740,7 @@ body {
   font-weight:    800 !important;
   font-size:      15px;
   letter-spacing: -0.02em;
-  color: var(--c-text);
+  color: var(--rs-ink);
 }
 
 .rp-big-num {
@@ -733,7 +757,7 @@ body {
   font-size:      11px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: var(--c-muted);
+  color: var(--rs-ink-55);
 }
 
 /* ============================================================
@@ -743,11 +767,10 @@ body {
 .rp-heading-gradient {
   background: linear-gradient(
     90deg,
-    #ffffff 0%,
-    #ffffff 40%,
-    #7deefc 65%,
-    #00d4ff 82%,
-    #0090ff 100%
+    #0A0A0A 0%,
+    #0A0A0A 40%,
+    #C8512C 70%,
+    #C8512C 100%
   );
   -webkit-background-clip: text;
   background-clip: text;
@@ -1011,7 +1034,7 @@ body.admin-mode [class*="RainbowKit"] {
 }
 
 body.admin-mode {
-  background: #060611 !important;
+  background: #FAFAFA !important;
 }
 
 /* Reset any RainbowKit global backdrop/overlay styles */

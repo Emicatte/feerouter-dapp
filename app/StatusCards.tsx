@@ -1,15 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-
-const C = {
-  bg: '#0a0a0f', surface: '#111118', card: '#16161f',
-  border: 'rgba(255,255,255,0.06)', text: '#E2E2F0',
-  sub: '#8A8FA8', dim: '#4A4E64', green: '#00D68F',
-  red: '#FF4C6A', amber: '#FFB547', blue: '#3B82F6',
-  purple: '#8B5CF6',
-  D: 'var(--font-display)', M: 'var(--font-mono)',
-}
+import { C } from '@/app/designTokens'
 
 interface Props {
   gas: number | null
@@ -26,7 +18,7 @@ function gasLevel(g: number | null) {
 }
 
 const cardStyle: React.CSSProperties = {
-  background: 'rgba(255,255,255,0.03)',
+  background: 'rgba(10,10,10,0.03)',
   border: `1px solid ${C.border}`,
   borderRadius: 14,
   padding: '14px 16px',

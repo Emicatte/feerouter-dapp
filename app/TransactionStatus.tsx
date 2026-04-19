@@ -15,23 +15,11 @@
 import { useState, useEffect, useRef } from 'react'
 import { usePublicClient, useChainId } from 'wagmi'
 import { formatUnits } from 'viem'
+import { useTranslations } from 'next-intl'
 import type { ComplianceRecord } from '../lib/useComplianceEngine'
 // ── Theme ─────────────────────────────────────────────────────────────────
-const T = {
-  bg:      '#080810',
-  surface: '#0d0d1a',
-  card:    '#111120',
-  border:  'rgba(255,255,255,0.06)',
-  emerald: '#00ffa3',
-  red:     '#ff2d55',
-  amber:   '#ffb800',
-  blue:    '#4d96ff',
-  purple:  '#a78bfa',
-  muted:   '#4a4a6a',
-  text:    '#e2e2f0',
-  mono:    'var(--font-mono)',
-  display: 'var(--font-display)',
-}
+import { C } from '@/app/designTokens'
+const T = { ...C, emerald: '#00ffa3', muted: C.sub, red: '#ff2d55', amber: '#ffb800', blue: '#4d96ff', mono: C.M, display: C.D }
 
 // ── Live Gas Tracker ───────────────────────────────────────────────────────
 export function GasTracker(): React.JSX.Element {
@@ -81,6 +69,7 @@ export function GasTracker(): React.JSX.Element {
 type AmlStatus = 'unchecked' | 'checking' | 'clean' | 'contract' | 'flagged'
 
 export function AddressVerifier({ address }: { address: string }): React.JSX.Element | null {
+  const t = useTranslations('txStatus')
   const publicClient = usePublicClient()
   const [status, setStatus] = useState<AmlStatus>('unchecked')
 
@@ -105,10 +94,10 @@ export function AddressVerifier({ address }: { address: string }): React.JSX.Ele
   if (status === 'unchecked') return null
 
   const cfg = {
-    checking: { color: T.amber,   icon: '⏳', text: 'Verifica AML in corso…'           },
-    clean:    { color: T.emerald, icon: '✓',  text: 'Indirizzo verificato · AML clean' },
-    contract: { color: T.blue,    icon: '📄', text: 'Smart Contract · Verifica manuale' },
-    flagged:  { color: T.red,     icon: '⚠',  text: 'Indirizzo segnalato · Alto rischio' },
+    checking: { color: T.amber,   icon: '⏳', text: t('amlChecking')    },
+    clean:    { color: T.emerald, icon: '✓',  text: t('amlClean')      },
+    contract: { color: T.blue,    icon: '📄', text: t('smartContract')  },
+    flagged:  { color: T.red,     icon: '⚠',  text: t('addressFlagged') },
   }[status]
 
   return (
@@ -185,8 +174,9 @@ interface MicroStateProps {
 }
 
 export function MicroStateBadge({ phase, silent }: MicroStateProps): React.JSX.Element | null {
+  const t = useTranslations('txStatus')
   const states: Record<string, { color: string; icon: string; text: string; blink?: boolean }> = {
-    approving:    { color: T.amber,   icon: '🔐', text: 'Permit2 · Approvazione one-time…', blink: true  },
+    approving:    { color: T.amber,   icon: '🔐', text: t('permit2Approving'), blink: true  },
     wait_approve: { color: T.amber,   icon: '⛓',  text: 'status: pending · On-chain confirm…'             },
     signing:      { color: T.purple,  icon: '✍',  text: 'status: order_scheduled · Firma EIP-712…', blink: true },
     wait_send:    { color: T.blue,    icon: '⚡',  text: 'status: finalizing_on_base · Base L2 ~2s'         },
@@ -214,7 +204,7 @@ export function MicroStateBadge({ phase, silent }: MicroStateProps): React.JSX.E
         <div style={{ fontFamily: T.mono, fontSize: 12, color: s.color }}>{s.text}</div>
         {silent && phase === 'signing' && (
           <div style={{ fontFamily: T.mono, fontSize: 10, color: T.emerald, marginTop: 2 }}>
-            ⚡ Permit2 · 1 sola firma richiesta
+            {t('permit2OneSig')}
           </div>
         )}
       </div>
@@ -370,6 +360,7 @@ export function TransactionStatusUI({
   onCopyHash, copied, onReset, onDownloadPdf,
 }: TxStatusProps): React.JSX.Element | null {
 
+  const t = useTranslations('txStatus')
   const basescan = isTestnet ? 'https://sepolia.basescan.org/tx/' : 'https://basescan.org/tx/'
   const busy     = ['approving','wait_approve','signing','wait_send'].includes(phase)
 
@@ -390,7 +381,7 @@ export function TransactionStatusUI({
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <ResponseCard
-          type="success" code="200" title="Pagamento Confermato"
+          type="success" code="200" title={t('paymentConfirmed')}
           rows={rows}
           footer={
             txHash ? (
@@ -402,10 +393,10 @@ export function TransactionStatusUI({
                   <div style={{ fontFamily: T.mono, fontSize: 11, color: T.muted, wordBreak: 'break-all' as const, flex: 1 }}>{txHash}</div>
                   <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
                     <button onClick={onCopyHash} style={{ fontFamily: T.mono, fontSize: 11, color: copied ? T.emerald : T.muted, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                      {copied ? '✓ Copiato' : '📋'}
+                      {copied ? t('copied') : '📋'}
                     </button>
                     <a href={basescan + txHash} target="_blank" rel="noopener noreferrer"
-                      style={{ fontFamily: T.mono, fontSize: 11, color: '#a78bfa', textDecoration: 'none' }}>
+                      style={{ fontFamily: T.mono, fontSize: 11, color: '#C8512C', textDecoration: 'none' }}>
                       BaseScan ↗
                     </a>
                   </div>
@@ -434,7 +425,7 @@ export function TransactionStatusUI({
               color: T.emerald, fontSize: 12, fontWeight: 700,
               cursor: 'pointer', fontFamily: T.mono, transition: 'all 0.2s',
             }}>
-              📄 Ricevuta PDF + QR
+              {t('receiptPdf')}
             </button>
           )}
           {onReset && (
@@ -444,7 +435,7 @@ export function TransactionStatusUI({
               color: T.muted, fontSize: 12, fontWeight: 700,
               cursor: 'pointer', fontFamily: T.display, transition: 'all 0.2s',
             }}>
-              + Nuovo pagamento
+              {t('newPayment')}
             </button>
           )}
         </div>
@@ -458,10 +449,10 @@ export function TransactionStatusUI({
     const noGas       = error.includes('gas') || error.includes('Gas')
     const sequencer   = error.includes('sequencer') || error.includes('Sequencer')
     const code        = cancelled ? '499' : noGas ? '402' : sequencer ? '503' : '500'
-    const title       = cancelled ? 'User Cancelled'
-      : noGas ? 'Insufficient Gas'
-      : sequencer ? 'L2 Sequencer Down'
-      : 'TX Failed'
+    const title       = cancelled ? t('userCancelled')
+      : noGas ? t('insufficientGas')
+      : sequencer ? t('sequencerDown')
+      : t('txFailed')
 
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -480,7 +471,7 @@ export function TransactionStatusUI({
             color: T.muted, fontSize: 13, fontWeight: 700,
             cursor: 'pointer', fontFamily: T.display, transition: 'all 0.2s',
           }}>
-            Riprova
+            {t('retry')}
           </button>
         )}
       </div>

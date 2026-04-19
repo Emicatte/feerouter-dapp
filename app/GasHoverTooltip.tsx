@@ -2,14 +2,8 @@
 
 import { useState, useRef, useCallback } from 'react'
 
-const T = {
-  card:    '#0c0c1e',
-  border:  'rgba(255,255,255,0.06)',
-  text:    '#ffffff',
-  muted:   'rgba(255,255,255,0.50)',
-  D:       'var(--font-display)',
-  M:       'var(--font-mono)',
-}
+import { C } from '@/app/designTokens'
+const T = { ...C, muted: C.sub }
 
 const GAS_LABELS: Record<string, { label: string; color: string }> = {
   low:     { label: 'Basso',   color: '#00D68F' },

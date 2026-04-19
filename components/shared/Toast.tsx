@@ -62,7 +62,7 @@ function ToastEntry({ item, onDismiss }: { item: ToastItem; onDismiss: () => voi
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
           fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 600,
-          color: '#E2E2F0', lineHeight: 1.3,
+          color: '#0A0A0A', lineHeight: 1.3,
           overflow: 'hidden', textOverflow: 'ellipsis',
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
         } as React.CSSProperties}>
@@ -76,7 +76,7 @@ function ToastEntry({ item, onDismiss }: { item: ToastItem; onDismiss: () => voi
           onClick={item.action.onClick}
           style={{
             padding: '4px 10px', borderRadius: 8, border: 'none',
-            background: 'rgba(255,255,255,0.08)', color: c.icon,
+            background: 'rgba(10,10,10,0.08)', color: c.icon,
             fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 600,
             cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
           }}
@@ -91,7 +91,7 @@ function ToastEntry({ item, onDismiss }: { item: ToastItem; onDismiss: () => voi
         aria-label="Dismiss"
         style={{
           width: 18, height: 18, borderRadius: '50%', border: 'none',
-          background: 'rgba(255,255,255,0.06)', color: '#4A4E64',
+          background: 'rgba(10,10,10,0.08)', color: 'rgba(10,10,10,0.55)',
           fontSize: 10, cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           flexShrink: 0,

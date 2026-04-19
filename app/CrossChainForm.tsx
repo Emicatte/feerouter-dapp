@@ -4,24 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAccount, useChainId, usePublicClient, useWalletClient } from 'wagmi'
 import { parseUnits, formatUnits, encodeFunctionData, type Hex } from 'viem'
 import { CCIP_CHAINS, getCCIPConfig, isCCIPAvailable, getCCIPChainSelector, CCIP_SUPPORTED_TOKENS, type CCIPChainConfig } from '@/lib/ccipRegistry'
-
-// ── Styles matching TransferForm ──────────────────────────────────────────
-const C = {
-  bg:      '#0a0a0f',
-  surface: '#111118',
-  card:    '#16161f',
-  border:  'rgba(255,255,255,0.06)',
-  text:    '#E2E2F0',
-  sub:     '#8A8FA8',
-  dim:     '#4A4E64',
-  green:   '#00D68F',
-  red:     '#FF4C6A',
-  amber:   '#FFB547',
-  blue:    '#3B82F6',
-  purple:  '#8B5CF6',
-  D:       'var(--font-display)',
-  M:       'var(--font-mono)',
-}
+import { C } from '@/app/designTokens'
 
 // ── ABI ──────────────────────────────────────────────────────────────────
 const CCIP_SENDER_ABI = [
@@ -256,8 +239,8 @@ export default function CrossChainForm({ noCard }: Props) {
     width: '100%',
     padding: '12px 14px',
     borderRadius: 12,
-    border: `1px solid rgba(255,255,255,0.1)`,
-    background: 'rgba(255,255,255,0.04)',
+    border: `1px solid rgba(10,10,10,0.1)`,
+    background: 'rgba(10,10,10,0.04)',
     color: C.text,
     fontFamily: C.M,
     fontSize: 14,
@@ -329,7 +312,7 @@ export default function CrossChainForm({ noCard }: Props) {
       <div style={{
         display: 'flex', gap: 4, padding: 3,
         borderRadius: 12,
-        background: 'rgba(255,255,255,0.03)',
+        background: 'rgba(10,10,10,0.03)',
         marginBottom: 16,
       }}>
         <button style={tabStyle(mode === 'bridge')} onClick={() => setMode('bridge')}>
@@ -536,7 +519,7 @@ export default function CrossChainForm({ noCard }: Props) {
             {/* Separator + Recipient receives */}
             <div style={{
               marginTop: 8, paddingTop: 8,
-              borderTop: '1px solid rgba(255,255,255,0.06)',
+              borderTop: '1px solid rgba(10,10,10,0.08)',
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             }}>
               <span style={{ fontFamily: C.D, fontSize: 11, color: C.text, fontWeight: 700 }}>
@@ -591,10 +574,10 @@ export default function CrossChainForm({ noCard }: Props) {
           borderRadius: 14,
           border: 'none',
           background: !isReady
-            ? 'rgba(255,255,255,0.06)'
+            ? 'rgba(10,10,10,0.08)'
             : isSwapMode
-              ? 'linear-gradient(135deg, #8B5CF6 0%, #3B82F6 100%)'
-              : 'linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%)',
+              ? 'linear-gradient(135deg, #C8512C 0%, #3B82F6 100%)'
+              : 'linear-gradient(135deg, #3B82F6 0%, #C8512C 100%)',
           color: !isReady ? C.dim : '#fff',
           fontFamily: C.D,
           fontSize: 15,

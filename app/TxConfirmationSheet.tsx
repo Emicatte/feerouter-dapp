@@ -3,28 +3,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence, type PanInfo } from 'framer-motion'
+import { useTranslations } from 'next-intl'
 import type { TokenInfo } from './tokens/tokenRegistry'
 
 // ── Theme (matches TransferForm T) ──────────────────────────────────────────
-const T = {
-  bg:      '#080810',
-  surface: '#0d0d1a',
-  card:    '#0c0c1e',
-  border:  'rgba(255,255,255,0.06)',
-  emerald: '#00ffa3',
-  red:     '#ff2d55',
-  amber:   '#ffb800',
-  pink:    '#ff007a',
-  purple:  '#a78bfa',
-  green:   '#00D68F',
-  muted:   'rgba(255,255,255,0.50)',
-  dim:     'rgba(255,255,255,0.30)',
-  text:    '#ffffff',
-  D:       'var(--font-display)',
-  M:       'var(--font-mono)',
-}
-
-const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1]
+import { C, SPRING as EASE } from '@/app/designTokens'
+const T = { ...C, emerald: '#00ffa3', muted: C.sub, pink: C.purple, red: '#ff2d55', amber: '#ffb800' }
 const GAS_EXPIRY_SEC = 60
 const HOLD_DURATION = 3000
 
@@ -45,7 +29,7 @@ function Identicon({ address, size = 32 }: { address: string; size?: number }) {
   const cell = size / 4
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ borderRadius: size / 5, flexShrink: 0 }}>
-      <rect width={size} height={size} fill="#111120" rx={size / 5} />
+      <rect width={size} height={size} fill="#FFFFFF" rx={size / 5} />
       {colors.map((c, i) => (
         <rect
           key={i}
@@ -63,6 +47,7 @@ function Identicon({ address, size = 32 }: { address: string; size?: number }) {
 
 // ── Gas level visual indicator ──────────────────────────────────────────────
 function GasLevelBar({ level }: { level: 'low' | 'medium' | 'normal' | 'high' | 'extreme' }) {
+  const t = useTranslations('txConfirmation')
   const lvl = level === 'medium' ? 'normal' : level
   const segments = lvl === 'low' ? 1 : lvl === 'normal' ? 2 : lvl === 'high' ? 3 : 4
   const color = lvl === 'extreme' ? T.red : lvl === 'high' ? T.amber : T.green
@@ -73,13 +58,13 @@ function GasLevelBar({ level }: { level: 'low' | 'medium' | 'normal' | 'high' | 
           key={i}
           style={{
             width: 8, height: 10, borderRadius: 2,
-            background: i < segments ? color : 'rgba(255,255,255,0.08)',
+            background: i < segments ? color : 'rgba(10,10,10,0.08)',
             transition: 'background 0.2s',
           }}
         />
       ))}
       <span style={{ fontFamily: T.M, fontSize: 10, color, marginLeft: 4, textTransform: 'capitalize' }}>
-        {lvl === 'low' ? 'Low' : lvl === 'normal' ? 'Normal' : lvl === 'high' ? 'High' : 'Extreme'}
+        {lvl === 'low' ? t('gasLow') : lvl === 'normal' ? t('gasNormal') : lvl === 'high' ? t('gasHigh') : t('gasExtreme')}
       </span>
     </div>
   )
@@ -100,7 +85,7 @@ function ConfTokenIcon({ token, size = 28 }: { token: TokenInfo; size?: number }
       overflow: 'hidden', flexShrink: 0,
       background: imgErr ? color : 'transparent',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      border: '1.5px solid rgba(255,255,255,0.08)',
+      border: '1.5px solid rgba(10,10,10,0.08)',
     }}>
       {!imgErr ? (
         <img
@@ -208,6 +193,7 @@ export default function TxConfirmationSheet({
   antiPhishingCode,
   isMobile: isMobileProp,
 }: TxConfirmationProps) {
+  const t = useTranslations('txConfirmation')
   const [isMobile, setIsMobile] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [expired, setExpired] = useState(false)
@@ -318,14 +304,14 @@ export default function TxConfirmationSheet({
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           
           <span style={{ fontFamily: T.D, fontSize: 17, fontWeight: 700, color: T.text, letterSpacing: '-0.02em' }}>
-            Conferma Transazione
+            {t('confirmTransaction')}
           </span>
         </div>
         <button
           onClick={onCancel}
           style={{
             width: 32, height: 32, borderRadius: 10,
-            background: 'rgba(255,255,255,0.06)',
+            background: 'rgba(10,10,10,0.08)',
             border: `1px solid ${T.border}`, color: T.muted,
             cursor: 'pointer', fontSize: 14,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -336,8 +322,8 @@ export default function TxConfirmationSheet({
       {/* Amount card */}
       <div style={{
         padding: '20px 16px', borderRadius: 16,
-        background: 'rgba(255,255,255,0.04)',
-        border: '1px solid rgba(255,255,255,0.10)',
+        background: 'rgba(10,10,10,0.04)',
+        border: '1px solid rgba(10,10,10,0.10)',
         textAlign: 'center',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
@@ -362,14 +348,14 @@ export default function TxConfirmationSheet({
       {/* Recipient card */}
       <div style={{
         padding: '14px 16px', borderRadius: 16,
-        background: 'rgba(255,255,255,0.04)',
-        border: '1px solid rgba(255,255,255,0.10)',
+        background: 'rgba(10,10,10,0.04)',
+        border: '1px solid rgba(10,10,10,0.10)',
       }}>
         <div style={{
           fontFamily: T.M, fontSize: 10, color: T.muted, marginBottom: 10,
           textTransform: 'uppercase', letterSpacing: '0.08em',
         }}>
-          Destinatario
+          {t('recipient')}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <Identicon address={recipient} size={36} />
@@ -385,7 +371,7 @@ export default function TxConfirmationSheet({
             onClick={handleCopy}
             style={{
               width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-              background: 'rgba(255,255,255,0.06)',
+              background: 'rgba(10,10,10,0.08)',
               border: `1px solid ${T.border}`,
               cursor: 'pointer', fontSize: 12,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -411,7 +397,7 @@ export default function TxConfirmationSheet({
           }}>
             <span style={{ fontSize: 12 }}>⚠️</span>
             <span style={{ fontFamily: T.D, fontSize: 11, fontWeight: 600, color: T.amber }}>
-              Primo invio a questo indirizzo
+              {t('firstSendWarning')}
             </span>
           </div>
         )}
@@ -420,13 +406,13 @@ export default function TxConfirmationSheet({
       {/* Dettagli (unified) */}
       <div style={{
         padding: '12px 16px', borderRadius: 14,
-        background: 'rgba(255,255,255,0.025)',
-        border: '1px solid rgba(255,255,255,0.06)',
+        background: 'rgba(10,10,10,0.04)',
+        border: '1px solid rgba(10,10,10,0.08)',
         display: 'flex', flexDirection: 'column', gap: 10,
       }}>
         {/* Token */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontFamily: T.M, fontSize: 11, color: T.muted }}>Token</span>
+          <span style={{ fontFamily: T.M, fontSize: 11, color: T.muted }}>{t('token')}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <ConfTokenIcon token={tokenInfo} size={16} />
             <span style={{ fontFamily: T.D, fontSize: 13, fontWeight: 600, color: T.text }}>
@@ -440,7 +426,7 @@ export default function TxConfirmationSheet({
 
         {/* Rete */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontFamily: T.M, fontSize: 11, color: T.muted }}>Rete</span>
+          <span style={{ fontFamily: T.M, fontSize: 11, color: T.muted }}>{t('network')}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <ConfChainIcon chain={chain} size={16} />
             <span style={{ fontFamily: T.D, fontSize: 13, fontWeight: 600, color: T.text }}>{chain.name}</span>
@@ -450,7 +436,7 @@ export default function TxConfirmationSheet({
 
         {/* Fee RSends */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontFamily: T.M, fontSize: 11, color: T.muted }}>Fee RSends</span>
+          <span style={{ fontFamily: T.M, fontSize: 11, color: T.muted }}>{t('feeRSends')}</span>
           <span style={{ fontFamily: T.D, fontSize: 13, fontWeight: 600, color: T.amber }}>
             {feeAmount} {tokenInfo.symbol} (0.5%)
           </span>
@@ -458,7 +444,7 @@ export default function TxConfirmationSheet({
 
         {/* Netto dest. */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontFamily: T.M, fontSize: 11, color: T.muted }}>Netto dest.</span>
+          <span style={{ fontFamily: T.M, fontSize: 11, color: T.muted }}>{t('netRecipient')}</span>
           <span style={{ fontFamily: T.D, fontSize: 13, fontWeight: 700, color: T.emerald }}>
             {netAmount} {tokenInfo.symbol}
           </span>
@@ -466,7 +452,7 @@ export default function TxConfirmationSheet({
 
         {/* Gas Fee */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span style={{ fontFamily: T.M, fontSize: 11, color: T.muted }}>Gas Fee</span>
+          <span style={{ fontFamily: T.M, fontSize: 11, color: T.muted }}>{t('gasFee')}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontFamily: T.D, fontSize: 13, fontWeight: 600, color: T.text }}>
               ~{gasEstimate.eth} ETH
@@ -483,7 +469,7 @@ export default function TxConfirmationSheet({
         {/* Tempo */}
         {estimatedTime && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontFamily: T.M, fontSize: 11, color: T.muted }}>Tempo</span>
+            <span style={{ fontFamily: T.M, fontSize: 11, color: T.muted }}>{t('time')}</span>
             <span style={{ fontFamily: T.D, fontSize: 13, fontWeight: 600, color: T.text }}>{estimatedTime}</span>
           </div>
         )}
@@ -498,7 +484,7 @@ export default function TxConfirmationSheet({
         }}>
           <span style={{ fontSize: 16 }}>⚠️</span>
           <span style={{ fontFamily: T.D, fontSize: 12, fontWeight: 600, color: T.amber }}>
-            Importo elevato. Verifica attentamente i dati.
+            {t('highAmountWarning')}
           </span>
         </div>
       )}
@@ -512,7 +498,7 @@ export default function TxConfirmationSheet({
         }}>
           <span style={{ fontSize: 14 }}>🔑</span>
           <span style={{ fontFamily: T.M, fontSize: 12, color: T.purple }}>
-            Codice anti-phishing: <strong>{antiPhishingCode}</strong>
+            {t('antiPhishingCode')} <strong>{antiPhishingCode}</strong>
           </span>
         </div>
       )}
@@ -526,7 +512,7 @@ export default function TxConfirmationSheet({
           style={{
             position: 'relative', width: '100%', padding: 18, borderRadius: 14, border: 'none',
             fontFamily: T.D, fontSize: 16, fontWeight: 700, letterSpacing: '-0.01em',
-            background: 'rgba(255,255,255,0.06)',
+            background: 'rgba(10,10,10,0.08)',
             color: T.text, cursor: 'pointer',
             overflow: 'hidden', userSelect: 'none',
             WebkitUserSelect: 'none',
@@ -543,7 +529,7 @@ export default function TxConfirmationSheet({
           <span style={{ position: 'relative', zIndex: 1, color: holdProgress > 50 ? '#000' : T.text }}>
             {holdProgress > 0
               ? `${Math.round(holdProgress)}%`
-              : 'Tieni premuto per confermare (3s)'
+              : t('holdToConfirm')
             }
           </span>
         </button>
@@ -564,7 +550,7 @@ export default function TxConfirmationSheet({
             transition: 'all 0.2s ease',
           }}
         >
-          {expired ? '↻ Aggiorna Quotazione' : '✓ Conferma Invio'}
+          {expired ? t('refreshQuote') : t('confirmSend')}
         </button>
       )}
 
@@ -574,21 +560,21 @@ export default function TxConfirmationSheet({
         style={{
           width: '100%', padding: 12, borderRadius: 14, border: 'none',
           fontFamily: T.D, fontSize: 13, fontWeight: 600,
-          background: 'rgba(255,255,255,0.04)',
+          background: 'rgba(10,10,10,0.04)',
           color: T.muted, cursor: 'pointer',
         }}
       >
-        Annulla
+        {t('cancel')}
       </button>
 
       {/* Gas expiry progress bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ fontFamily: T.M, fontSize: 10, color: T.dim, flexShrink: 0 }}>
-          {expired ? '⏱ Scaduto' : `${GAS_EXPIRY_SEC - elapsed}s`}
+          {expired ? t('expired') : `${GAS_EXPIRY_SEC - elapsed}s`}
         </span>
         <div style={{
           flex: 1, height: 3, borderRadius: 2,
-          background: 'rgba(255,255,255,0.06)',
+          background: 'rgba(10,10,10,0.08)',
           overflow: 'hidden',
         }}>
           <div style={{
@@ -643,9 +629,9 @@ export default function TxConfirmationSheet({
                   maxWidth: 480,
                   maxHeight: '85vh',
                   overflowY: 'auto',
-                  background: '#111120',
+                  background: '#FFFFFF',
                   borderRadius: 20,
-                  border: '1px solid rgba(255,255,255,0.10)',
+                  border: '1px solid rgba(10,10,10,0.10)',
                   boxShadow: '0 40px 100px rgba(0,0,0,0.7)',
                   padding: 24,
                   pointerEvents: 'auto',
@@ -670,10 +656,10 @@ export default function TxConfirmationSheet({
               position: 'fixed',
               bottom: 0, left: 0, right: 0,
               zIndex: 2001,
-              background: '#111120',
+              background: '#FFFFFF',
               borderTopLeftRadius: 24,
               borderTopRightRadius: 24,
-              border: '1px solid rgba(255,255,255,0.10)',
+              border: '1px solid rgba(10,10,10,0.10)',
               borderBottom: 'none',
               boxShadow: '0 -16px 64px rgba(0,0,0,0.7)',
               padding: '16px 20px calc(20px + var(--sab, 0px))',
@@ -684,7 +670,7 @@ export default function TxConfirmationSheet({
           >
             {/* Drag handle — mobile only */}
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
-              <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.15)' }} />
+              <div style={{ width: 36, height: 4, borderRadius: 2, background: 'rgba(10,10,10,0.15)' }} />
             </div>
             {content}
           </motion.div>

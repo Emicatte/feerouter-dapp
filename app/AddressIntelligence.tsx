@@ -2,23 +2,11 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { isAddress, getAddress } from 'viem'
+import { useTranslations } from 'next-intl'
 
 // ── Theme (matches TransferForm T) ──────────────────────────────────────────
-const T = {
-  bg:      '#080810',
-  surface: '#0d0d1a',
-  card:    '#0c0c1e',
-  border:  'rgba(255,255,255,0.06)',
-  emerald: '#00ffa3',
-  red:     '#ff2d55',
-  amber:   '#ffb800',
-  pink:    '#ff007a',
-  purple:  '#a78bfa',
-  muted:   'rgba(255,255,255,0.90)',
-  text:    '#ffffff',
-  D:       'var(--font-display)',
-  M:       'var(--font-mono)',
-}
+import { C } from '@/app/designTokens'
+const T = { ...C, emerald: '#00ffa3', muted: C.sub, pink: C.purple, red: '#ff2d55', amber: '#ffb800' }
 
 const LS_KEY = 'rp_address_book'
 
@@ -56,7 +44,7 @@ function Identicon({ address, size = 28 }: { address: string; size?: number }) {
   const cell = size / 4
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ borderRadius: size / 5, flexShrink: 0 }}>
-      <rect width={size} height={size} fill="#111120" rx={size / 5} />
+      <rect width={size} height={size} fill="#FFFFFF" rx={size / 5} />
       {colors.map((c, i) => (
         <rect
           key={i}
@@ -120,6 +108,7 @@ export default function AddressIntelligence({
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [focused, setFocused]           = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
+  const t = useTranslations('send')
 
   // ── Validate + check contact book ────────────────────────────────────────
   const validate = useCallback((addr: string) => {
@@ -129,8 +118,8 @@ export default function AddressIntelligence({
       return
     }
     if (!isAddress(addr)) {
-      setAddrError('Indirizzo non valido'); setIsValid(false); setIsNew(false)
-      onValidation?.(false, 'Indirizzo non valido')
+      setAddrError(t('invalidAddress')); setIsValid(false); setIsNew(false)
+      onValidation?.(false, t('invalidAddress'))
       return
     }
     // Valid — check if known
@@ -139,7 +128,7 @@ export default function AddressIntelligence({
     const known = contacts.some(c => c.address.toLowerCase() === addr.toLowerCase())
     setIsNew(!known)
     onValidation?.(true, '')
-  }, [onValidation])
+  }, [onValidation, t])
 
   useEffect(() => { validate(value) }, [value, validate])
 
@@ -284,8 +273,8 @@ export default function AddressIntelligence({
         <div style={{
           position: 'absolute', left: 0, right: 0, top: '100%',
           marginTop: 4, zIndex: 100,
-          background: '#111120',
-          border: `1px solid rgba(255,255,255,0.10)`,
+          background: '#FFFFFF',
+          border: `1px solid rgba(10,10,10,0.10)`,
           borderRadius: 12,
           boxShadow: '0 12px 40px rgba(0,0,0,0.7)',
           overflow: 'hidden',
@@ -317,7 +306,7 @@ export default function AddressIntelligence({
                 transition: 'background 0.1s',
                 textAlign: 'left',
               }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.04)')}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(10,10,10,0.04)')}
               onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
             >
               <Identicon address={contact.address} size={24} />

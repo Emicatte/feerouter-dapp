@@ -9,22 +9,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { TOKEN_LIST, SUPPORTED_CHAINS, type ChainId } from './tokens/tokenRegistry'
 import type { TokenMarket } from '@/lib/types/tokenMarket'
-
-const C = {
-  bg: '#0a0a0f',
-  surface: '#111118',
-  card: '#16161f',
-  border: 'rgba(255,255,255,0.06)',
-  text: '#E2E2F0',
-  sub: '#8A8FA8',
-  dim: '#4A4E64',
-  green: '#00D68F',
-  red: '#FF4C6A',
-  blue: '#3B82F6',
-  purple: '#8B5CF6',
-  D: 'var(--font-display)',
-  M: 'var(--font-mono)',
-}
+import { C } from '@/app/designTokens'
 
 const CHAIN_COLORS = [
   '#627EEA', '#F3BA2F', '#8247E5', '#E84142',
@@ -160,7 +145,7 @@ function LargeTokenLogo({
         flexShrink: 0,
         display: 'block',
         objectFit: 'cover',
-        background: 'rgba(255,255,255,0.04)',
+        background: 'rgba(10,10,10,0.04)',
       }}
     />
   )
@@ -213,7 +198,7 @@ function SmallChainIcon({ chainId, size = 18 }: { chainId: number; size?: number
         flexShrink: 0,
         display: 'block',
         objectFit: 'cover',
-        background: 'rgba(255,255,255,0.04)',
+        background: 'rgba(10,10,10,0.04)',
       }}
     />
   )
@@ -288,7 +273,7 @@ function LargeChart({
             x2={hp.x}
             y1={0}
             y2={height}
-            stroke="rgba(255,255,255,0.25)"
+            stroke="rgba(10,10,10,0.25)"
             strokeWidth={1}
             strokeDasharray="4 4"
           />
@@ -312,7 +297,7 @@ function TimePills() {
         gap: 4,
         marginTop: 16,
         padding: 4,
-        background: 'rgba(255,255,255,0.03)',
+        background: 'rgba(10,10,10,0.03)',
         border: `1px solid ${C.border}`,
         borderRadius: 10,
         width: 'fit-content',
@@ -329,9 +314,9 @@ function TimePills() {
             style={{
               padding: '6px 14px',
               background: active
-                ? 'linear-gradient(135deg, rgba(59,130,246,0.22), rgba(139,92,246,0.22))'
+                ? 'linear-gradient(135deg, rgba(200,81,44,0.22), rgba(200,81,44,0.22))'
                 : 'transparent',
-              border: active ? '1px solid rgba(139,92,246,0.35)' : '1px solid transparent',
+              border: active ? '1px solid rgba(200,81,44,0.35)' : '1px solid transparent',
               borderRadius: 7,
               color: active ? C.text : C.dim,
               cursor: active ? 'default' : 'not-allowed',
@@ -626,7 +611,7 @@ export default function TokenDetailView({
       {/* Chart */}
       <div
         style={{
-          background: 'rgba(22,22,31,0.6)',
+          background: 'rgba(10,10,10,0.04)',
           border: `1px solid ${C.border}`,
           borderRadius: 16,
           padding: 16,
@@ -671,7 +656,7 @@ export default function TokenDetailView({
           gap: 16,
           marginTop: 32,
           padding: 20,
-          background: 'rgba(22,22,31,0.4)',
+          background: 'rgba(10,10,10,0.03)',
           border: `1px solid ${C.border}`,
           borderRadius: 12,
         }}
@@ -698,7 +683,7 @@ export default function TokenDetailView({
                 alignItems: 'center',
                 gap: 8,
                 padding: '8px 12px',
-                background: 'rgba(255,255,255,0.03)',
+                background: 'rgba(10,10,10,0.03)',
                 border: `1px solid ${C.border}`,
                 borderRadius: 999,
               }}
@@ -714,7 +699,7 @@ export default function TokenDetailView({
       <SectionTitle>Token addresses</SectionTitle>
       <div
         style={{
-          background: 'rgba(22,22,31,0.4)',
+          background: 'rgba(10,10,10,0.03)',
           border: `1px solid ${C.border}`,
           borderRadius: 12,
           overflow: 'hidden',

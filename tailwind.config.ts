@@ -14,6 +14,14 @@ module.exports = {
         mono:    ['var(--font-mono)', ...defaultTheme.fontFamily.mono],
         sans:    ['var(--font-display)', ...defaultTheme.fontFamily.sans],
       },
+      colors: {
+        // RSends palette — references CSS variables for runtime flexibility
+        ink:        'var(--rs-ink)',
+        terracotta: 'var(--rs-terracotta)',
+        paper:      'var(--rs-paper)',
+        surface:    'var(--rs-surface)',
+        wash:       'var(--rs-wash)',
+      },
     },
   },
   plugins: [],

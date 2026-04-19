@@ -115,18 +115,18 @@ function StatCard({ title, value, sub, icon, gradient }: {
   title: string; value: string; sub?: string; icon: React.ReactNode; gradient: string
 }) {
   return (
-    <div className="group relative overflow-hidden rounded-xl border border-white/[0.04] p-5 transition-all hover:border-white/[0.08]"
-      style={{ background: 'rgba(12,12,24,0.8)' }}>
+    <div className="group relative overflow-hidden rounded-xl border border-black/[0.06] p-5 transition-all hover:border-black/[0.1]"
+      style={{ background: 'rgba(255,255,255,0.8)' }}>
       {/* Subtle gradient accent top */}
       <div className="absolute top-0 left-0 right-0 h-[1px] opacity-40" style={{ background: gradient }} />
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 mb-1.5">{title}</p>
-          <p className="text-2xl font-bold tracking-tight text-white">{value}</p>
-          {sub && <p className="mt-0.5 text-[11px] text-zinc-500">{sub}</p>}
+          <p className="text-[10px] font-semibold uppercase tracking-widest mb-1.5" style={{ color: 'rgba(10,10,10,0.55)' }}>{title}</p>
+          <p className="text-2xl font-bold tracking-tight text-[#0A0A0A]">{value}</p>
+          {sub && <p className="mt-0.5 text-[11px]" style={{ color: 'rgba(10,10,10,0.55)' }}>{sub}</p>}
         </div>
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/[0.04]"
-          style={{ background: 'rgba(255,255,255,0.02)' }}>
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-black/[0.06]"
+          style={{ background: 'rgba(10,10,10,0.02)' }}>
           {icon}
         </div>
       </div>
@@ -235,17 +235,17 @@ export default function AdminTransactionsPage() {
 
   if (!authed) return null
 
-  const inputCls = 'rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-xs text-zinc-300 transition-all focus:border-blue-500/30 focus:outline-none focus:ring-1 focus:ring-blue-500/10 placeholder-zinc-600'
+  const inputCls = 'rounded-lg border border-black/[0.08] bg-black/[0.02] px-3 py-2 text-xs text-[#0A0A0A] transition-all focus:border-[#C8512C]/30 focus:outline-none focus:ring-1 focus:ring-[#C8512C]/10 placeholder-black/30'
   const selectCls = `${inputCls} appearance-none cursor-pointer pr-7`
 
   return (
-    <div className="min-h-screen text-white antialiased" style={{ background: '#060611' }}>
+    <div className="min-h-screen text-[#0A0A0A] antialiased" style={{ background: '#FAFAFA' }}>
       {/* Ambient background */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -top-20 right-1/3 w-[600px] h-[600px] rounded-full opacity-[0.04]"
-          style={{ background: 'radial-gradient(circle, #3b82f6 0%, transparent 70%)' }} />
+          style={{ background: 'radial-gradient(circle, #C8512C 0%, transparent 70%)' }} />
         <div className="absolute bottom-0 left-1/4 w-[400px] h-[400px] rounded-full opacity-[0.03]"
-          style={{ background: 'radial-gradient(circle, #8b5cf6 0%, transparent 70%)' }} />
+          style={{ background: 'radial-gradient(circle, #C8512C 0%, transparent 70%)' }} />
       </div>
 
       <div className="relative z-10 mx-auto max-w-[1200px] px-6 py-8">
@@ -253,19 +253,19 @@ export default function AdminTransactionsPage() {
         {/* ─── Header ─────────────────────────────────────────── */}
         <header className="flex items-center justify-between mb-8 admin-fade-in">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-blue-500/15"
-              style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.12) 0%, rgba(139,92,246,0.08) 100%)' }}>
-              <svg className="h-4.5 w-4.5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#C8512C]/15"
+              style={{ background: 'linear-gradient(135deg, rgba(200,81,44,0.12) 0%, rgba(200,81,44,0.08) 100%)' }}>
+              <svg className="h-4.5 w-4.5 text-[#C8512C]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
               </svg>
             </div>
             <div>
               <h1 className="text-lg font-bold tracking-tight">Transazioni</h1>
-              <p className="text-xs text-zinc-500 flex items-center gap-1.5">
+              <p className="text-xs flex items-center gap-1.5" style={{ color: 'rgba(10,10,10,0.55)' }}>
                 {lastRefresh ? (
                   <>Aggiornato alle {lastRefresh.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</>
                 ) : 'Caricamento\u2026'}
-                {loading && <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-blue-400" />}
+                {loading && <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[#C8512C]" />}
               </p>
             </div>
           </div>
@@ -304,7 +304,7 @@ export default function AdminTransactionsPage() {
           </div>
           <div className="admin-fade-in-4">
             <StatCard title="Ultime 24h" value={String(tx24h)} sub="transazioni recenti" icon={<IconClock />}
-              gradient="linear-gradient(90deg, transparent, #8b5cf6, transparent)" />
+              gradient="linear-gradient(90deg, transparent, #C8512C, transparent)" />
           </div>
         </div>
 
@@ -392,7 +392,7 @@ export default function AdminTransactionsPage() {
                   <tr>
                     <td colSpan={9} className="px-4 py-16 text-center">
                       <div className="mx-auto w-12 h-12 rounded-xl border border-white/[0.04] flex items-center justify-center mb-3"
-                        style={{ background: 'rgba(255,255,255,0.02)' }}>
+                        style={{ background: 'rgba(10,10,10,0.04)' }}>
                         <svg className="h-5 w-5 text-zinc-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5m6 4.125l2.25 2.25m0 0l2.25 2.25M12 13.875l2.25-2.25M12 13.875l-2.25 2.25M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
                         </svg>

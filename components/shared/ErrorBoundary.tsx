@@ -35,17 +35,17 @@ export class ErrorBoundary extends Component<Props, State> {
           borderRadius: 14, margin: 12,
         }}>
           <div style={{ fontSize: 24, marginBottom: 8 }}>⚠</div>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 600, color: '#E2E2F0', marginBottom: 4 }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 600, color: '#0A0A0A', marginBottom: 4 }}>
             Something went wrong
           </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: '#8A8FA8', marginBottom: 12 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'rgba(10,10,10,0.55)', marginBottom: 12 }}>
             {this.state.error?.message || 'Unexpected error'}
           </div>
           <button
             onClick={() => this.setState({ hasError: false, error: null })}
             style={{
               padding: '8px 20px', borderRadius: 10, border: 'none',
-              background: 'rgba(255,255,255,0.08)', color: '#E2E2F0',
+              background: 'rgba(10,10,10,0.08)', color: '#0A0A0A',
               fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 600,
               cursor: 'pointer',
             }}

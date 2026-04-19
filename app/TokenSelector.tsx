@@ -5,24 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { formatUnits } from 'viem'
 import { getTokensForChain, type TokenInfo } from './tokens/tokenRegistry'
 import { useTokenBalance } from './hooks/useTokenBalance'
-
-// ── Palette (matching page.tsx C object) ─────────────────────────────────
-const C = {
-  bg:      '#0a0a0f',
-  surface: '#111118',
-  card:    '#16161f',
-  border:  'rgba(255,255,255,0.06)',
-  text:    '#E2E2F0',
-  sub:     '#8A8FA8',
-  dim:     '#4A4E64',
-  green:   '#00D68F',
-  blue:    '#3B82F6',
-  purple:  '#8B5CF6',
-  D:       'var(--font-display)',
-  M:       'var(--font-mono)',
-}
-
-const EASE: [number, number, number, number] = [0.4, 0, 0.2, 1]
+import { C, EASE } from '@/app/designTokens'
 
 // ── Color map per token icon fallback ────────────────────────────────────
 const TOKEN_COLORS: Record<string, string> = {
@@ -46,7 +29,7 @@ function TokenIcon({ token, size = 28 }: { token: TokenInfo; size?: number }) {
       overflow: 'hidden', flexShrink: 0,
       background: imgErr ? color : 'transparent',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      border: '1.5px solid rgba(255,255,255,0.08)',
+      border: '1.5px solid rgba(10,10,10,0.08)',
     }}>
       {!imgErr ? (
         <img
@@ -104,10 +87,10 @@ function TokenRow({
         background: isSelected
           ? 'rgba(59,130,246,0.08)'
           : hovered
-            ? 'rgba(255,255,255,0.04)'
+            ? 'rgba(10,10,10,0.04)'
             : 'transparent',
         border: 'none',
-        borderBottom: '1px solid rgba(255,255,255,0.04)',
+        borderBottom: '1px solid rgba(10,10,10,0.04)',
         cursor: 'pointer',
         transition: 'background 0.12s ease',
         textAlign: 'left' as const,
@@ -142,7 +125,7 @@ function TokenRow({
         {isLoading ? (
           <div style={{
             width: 40, height: 14, borderRadius: 4,
-            background: 'rgba(255,255,255,0.06)',
+            background: 'rgba(10,10,10,0.08)',
             animation: 'rsPulse 1.5s ease infinite',
           }} />
         ) : (
@@ -218,8 +201,8 @@ export default function TokenSelector({
           width: '100%',
           display: 'flex', alignItems: 'center', gap: 8,
           padding: '8px 12px',
-          background: open ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.03)',
-          border: `1px solid ${open ? 'rgba(255,255,255,0.12)' : C.border}`,
+          background: open ? 'rgba(10,10,10,0.08)' : 'rgba(10,10,10,0.03)',
+          border: `1px solid ${open ? 'rgba(10,10,10,0.12)' : C.border}`,
           borderRadius: 12,
           cursor: 'pointer',
           transition: 'all 0.15s ease',
@@ -254,18 +237,18 @@ export default function TokenSelector({
               top: 'calc(100% + 6px)',
               left: 0, right: 0,
               zIndex: 200,
-              background: '#111120',
-              border: '1px solid rgba(255,255,255,0.10)',
+              background: '#FFFFFF',
+              border: '1px solid rgba(10,10,10,0.10)',
               borderRadius: 14,
               overflow: 'hidden',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.03)',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(10,10,10,0.03)',
               transformOrigin: 'top center',
             }}
           >
             {/* Header */}
             <div style={{
               padding: '10px 16px 8px',
-              borderBottom: '1px solid rgba(255,255,255,0.05)',
+              borderBottom: '1px solid rgba(10,10,10,0.05)',
             }}>
               <span style={{
                 fontFamily: C.D, fontSize: 10, fontWeight: 700,

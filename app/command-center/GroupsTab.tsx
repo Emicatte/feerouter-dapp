@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { useTranslations } from 'next-intl'
 import { motion, AnimatePresence } from 'framer-motion'
 import { C, EASE, inp, labelStyle, isValidAddr, Sk, TabSkeleton, tr } from './shared'
 import type { ChainFamily } from '../../lib/chain-adapters/types'
@@ -16,6 +17,8 @@ function GroupsTab({
   deleteList: (id: number) => Promise<void>
   activeFamily: ChainFamily
 }) {
+  const t = useTranslations('commandCenter.groups')
+
   // ── Non-EVM guard: distribution groups are EVM-only ──
   if (activeFamily !== 'evm') {
     return (
@@ -24,11 +27,10 @@ function GroupsTab({
           {activeFamily === 'solana' ? '◎' : '◆'}
         </div>
         <div style={{ fontFamily: C.D, fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4 }}>
-          Distribution groups on {activeFamily === 'solana' ? 'Solana' : 'TRON'}
+          {t('nonEvmTitle', { chain: activeFamily === 'solana' ? 'Solana' : 'TRON' })}
         </div>
         <div style={{ fontFamily: C.M, fontSize: 11, color: C.dim, lineHeight: 1.5 }}>
-          Cross-chain distribution coming soon.<br/>
-          Currently available on EVM chains.
+          {t('nonEvmDesc')}
         </div>
       </div>
     )
@@ -99,7 +101,7 @@ function GroupsTab({
           onClick={() => setShowForm(s => !s)}
           style={{
             padding: '6px 14px', borderRadius: 10,
-            background: showForm ? 'rgba(255,255,255,0.06)' : `${C.blue}10`,
+            background: showForm ? 'rgba(10,10,10,0.08)' : `${C.blue}10`,
             border: `1px solid ${showForm ? C.border : `${C.blue}25`}`,
             color: showForm ? C.dim : C.blue,
             fontFamily: C.D, fontSize: 11, fontWeight: 600, cursor: 'pointer',
@@ -121,8 +123,8 @@ function GroupsTab({
             style={{ overflow: 'hidden', marginBottom: 12 }}
           >
             <div className="bf-blur-24s" style={{
-              background: 'rgba(255,255,255,0.03)',
-              border: '1px solid rgba(255,255,255,0.08)',
+              background: 'rgba(10,10,10,0.03)',
+              border: '1px solid rgba(10,10,10,0.08)',
               borderRadius: 16, padding: 16,
             }}>
               <div style={{ marginBottom: 8 }}>
@@ -192,14 +194,14 @@ function GroupsTab({
                 disabled={!canSave || saving}
                 style={{
                   width: '100%', padding: '10px', borderRadius: 12, border: 'none',
-                  background: canSave ? `linear-gradient(135deg, ${C.red}, ${C.purple})` : 'rgba(255,255,255,0.04)',
-                  color: canSave ? '#fff' : 'rgba(255,255,255,0.35)',
+                  background: canSave ? `linear-gradient(135deg, ${C.red}, ${C.purple})` : 'rgba(10,10,10,0.04)',
+                  color: canSave ? '#fff' : 'rgba(10,10,10,0.35)',
                   fontFamily: C.D, fontSize: 12, fontWeight: 700,
                   cursor: canSave ? 'pointer' : 'not-allowed',
                   transition: 'all 0.2s',
                 }}
               >
-                {saving ? 'Saving...' : 'Save Group'}
+                {saving ? t('saving') : t('saveGroup')}
               </button>
             </div>
           </motion.div>
@@ -212,7 +214,7 @@ function GroupsTab({
       ) : lists.length === 0 && !showForm ? (
         <div style={{
           padding: 28, textAlign: 'center',
-          background: 'rgba(255,255,255,0.03)',
+          background: 'rgba(10,10,10,0.03)',
           borderRadius: 14, border: `1px solid ${C.border}`,
         }}>
           <div style={{ fontFamily: C.D, fontSize: 13, color: C.dim, marginBottom: 4 }}>No groups yet</div>
@@ -230,7 +232,7 @@ function GroupsTab({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               style={{
-                background: 'rgba(255,255,255,0.03)',
+                background: 'rgba(10,10,10,0.03)',
                 border: `1px solid ${C.border}`,
                 borderRadius: 14, padding: 14, marginBottom: 8,
               }}
@@ -251,7 +253,7 @@ function GroupsTab({
                         opacity: deleting ? 0.5 : 1,
                         fontFamily: C.M, fontSize: 9, fontWeight: 600,
                       }}
-                    >{deleting ? 'Deleting...' : 'Confirm'}</button>
+                    >{deleting ? t('deleting') : t('confirm')}</button>
                     {!deleting && <button
                       onClick={() => setConfirmDelete(null)}
                       style={{

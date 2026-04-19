@@ -2,31 +2,11 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, useInView } from 'framer-motion'
-
-const C = {
-  bg:      '#0a0a0f',
-  surface: '#111118',
-  card:    '#16161f',
-  border:  'rgba(255,255,255,0.06)',
-  text:    '#E2E2F0',
-  sub:     '#8A8FA8',
-  dim:     '#4A4E64',
-  green:   '#00D68F',
-  red:     '#FF4C6A',
-  amber:   '#FFB547',
-  blue:    '#3B82F6',
-  purple:  '#8B5CF6',
-  D:       'var(--font-display)',
-  M:       'var(--font-mono)',
-}
+import { C, EASE } from '@/app/designTokens'
 
 const GRAD: React.CSSProperties = {
-  background: 'linear-gradient(135deg, #FFFFFF 0%, #60A5FA 60%, #1D4ED8 100%)',
-  WebkitBackgroundClip: 'text',
-  WebkitTextFillColor: 'transparent',
+  color: '#C8512C',
 }
-
-const EASE: [number, number, number, number] = [0.4, 0, 0.2, 1]
 
 // ── Animated counter ──
 function AnimatedNumber({ target, prefix = '', suffix = '', decimals = 2 }: { target: number; prefix?: string; suffix?: string; decimals?: number }) {
@@ -97,7 +77,7 @@ export default function PricingOverlay() {
           </div>
 
           {/* Animated bar */}
-          <div style={{ position: 'relative', height: 40, borderRadius: 10, overflow: 'hidden', background: 'rgba(255,255,255,0.04)', marginBottom: 20 }}>
+          <div style={{ position: 'relative', height: 40, borderRadius: 10, overflow: 'hidden', background: 'rgba(10,10,10,0.04)', marginBottom: 20 }}>
             <motion.div
               initial={{ width: 0 }}
               whileInView={{ width: '99.5%' }}
@@ -121,7 +101,7 @@ export default function PricingOverlay() {
               transition={{ duration: 1.2, ease: EASE, delay: 0.3 }}
               style={{
                 position: 'absolute', top: 0, right: 0, bottom: 0,
-                background: 'linear-gradient(135deg, #FF4C6A, #8B5CF6)',
+                background: 'linear-gradient(135deg, #FF4C6A, #C8512C)',
                 borderRadius: '0 10px 10px 0',
                 minWidth: 40,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -143,7 +123,7 @@ export default function PricingOverlay() {
             <div>
               <div style={{
                 fontFamily: C.D, fontSize: 28, fontWeight: 800,
-                background: 'linear-gradient(135deg, #FF4C6A, #8B5CF6)',
+                background: 'linear-gradient(135deg, #FF4C6A, #C8512C)',
                 WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
               }}>
                 $<AnimatedNumber target={5} decimals={2} />
@@ -167,7 +147,7 @@ export default function PricingOverlay() {
           <div style={{
             display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr',
             padding: '10px 14px', borderBottom: `1px solid ${C.border}`,
-            background: 'rgba(255,255,255,0.02)',
+            background: 'rgba(10,10,10,0.02)',
           }}>
             <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Feature</span>
             <span style={{ fontFamily: C.D, fontSize: 10, fontWeight: 700, color: C.blue, textAlign: 'center' }}>RSends</span>
@@ -237,13 +217,13 @@ export default function PricingOverlay() {
               onChange={e => setAmount(Math.max(0, parseFloat(e.target.value) || 0))}
               style={{
                 width: '100%', padding: '14px 16px', borderRadius: 12,
-                background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
+                background: 'rgba(10,10,10,0.08)', border: '1px solid rgba(10,10,10,0.12)',
                 color: C.text, fontFamily: C.D, fontSize: 20, fontWeight: 700,
                 outline: 'none', boxSizing: 'border-box',
                 transition: 'border-color 0.2s',
               }}
               onFocus={e => e.currentTarget.style.borderColor = 'rgba(59,130,246,0.4)'}
-              onBlur={e => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'}
+              onBlur={e => e.currentTarget.style.borderColor = 'rgba(10,10,10,0.12)'}
             />
             {/* Quick amounts */}
             <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
@@ -279,12 +259,12 @@ export default function PricingOverlay() {
             </div>
             <div style={{
               padding: '16px 14px', borderRadius: 12,
-              background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}`,
+              background: 'rgba(10,10,10,0.02)', border: `1px solid ${C.border}`,
               textAlign: 'center',
             }}>
               <div style={{
                 fontFamily: C.D, fontSize: 22, fontWeight: 800,
-                background: 'linear-gradient(135deg, #FF4C6A, #8B5CF6)',
+                background: 'linear-gradient(135deg, #FF4C6A, #C8512C)',
                 WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
               }}>
                 ${fee.toFixed(2)}
@@ -293,7 +273,7 @@ export default function PricingOverlay() {
             </div>
             <div style={{
               padding: '16px 14px', borderRadius: 12,
-              background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}`,
+              background: 'rgba(10,10,10,0.02)', border: `1px solid ${C.border}`,
               textAlign: 'center',
             }}>
               <div style={{ fontFamily: C.D, fontSize: 22, fontWeight: 800, color: C.sub }}>

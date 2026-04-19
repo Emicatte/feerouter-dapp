@@ -36,7 +36,7 @@ export default function NetworkSelector({ onNetworkChange, compact = false }: Ne
   const networks = getSupportedChains()
     .map(id => {
       const reg  = getRegistry(id)
-      const meta = CHAIN_META[id] ?? { color: '#4a4a6a', icon: '●', isTestnet: false }
+      const meta = CHAIN_META[id] ?? { color: 'rgba(10,10,10,0.55)', icon: '●', isTestnet: false }
       if (!reg) return null
       return {
         chainId:     id,
@@ -102,7 +102,7 @@ export default function NetworkSelector({ onNetworkChange, compact = false }: Ne
   }, [walletChainId, switchChain])
 
   const currentNet  = networks.find(n => n.chainId === walletChainId)
-  const currentMeta = CHAIN_META[walletChainId] ?? { color: '#4a4a6a', icon: '●', isTestnet: false }
+  const currentMeta = CHAIN_META[walletChainId] ?? { color: 'rgba(10,10,10,0.55)', icon: '●', isTestnet: false }
 
   if (!isConnected) return null
 
@@ -117,14 +117,14 @@ export default function NetworkSelector({ onNetworkChange, compact = false }: Ne
           display: 'flex', alignItems: 'center', gap: compact ? 6 : 8,
           padding: compact ? '5px 10px' : '7px 13px 7px 10px',
           borderRadius: 14,
-          background: open ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.04)',
-          border: `1.5px solid ${open ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.06)'}`,
+          background: open ? 'rgba(10,10,10,0.10)' : 'rgba(10,10,10,0.04)',
+          border: `1.5px solid ${open ? 'rgba(10,10,10,0.18)' : 'rgba(10,10,10,0.08)'}`,
           cursor: isPending ? 'wait' : 'pointer',
           transition: 'all 0.15s ease',
           outline: 'none',
         }}
-        onMouseEnter={e => { if (!open && !isPending) e.currentTarget.style.background = 'rgba(255,255,255,0.07)' }}
-        onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+        onMouseEnter={e => { if (!open && !isPending) e.currentTarget.style.background = 'rgba(10,10,10,0.08)' }}
+        onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'rgba(10,10,10,0.04)' }}
       >
         <div style={{
           width: 8, height: 8, borderRadius: '50%',
@@ -151,12 +151,12 @@ export default function NetworkSelector({ onNetworkChange, compact = false }: Ne
               fontFamily: 'var(--font-display)',
               fontSize: compact ? 11 : 12,
               fontWeight: 700,
-              color: '#e2e2f0',
+              color: '#0A0A0A',
             }}>
               {currentNet?.shortName ?? `Chain ${walletChainId}`}
             </span>
             <span style={{
-              color: '#4a4a6a', fontSize: 9,
+              color: 'rgba(10,10,10,0.55)', fontSize: 9,
               transform: open ? 'rotate(180deg)' : 'none',
               transition: 'transform 0.2s',
               display: 'inline-block',
@@ -186,11 +186,11 @@ export default function NetworkSelector({ onNetworkChange, compact = false }: Ne
               right: menuPos.right,
               minWidth: 240,
               zIndex: 99999,
-              background: '#111120',
+              background: '#FFFFFF',
               opacity: 1,
-              border: '1.5px solid rgba(255,255,255,0.12)',
+              border: '1.5px solid rgba(10,10,10,0.12)',
               borderRadius: 18,
-              boxShadow: '0 20px 60px rgba(0,0,0,0.95), 0 0 0 1px rgba(255,255,255,0.05)',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.95), 0 0 0 1px rgba(10,10,10,0.05)',
               overflow: 'hidden',
               animation: 'rpFadeUp 0.15s ease both',
             }}
@@ -198,12 +198,12 @@ export default function NetworkSelector({ onNetworkChange, compact = false }: Ne
             {/* Header */}
             <div style={{
               padding: '12px 16px 10px',
-              borderBottom: '1px solid rgba(255,255,255,0.07)',
-              background: '#111120',
+              borderBottom: '1px solid rgba(10,10,10,0.08)',
+              background: '#FFFFFF',
             }}>
               <span style={{
                 fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700,
-                color: '#4a4a6a', textTransform: 'uppercase' as const,
+                color: 'rgba(10,10,10,0.55)', textTransform: 'uppercase' as const,
                 letterSpacing: '0.08em',
               }}>
                 Seleziona Rete
@@ -231,8 +231,8 @@ export default function NetworkSelector({ onNetworkChange, compact = false }: Ne
                   style={{
                     display: 'flex', alignItems: 'center', gap: 12,
                     padding: '12px 16px',
-                    background: isActive ? `${net.color}12` : '#111120',
-                    borderBottom: i < networks.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none',
+                    background: isActive ? `${net.color}12` : '#FFFFFF',
+                    borderBottom: i < networks.length - 1 ? '1px solid rgba(10,10,10,0.05)' : 'none',
                     cursor: disabled ? 'not-allowed' : isSwitching ? 'wait' : 'pointer',
                     transition: 'background 0.12s ease',
                     opacity: disabled ? 0.4 : 1,
@@ -241,10 +241,10 @@ export default function NetworkSelector({ onNetworkChange, compact = false }: Ne
                   }}
                   onMouseEnter={e => {
                     if (!isActive && !disabled && !isSwitching)
-                      (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)'
+                      (e.currentTarget as HTMLElement).style.background = 'rgba(10,10,10,0.08)'
                   }}
                   onMouseLeave={e => {
-                    (e.currentTarget as HTMLElement).style.background = isActive ? `${net.color}12` : '#111120'
+                    (e.currentTarget as HTMLElement).style.background = isActive ? `${net.color}12` : '#FFFFFF'
                   }}
                 >
                   {/* Icona */}
@@ -262,7 +262,7 @@ export default function NetworkSelector({ onNetworkChange, compact = false }: Ne
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span style={{
                         fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 700,
-                        color: '#e2e2f0',
+                        color: '#0A0A0A',
                       }}>
                         {net.name}
                       </span>
@@ -284,7 +284,7 @@ export default function NetworkSelector({ onNetworkChange, compact = false }: Ne
                       )}
                     </div>
                     {disabled && (
-                      <span style={{ fontFamily: 'var(--font-display)', fontSize: 10, color: '#4a4a6a', display: 'block', marginTop: 1 }}>
+                      <span style={{ fontFamily: 'var(--font-display)', fontSize: 10, color: 'rgba(10,10,10,0.55)', display: 'block', marginTop: 1 }}>
                         Coming Soon
                       </span>
                     )}

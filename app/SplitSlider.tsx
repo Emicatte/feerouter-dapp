@@ -1,13 +1,7 @@
 'use client'
 
 import { useRef, useCallback } from 'react'
-
-const C = {
-  text: '#E2E2F0', sub: '#8A8FA8', dim: '#4A4E64',
-  green: '#00D68F', purple: '#8B5CF6', blue: '#3B82F6',
-  border: 'rgba(255,255,255,0.06)',
-  D: 'var(--font-display)', M: 'var(--font-mono)',
-}
+import { C } from '@/app/designTokens'
 
 interface Props {
   value: number
@@ -56,7 +50,7 @@ export default function SplitSlider({ value, onChange, dest1, dest2 }: Props) {
         onPointerDown={handlePointer}
         style={{
           position: 'relative', height: 28, cursor: 'pointer',
-          background: 'rgba(255,255,255,0.04)', borderRadius: 8,
+          background: 'rgba(10,10,10,0.04)', borderRadius: 8,
           border: `1px solid ${C.border}`, overflow: 'hidden',
           touchAction: 'none', userSelect: 'none',
         }}

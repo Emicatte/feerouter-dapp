@@ -1,12 +1,14 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
+import { Link } from '@/i18n/navigation'
+import { useTranslations } from 'next-intl'
 import { useAccount, useChainId } from 'wagmi'
 import dynamic from 'next/dynamic'
 import { motion } from 'framer-motion'
 import { C } from '@/app/designTokens'
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
+import LanguageSwitcher from '@/components/LanguageSwitcher'
 
 import TransferForm from '@/app/TransferForm'
 import SwapModule from '@/app/SwapModule'
@@ -16,7 +18,7 @@ const CommandCenter = dynamic(() => import('@/app/command-center'), {
   ssr: false,
   loading: () => (
     <div style={{ padding: 40, textAlign: 'center', color: C.sub, fontFamily: C.D }}>
-      Loading Command Center…
+      …
     </div>
   ),
 })
@@ -50,6 +52,7 @@ export default function AppPage() {
   const { address, isConnected } = useAccount()
   const chainId = useChainId()
   const [isMobile, setIsMobile] = useState(false)
+  const t = useTranslations('dapp')
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768)
@@ -106,20 +109,20 @@ export default function AppPage() {
           transform: isMobile ? 'none' : 'translateX(-50%)',
         }}>
           {([
-            { key: 'send' as AppTab, label: 'Send' },
-            { key: 'swap' as AppTab, label: 'Swap' },
-            { key: 'command' as AppTab, label: isMobile ? 'CMD' : 'Command Center' },
-          ]).map((t) => (
+            { key: 'send' as AppTab, label: t('tabs.send') },
+            { key: 'swap' as AppTab, label: t('tabs.swap') },
+            { key: 'command' as AppTab, label: t('tabs.flow') },
+          ]).map((item) => (
             <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
+              key={item.key}
+              onClick={() => setTab(item.key)}
               style={{
                 position: 'relative',
                 padding: isMobile ? '6px 10px' : '8px 16px',
                 borderRadius: 8,
                 border: 'none',
                 background: 'transparent',
-                color: tab === t.key ? C.text : C.sub,
+                color: tab === item.key ? C.text : C.sub,
                 fontFamily: C.D,
                 fontSize: isMobile ? 12 : 13,
                 fontWeight: 500,
@@ -127,8 +130,8 @@ export default function AppPage() {
                 transition: 'color 0.2s',
               }}
             >
-              {t.label}
-              {tab === t.key && (
+              {item.label}
+              {tab === item.key && (
                 <motion.div
                   layoutId="app-tab-indicator"
                   style={{
@@ -146,8 +149,9 @@ export default function AppPage() {
           ))}
         </div>
 
-        {/* Right: wallet status */}
+        {/* Right: language switcher + wallet status */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <LanguageSwitcher />
           {isConnected && address ? (
             <div style={{
               padding: '6px 12px',
@@ -170,7 +174,7 @@ export default function AppPage() {
               fontSize: 12,
               fontWeight: 500,
             }}>
-              Connect wallet
+              {t('connectWallet')}
             </div>
           )}
         </div>
@@ -203,7 +207,7 @@ export default function AppPage() {
             </ErrorBoundary>
           </div>
 
-          {/* Command Center */}
+          {/* Flow */}
           <div style={tab === 'command' ? panelActive : panelHidden}>
             <ErrorBoundary module="CommandCenter">
               <CommandCenter

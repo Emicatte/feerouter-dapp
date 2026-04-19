@@ -2,15 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-
-const C = {
-  bg: '#050510', surface: '#111118', card: '#16161f',
-  border: 'rgba(255,255,255,0.06)', text: '#E2E2F0',
-  sub: '#8A8FA8', dim: '#4A4E64', green: '#00D68F', red: '#FF4C6A',
-  amber: '#FFB547', blue: '#3B82F6', purple: '#8B5CF6',
-  D: 'var(--font-display)', M: 'var(--font-mono)',
-  S: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-}
+import { C } from '@/app/designTokens'
 
 const fadeUp = {
   initial: { opacity: 0, y: 30 } as const,
@@ -20,7 +12,7 @@ const fadeUp = {
 }
 
 const cardStyle: React.CSSProperties = {
-  background: 'rgba(22,22,31,0.5)',
+  background: 'rgba(10,10,10,0.5)',
   border: `1px solid ${C.border}`,
   borderRadius: 16,
   padding: 28,
@@ -29,7 +21,7 @@ const cardStyle: React.CSSProperties = {
 }
 
 const codeBlockStyle: React.CSSProperties = {
-  background: '#0a0a14',
+  background: '#FAFAFA',
   border: `1px solid ${C.border}`,
   borderRadius: 12,
   padding: '20px 24px',
@@ -42,7 +34,7 @@ const codeBlockStyle: React.CSSProperties = {
 
 const dividerStyle: React.CSSProperties = {
   width: '100%', height: 1,
-  background: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.06) 20%, rgba(255,255,255,0.06) 80%, transparent)',
+  background: 'linear-gradient(90deg, transparent, rgba(10,10,10,0.06) 20%, rgba(10,10,10,0.06) 80%, transparent)',
   margin: '80px 0',
 }
 
@@ -53,7 +45,7 @@ function HoverCard({ children, style, ...rest }: React.HTMLAttributes<HTMLDivEle
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
       style={{
         ...cardStyle, ...style,
-        borderColor: hov ? 'rgba(255,255,255,0.12)' : C.border,
+        borderColor: hov ? 'rgba(10,10,10,0.12)' : C.border,
       }}
       {...rest}
     >{children}</div>
@@ -239,7 +231,7 @@ export default function ApiDocsOverlay({ onClose, onGoToCommand }: { onClose: ()
         position: 'sticky', top: 0, zIndex: 10,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: isMobile ? '14px 16px' : '16px 32px',
-        background: 'rgba(5,5,16,0.8)',
+        background: 'rgba(250,250,250,0.8)',
         backdropFilter: 'blur(12px)',
         borderBottom: `1px solid ${C.border}`,
       }}>
@@ -254,7 +246,7 @@ export default function ApiDocsOverlay({ onClose, onGoToCommand }: { onClose: ()
           }}
         >← Back to RSends</button>
         <button onClick={onClose} style={{
-          background: 'rgba(255,255,255,0.06)', border: 'none',
+          background: 'rgba(10,10,10,0.08)', border: 'none',
           borderRadius: '50%', width: 36, height: 36, cursor: 'pointer',
           color: C.sub, fontSize: 18, display: 'grid', placeItems: 'center',
           transition: 'background 0.15s',
@@ -282,8 +274,7 @@ export default function ApiDocsOverlay({ onClose, onGoToCommand }: { onClose: ()
           <p style={{
             fontFamily: C.D, fontSize: 'clamp(20px, 3vw, 28px)', fontWeight: 600,
             margin: '0 0 12px',
-            background: `linear-gradient(135deg, ${C.blue}, ${C.purple})`,
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+            color: '#C8512C',
           }}>Integrate payments in minutes</p>
           <p style={{
             fontFamily: C.S, fontSize: 16, color: C.sub, margin: '0 0 36px',
@@ -454,7 +445,7 @@ export default function ApiDocsOverlay({ onClose, onGoToCommand }: { onClose: ()
               <div key={t.label} style={{
                 padding: '32px 20px', textAlign: 'center',
                 border: `1px solid ${C.border}`, borderRadius: 16,
-                background: 'rgba(22,22,31,0.3)',
+                background: 'rgba(10,10,10,0.3)',
               }}>
                 <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>{t.icon}</div>
                 <div style={{ fontFamily: C.D, fontSize: 14, fontWeight: 600, color: C.text, lineHeight: 1.4 }}>{t.label}</div>
@@ -470,8 +461,7 @@ export default function ApiDocsOverlay({ onClose, onGoToCommand }: { onClose: ()
           <h2 style={{
             fontFamily: C.D, fontSize: 'clamp(26px, 4vw, 36px)', fontWeight: 700,
             margin: '0 0 14px',
-            background: `linear-gradient(135deg, ${C.blue}, ${C.purple})`,
-            WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
+            color: '#C8512C',
           }}>Start building with RSends</h2>
           <p style={{
             fontFamily: C.S, fontSize: 16, color: C.sub, margin: '0 0 32px', lineHeight: 1.6,

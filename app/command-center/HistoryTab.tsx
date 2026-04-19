@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useTranslations } from 'next-intl'
 import { motion, AnimatePresence } from 'framer-motion'
 import { C, EASE, BACKEND, RSEND_FEE_PCT, STATUS_COLORS, STATUS_OPTIONS, TOKEN_OPTIONS, CHAIN_NAMES, tr, ago, fmtDate, fiat, isValidAddr, Sk, TabSkeleton, PaginationBtn, inp, selectStyle, labelStyle } from './shared'
 import type { LogEntry } from './shared'
@@ -9,6 +10,7 @@ import { mutationHeaders } from '../../lib/rsendFetch'
 import { logger } from '../../lib/logger'
 
 function HistoryTab({ address, ethPrice, stats: overallStats, rules, activeFamily, walletAddress }: { address: string; ethPrice: number; stats: any; rules: any[]; activeFamily: ChainFamily; walletAddress: string | null }) {
+  const t = useTranslations('commandCenter.history')
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
@@ -99,13 +101,13 @@ function HistoryTab({ address, ethPrice, stats: overallStats, rules, activeFamil
       {/* Summary Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 6, marginBottom: 10 }}>
         {[
-          { label: 'Total Routed', val: overallStats ? `${overallStats.total_volume_eth.toFixed(4)} ETH` : '--', sub: overallStats ? fiat(overallStats.total_volume_eth, ethPrice) : '', color: C.purple },
-          { label: 'Fees', val: overallStats ? `${(overallStats.total_volume_eth * RSEND_FEE_PCT / 100).toFixed(6)} ETH` : '--', sub: overallStats ? fiat(overallStats.total_volume_eth * RSEND_FEE_PCT / 100, ethPrice) : '', color: C.amber },
-          { label: 'Gas Spent', val: overallStats ? `${overallStats.total_gas_spent_eth.toFixed(6)} ETH` : '--', sub: overallStats ? fiat(overallStats.total_gas_spent_eth, ethPrice) : '', color: C.blue },
-          { label: 'Success Rate', val: overallStats ? `${overallStats.success_rate}%` : '--', sub: overallStats ? `${overallStats.completed}/${overallStats.total_sweeps}` : '', color: overallStats?.success_rate >= 90 ? C.green : overallStats?.success_rate >= 70 ? C.amber : C.red },
+          { label: t('totalRouted'), val: overallStats ? `${overallStats.total_volume_eth.toFixed(4)} ETH` : '--', sub: overallStats ? fiat(overallStats.total_volume_eth, ethPrice) : '', color: C.purple },
+          { label: t('fees'), val: overallStats ? `${(overallStats.total_volume_eth * RSEND_FEE_PCT / 100).toFixed(6)} ETH` : '--', sub: overallStats ? fiat(overallStats.total_volume_eth * RSEND_FEE_PCT / 100, ethPrice) : '', color: C.amber },
+          { label: t('gasSpent'), val: overallStats ? `${overallStats.total_gas_spent_eth.toFixed(6)} ETH` : '--', sub: overallStats ? fiat(overallStats.total_gas_spent_eth, ethPrice) : '', color: C.blue },
+          { label: t('successRate'), val: overallStats ? `${overallStats.success_rate}%` : '--', sub: overallStats ? `${overallStats.completed}/${overallStats.total_sweeps}` : '', color: overallStats?.success_rate >= 90 ? C.green : overallStats?.success_rate >= 70 ? C.amber : C.red },
         ].map(c => (
           <div key={c.label} style={{
-            background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`,
+            background: 'rgba(10,10,10,0.03)', border: `1px solid ${C.border}`,
             borderRadius: 10, padding: '8px 10px',
           }}>
             <div style={{ fontFamily: C.M, fontSize: 8, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>{c.label}</div>
@@ -154,7 +156,7 @@ function HistoryTab({ address, ethPrice, stats: overallStats, rules, activeFamil
 
       {/* Table */}
       <div style={{
-        background: 'rgba(255,255,255,0.03)',
+        background: 'rgba(10,10,10,0.03)',
         border: `1px solid ${C.border}`,
         borderRadius: 14, overflow: 'hidden',
       }}>
@@ -163,9 +165,9 @@ function HistoryTab({ address, ethPrice, stats: overallStats, rules, activeFamil
           gridTemplateColumns: '32px 78px 44px 80px 1fr 60px 55px',
           gap: 4, padding: '8px 12px',
           borderBottom: `1px solid ${C.border}`,
-          background: 'rgba(255,255,255,0.02)',
+          background: 'rgba(10,10,10,0.04)',
         }}>
-          {['#', 'Time', 'Token', 'Amount', 'Route', 'TX', 'Status'].map(h => (
+          {[t('columns.id'), t('columns.time'), t('columns.token'), t('columns.amount'), t('columns.route'), t('columns.tx'), t('columns.status')].map(h => (
             <span key={h} style={{ fontFamily: C.M, fontSize: 8, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
               {h}
             </span>
@@ -196,7 +198,7 @@ function HistoryTab({ address, ethPrice, stats: overallStats, rules, activeFamil
                     borderBottom: (i < logs.length - 1 && !isExpanded) ? `1px solid ${C.border}` : 'none',
                     alignItems: 'center',
                     cursor: 'pointer',
-                    background: isExpanded ? 'rgba(255,255,255,0.02)' : 'transparent',
+                    background: isExpanded ? 'rgba(10,10,10,0.04)' : 'transparent',
                     transition: 'background 0.15s',
                   }}
                 >
@@ -250,7 +252,7 @@ function HistoryTab({ address, ethPrice, stats: overallStats, rules, activeFamil
                     >
                       <div style={{
                         padding: '10px 14px',
-                        background: 'rgba(255,255,255,0.015)',
+                        background: 'rgba(10,10,10,0.03)',
                         borderBottom: `1px solid ${C.border}`,
                         display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8,
                       }}>

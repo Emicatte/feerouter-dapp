@@ -4,24 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSwitchChain, useChainId } from 'wagmi'
 import { SUPPORTED_CHAINS, type ChainId } from './tokens/tokenRegistry'
-
-// ── Palette (matching page.tsx C object) ─────────────────────────────────
-const C = {
-  bg:      '#0a0a0f',
-  surface: '#111118',
-  card:    '#16161f',
-  border:  'rgba(255,255,255,0.06)',
-  text:    '#E2E2F0',
-  sub:     '#8A8FA8',
-  dim:     '#4A4E64',
-  green:   '#00D68F',
-  blue:    '#3B82F6',
-  purple:  '#8B5CF6',
-  D:       'var(--font-display)',
-  M:       'var(--font-mono)',
-}
-
-const EASE: [number, number, number, number] = [0.4, 0, 0.2, 1]
+import { C, EASE } from '@/app/designTokens'
 
 // ── Chain color map ──────────────────────────────────────────────────────
 const CHAIN_COLORS: Record<number, string> = {
@@ -117,8 +100,8 @@ export default function ChainSelector({
         style={{
           display: 'flex', alignItems: 'center', gap: 6,
           padding: '8px 10px',
-          background: open ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.03)',
-          border: `1px solid ${open ? 'rgba(255,255,255,0.12)' : C.border}`,
+          background: open ? 'rgba(10,10,10,0.08)' : 'rgba(10,10,10,0.03)',
+          border: `1px solid ${open ? 'rgba(10,10,10,0.12)' : C.border}`,
           borderRadius: 12,
           cursor: 'pointer',
           transition: 'all 0.15s ease',
@@ -157,18 +140,18 @@ export default function ChainSelector({
               left: 0,
               zIndex: 200,
               minWidth: 180,
-              background: '#111120',
-              border: '1px solid rgba(255,255,255,0.10)',
+              background: '#FFFFFF',
+              border: '1px solid rgba(10,10,10,0.10)',
               borderRadius: 14,
               overflow: 'hidden',
-              boxShadow: '0 20px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.03)',
+              boxShadow: '0 20px 60px rgba(0,0,0,0.7), 0 0 0 1px rgba(10,10,10,0.03)',
               transformOrigin: 'top left',
             }}
           >
             {/* Header */}
             <div style={{
               padding: '10px 14px 8px',
-              borderBottom: '1px solid rgba(255,255,255,0.05)',
+              borderBottom: '1px solid rgba(10,10,10,0.05)',
             }}>
               <span style={{
                 fontFamily: C.D, fontSize: 10, fontWeight: 700,
@@ -195,14 +178,14 @@ export default function ChainSelector({
                     width: '100%',
                     display: 'flex', alignItems: 'center', gap: 10,
                     padding: '10px 14px',
-                    background: active ? 'rgba(255,255,255,0.04)' : 'transparent',
+                    background: active ? 'rgba(10,10,10,0.04)' : 'transparent',
                     border: 'none',
-                    borderBottom: '1px solid rgba(255,255,255,0.04)',
+                    borderBottom: '1px solid rgba(10,10,10,0.04)',
                     cursor: 'pointer',
                     transition: 'background 0.12s ease',
                     textAlign: 'left' as const,
                   }}
-                  onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.03)' }}
+                  onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'rgba(10,10,10,0.03)' }}
                   onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = 'transparent' }}
                 >
                   <div style={{

@@ -2,31 +2,11 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { motion, useInView } from 'framer-motion'
-
-const C = {
-  bg:      '#0a0a0f',
-  surface: '#111118',
-  card:    '#16161f',
-  border:  'rgba(255,255,255,0.06)',
-  text:    '#E2E2F0',
-  sub:     '#8A8FA8',
-  dim:     '#4A4E64',
-  green:   '#00D68F',
-  red:     '#FF4C6A',
-  amber:   '#FFB547',
-  blue:    '#3B82F6',
-  purple:  '#8B5CF6',
-  D:       'var(--font-display)',
-  M:       'var(--font-mono)',
-}
+import { C } from '@/app/designTokens'
 
 const GRAD: React.CSSProperties = {
-  background: 'linear-gradient(135deg, #FFFFFF 0%, #60A5FA 60%, #1D4ED8 100%)',
-  WebkitBackgroundClip: 'text',
-  WebkitTextFillColor: 'transparent',
+  color: '#C8512C',
 }
-
-const EASE: [number, number, number, number] = [0.4, 0, 0.2, 1]
 
 const CONTRACT = '0x81d78BDD917D5A43a9E424B905407495b8f2c0f4'
 
@@ -57,11 +37,11 @@ function Code({ children, lang }: { children: string; lang?: string }) {
               .replace(/<\/kw>/g, '</span>')
               .replace(/<str>/g, '<span style="color:#86efac">')
               .replace(/<\/str>/g, '</span>')
-              .replace(/<cmt>/g, '<span style="color:#4A4E64">')
+              .replace(/<cmt>/g, '<span style="color:rgba(10,10,10,0.55)">')
               .replace(/<\/cmt>/g, '</span>')
               .replace(/<num>/g, '<span style="color:#FFB547">')
               .replace(/<\/num>/g, '</span>')
-              .replace(/<fn>/g, '<span style="color:#60A5FA">')
+              .replace(/<fn>/g, '<span style="color:#C8512C">')
               .replace(/<\/fn>/g, '</span>')
             }}
           />
@@ -72,7 +52,7 @@ function Code({ children, lang }: { children: string; lang?: string }) {
 
   return (
     <div style={{
-      background: '#0c0c18', borderRadius: 12, padding: '14px 16px',
+      background: '#FAFAFA', borderRadius: 12, padding: '14px 16px',
       border: `1px solid ${C.border}`, fontFamily: C.M, fontSize: 11,
       color: C.text, overflow: 'auto', lineHeight: 1.6,
     }}>
@@ -95,7 +75,7 @@ function CopyButton({ text }: { text: string }) {
       onClick={() => { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000) }}
       style={{
         padding: '5px 10px', borderRadius: 8, border: `1px solid ${C.border}`,
-        background: copied ? `${C.green}15` : 'rgba(255,255,255,0.04)',
+        background: copied ? `${C.green}15` : 'rgba(10,10,10,0.04)',
         color: copied ? C.green : C.sub, fontFamily: C.M, fontSize: 10,
         cursor: 'pointer', transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: 4,
       }}
@@ -115,7 +95,7 @@ function TechBadge({ label }: { label: string }) {
       }}
       style={{
         padding: '5px 12px', borderRadius: 8,
-        background: 'rgba(255,255,255,0.03)',
+        background: 'rgba(10,10,10,0.03)',
         border: `1px solid ${C.border}`,
         fontFamily: C.M, fontSize: 10, color: C.sub,
         transition: 'all 0.25s ease', cursor: 'default',
@@ -335,7 +315,7 @@ event PaymentExecuted(
         </div>
         <div style={{
           padding: '16px', borderRadius: 14,
-          background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}`,
+          background: 'rgba(10,10,10,0.02)', border: `1px solid ${C.border}`,
           marginBottom: 12,
         }}>
           {/* Address + copy */}
@@ -401,12 +381,12 @@ event PaymentExecuted(
                   onClick={() => setExpandedEndpoint(isExpanded ? null : i)}
                   style={{
                     width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '10px 14px', background: isExpanded ? 'rgba(255,255,255,0.03)' : 'transparent',
+                    padding: '10px 14px', background: isExpanded ? 'rgba(10,10,10,0.03)' : 'transparent',
                     border: 'none', borderBottom: `1px solid ${C.border}`,
                     cursor: 'pointer', transition: 'background 0.15s',
                     textAlign: 'left',
                   }}
-                  onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
+                  onMouseEnter={e => { if (!isExpanded) e.currentTarget.style.background = 'rgba(10,10,10,0.02)' }}
                   onMouseLeave={e => { if (!isExpanded) e.currentTarget.style.background = 'transparent' }}
                 >
                   <span style={{
@@ -429,13 +409,13 @@ event PaymentExecuted(
                   <div style={{ padding: '12px 14px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                     <div>
                       <div style={{ fontFamily: C.M, fontSize: 8, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Request</div>
-                      <div style={{ background: '#0c0c18', borderRadius: 8, padding: '10px 12px', fontFamily: C.M, fontSize: 10, color: C.sub, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                      <div style={{ background: '#FAFAFA', borderRadius: 8, padding: '10px 12px', fontFamily: C.M, fontSize: 10, color: C.sub, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
                         {ep.example.request}
                       </div>
                     </div>
                     <div>
                       <div style={{ fontFamily: C.M, fontSize: 8, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Response</div>
-                      <div style={{ background: '#0c0c18', borderRadius: 8, padding: '10px 12px', fontFamily: C.M, fontSize: 10, color: C.green, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                      <div style={{ background: '#FAFAFA', borderRadius: 8, padding: '10px 12px', fontFamily: C.M, fontSize: 10, color: C.green, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
                         {ep.example.response}
                       </div>
                     </div>
@@ -479,7 +459,7 @@ event PaymentExecuted(
                       onClick={() => setCodeTab(prev => ({ ...prev, [i]: t }))}
                       style={{
                         padding: '3px 10px', borderRadius: 6, border: 'none',
-                        background: tab === t ? 'rgba(255,255,255,0.08)' : 'transparent',
+                        background: tab === t ? 'rgba(10,10,10,0.08)' : 'transparent',
                         color: tab === t ? C.text : C.dim,
                         fontFamily: C.M, fontSize: 9, cursor: 'pointer',
                         transition: 'all 0.15s',
@@ -503,7 +483,7 @@ event PaymentExecuted(
         </div>
         <div style={{
           padding: '18px 16px', borderRadius: 14,
-          background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}`,
+          background: 'rgba(10,10,10,0.02)', border: `1px solid ${C.border}`,
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
             {/* GitHub icon */}

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 import { motion } from 'framer-motion'
 import { C, EASE, PIE_COLORS, BACKEND, smooth, fiat, Sk, ChartTip } from './shared'
 import { useAccount } from 'wagmi'
@@ -10,6 +11,7 @@ import { logger } from '../../lib/logger'
 function AnalyticsTab({ stats: parentStats, daily: parentDaily, loading: parentLoading, ethPrice, isVisible = true }: {
   stats: any; daily: any[]; loading: boolean; ethPrice: number; isVisible?: boolean
 }) {
+  const t = useTranslations('commandCenter.analytics')
   const [tokenBreakdown, setTokenBreakdown] = useState<{ name: string; value: number }[]>([])
   const [topRoutes, setTopRoutes] = useState<{ label: string; volume: number }[]>([])
   const { address } = useAccount()
@@ -96,23 +98,23 @@ function AnalyticsTab({ stats: parentStats, daily: parentDaily, loading: parentL
   const feesSaved = Math.max(0, traditionalCost - actualCost)
 
   const statCards = [
-    { label: 'Total Routed', value: `${s.total_volume_eth.toFixed(4)} ETH`, sub: fiat(s.total_volume_eth, ethPrice), color: C.purple },
-    { label: 'Fees Saved', value: `$${feesSaved.toFixed(0)}`, sub: `vs ~$5/transfer traditional`, color: C.green },
-    { label: 'Success Rate', value: `${s.success_rate}%`, sub: `${s.completed} of ${s.total_sweeps}`, color: s.success_rate >= 90 ? C.green : s.success_rate >= 70 ? C.amber : C.red },
-    { label: 'Avg Time', value: s.avg_sweep_time_sec != null ? `${s.avg_sweep_time_sec.toFixed(1)}s` : '--', sub: 'per forward', color: C.blue },
+    { label: t('totalRouted'), value: `${s.total_volume_eth.toFixed(4)} ETH`, sub: fiat(s.total_volume_eth, ethPrice), color: C.purple },
+    { label: t('feesSaved'), value: `$${feesSaved.toFixed(0)}`, sub: `vs ~$5/transfer traditional`, color: C.green },
+    { label: t('successRate'), value: `${s.success_rate}%`, sub: `${s.completed} of ${s.total_sweeps}`, color: s.success_rate >= 90 ? C.green : s.success_rate >= 70 ? C.amber : C.red },
+    { label: t('avgTime'), value: s.avg_sweep_time_sec != null ? `${s.avg_sweep_time_sec.toFixed(1)}s` : '--', sub: t('perForward'), color: C.blue },
   ]
 
   const statusBreakdown = [
-    { name: 'Completed', value: s.completed, color: C.green },
-    { name: 'Failed', value: s.failed, color: C.red },
-    { name: 'Other', value: Math.max(0, s.total_sweeps - s.completed - s.failed), color: C.amber },
+    { name: t('completed'), value: s.completed, color: C.green },
+    { name: t('failed'), value: s.failed, color: C.red },
+    { name: t('other'), value: Math.max(0, s.total_sweeps - s.completed - s.failed), color: C.amber },
   ].filter(x => x.value > 0)
 
   const periods: { key: Period; label: string }[] = [
     { key: '24h', label: '24h' },
     { key: '7d', label: '7d' },
     { key: '30d', label: '30d' },
-    { key: 'all', label: 'All' },
+    { key: 'all', label: t('all') },
   ]
 
   return (
@@ -125,7 +127,7 @@ function AnalyticsTab({ stats: parentStats, daily: parentDaily, loading: parentL
             onClick={() => setPeriod(p.key)}
             style={{
               padding: '6px 14px', borderRadius: 8, border: 'none',
-              background: period === p.key ? `linear-gradient(135deg, ${C.red}, ${C.purple})` : 'rgba(255,255,255,0.04)',
+              background: period === p.key ? `linear-gradient(135deg, ${C.red}, ${C.purple})` : 'rgba(10,10,10,0.04)',
               color: period === p.key ? '#fff' : C.dim,
               fontFamily: C.D, fontSize: 11, fontWeight: 600, cursor: 'pointer',
               transition: 'all 0.15s',
@@ -150,7 +152,7 @@ function AnalyticsTab({ stats: parentStats, daily: parentDaily, loading: parentL
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.05, ...smooth }}
               style={{
-                background: 'rgba(255,255,255,0.03)',
+                background: 'rgba(10,10,10,0.03)',
                 border: `1px solid ${C.border}`,
                 borderRadius: 14, padding: '12px 14px',
               }}
@@ -171,11 +173,11 @@ function AnalyticsTab({ stats: parentStats, daily: parentDaily, loading: parentL
 
       {/* Volume AreaChart */}
       <div style={{
-        background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`,
+        background: 'rgba(10,10,10,0.03)', border: `1px solid ${C.border}`,
         borderRadius: 14, padding: '14px 12px 4px', marginBottom: 14,
       }}>
         <div style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 10 }}>
-          Volume ({period === 'all' ? 'All Time' : period})
+          {t('volume')} ({period === 'all' ? t('allTime') : period})
         </div>
         {!isVisible ? (
           <div style={{ height: 140 }} />
@@ -214,7 +216,7 @@ function AnalyticsTab({ stats: parentStats, daily: parentDaily, loading: parentL
 
       {/* Top Routes */}
       <div style={{
-        background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`,
+        background: 'rgba(10,10,10,0.03)', border: `1px solid ${C.border}`,
         borderRadius: 14, padding: '14px 12px', marginBottom: 14,
       }}>
         <div style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 10 }}>
@@ -230,7 +232,7 @@ function AnalyticsTab({ stats: parentStats, daily: parentDaily, loading: parentL
                 <span style={{ fontFamily: C.M, fontSize: 10, color: C.text }}>{r.label}</span>
                 <span style={{ fontFamily: C.M, fontSize: 10, color: C.sub }}>{r.volume} ETH</span>
               </div>
-              <div style={{ height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.04)' }}>
+              <div style={{ height: 4, borderRadius: 2, background: 'rgba(10,10,10,0.04)' }}>
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${pct}%` }}
@@ -251,7 +253,7 @@ function AnalyticsTab({ stats: parentStats, daily: parentDaily, loading: parentL
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
         {/* Token Breakdown */}
         <div style={{
-          background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`,
+          background: 'rgba(10,10,10,0.03)', border: `1px solid ${C.border}`,
           borderRadius: 14, padding: '14px 8px',
         }}>
           <div style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 8, paddingLeft: 4 }}>
@@ -287,7 +289,7 @@ function AnalyticsTab({ stats: parentStats, daily: parentDaily, loading: parentL
 
         {/* Status Breakdown */}
         <div style={{
-          background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`,
+          background: 'rgba(10,10,10,0.03)', border: `1px solid ${C.border}`,
           borderRadius: 14, padding: '14px 8px',
         }}>
           <div style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.sub, marginBottom: 8, paddingLeft: 4 }}>
@@ -324,12 +326,12 @@ function AnalyticsTab({ stats: parentStats, daily: parentDaily, loading: parentL
 
       {/* Gas BarChart */}
       <div style={{
-        background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`,
+        background: 'rgba(10,10,10,0.03)', border: `1px solid ${C.border}`,
         borderRadius: 14, padding: '14px 12px 4px',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
           <span style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.sub }}>
-            Gas Efficiency ({period === 'all' ? 'All Time' : period})
+            {t('gasEfficiency')} ({period === 'all' ? t('allTime') : period})
           </span>
           {s.total_gas_spent_eth > 0 && (
             <span style={{ fontFamily: C.M, fontSize: 9, color: C.amber }}>

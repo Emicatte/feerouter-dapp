@@ -28,7 +28,7 @@ function Identicon({ address, size = 28 }: { address: string; size?: number }) {
     <div style={{
       width: size, height: size, borderRadius: '50%',
       background: `conic-gradient(from 30deg, ${c1}, ${c2}, ${c3}, ${c1})`,
-      border: '2px solid rgba(255,255,255,0.12)', flexShrink: 0,
+      border: '2px solid rgba(10,10,10,0.12)', flexShrink: 0,
     }} />
   )
 }
@@ -162,12 +162,12 @@ export default function AccountHeader({ nonEvmWallet }: { nonEvmWallet?: NonEvmW
         style={{
           display: 'flex', alignItems: 'center', gap: 8,
           padding: '5px 12px 5px 5px', borderRadius: 24,
-          background: open ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.04)',
-          border: `1.5px solid ${open ? 'rgba(255,255,255,0.18)' : 'rgba(255,255,255,0.08)'}`,
+          background: open ? 'rgba(10,10,10,0.10)' : 'rgba(10,10,10,0.04)',
+          border: `1.5px solid ${open ? 'rgba(10,10,10,0.18)' : 'rgba(10,10,10,0.08)'}`,
           cursor: 'pointer', transition: 'all 0.15s', outline: 'none',
         }}
-        onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'rgba(255,255,255,0.07)' }}
-        onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+        onMouseEnter={e => { if (!open) e.currentTarget.style.background = 'rgba(10,10,10,0.08)' }}
+        onMouseLeave={e => { if (!open) e.currentTarget.style.background = 'rgba(10,10,10,0.04)' }}
       >
         {isNonEvm ? (
           <div style={{
@@ -180,7 +180,7 @@ export default function AccountHeader({ nonEvmWallet }: { nonEvmWallet?: NonEvmW
         ) : (
           <Identicon address={address} size={26} />
         )}
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 500, color: '#e2e2f0' }}>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, fontWeight: 500, color: '#0A0A0A' }}>
           {tr(address)}
         </span>
       </button>
@@ -198,12 +198,12 @@ export default function AccountHeader({ nonEvmWallet }: { nonEvmWallet?: NonEvmW
               ? { left: 8, right: 8 }
               : { right: menuPos.right, width: 320 }),
             zIndex: 99999,
-            background: '#111120', border: '1.5px solid rgba(255,255,255,0.12)',
+            background: '#FFFFFF', border: '1.5px solid rgba(10,10,10,0.12)',
             borderRadius: 20, boxShadow: '0 24px 80px rgba(0,0,0,0.95)',
             overflow: 'hidden', animation: 'rpFadeUp 0.18s ease both',
           }}>
             {/* Identity */}
-            <div style={{ padding: '18px 18px 14px', borderBottom: '1px solid rgba(255,255,255,0.07)', background: '#111120' }}>
+            <div style={{ padding: '18px 18px 14px', borderBottom: '1px solid rgba(10,10,10,0.08)', background: '#FFFFFF' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
                 {isNonEvm ? (
                   <div style={{
@@ -217,8 +217,8 @@ export default function AccountHeader({ nonEvmWallet }: { nonEvmWallet?: NonEvmW
                   <Identicon address={address} size={40} />
                 )}
                 <div>
-                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 500, color: '#e2e2f0' }}>{tr(address, 8, 6)}</div>
-                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: '#4a4a6a', marginTop: 2 }}>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 500, color: '#0A0A0A' }}>{tr(address, 8, 6)}</div>
+                  <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, color: 'rgba(10,10,10,0.55)', marginTop: 2 }}>
                     {isNonEvm ? NON_EVM_META[nonEvmWallet!.family].name : (reg?.chainName ?? 'Base')}
                   </div>
                 </div>
@@ -227,8 +227,8 @@ export default function AccountHeader({ nonEvmWallet }: { nonEvmWallet?: NonEvmW
               {/* Balance — EVM only */}
               {!isNonEvm && (
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 14 }}>
-                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, color: '#e2e2f0', letterSpacing: '-0.03em' }}>{balFmt}</span>
-                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 600, color: '#4a4a6a' }}>{balSym}</span>
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 800, color: '#0A0A0A', letterSpacing: '-0.03em' }}>{balFmt}</span>
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 600, color: 'rgba(10,10,10,0.55)' }}>{balSym}</span>
                 </div>
               )}
 
@@ -267,8 +267,8 @@ export default function AccountHeader({ nonEvmWallet }: { nonEvmWallet?: NonEvmW
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={handleCopy} style={{
                   flex: 1, padding: '8px 0', borderRadius: 10,
-                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
-                  color: copied ? '#00ffa3' : '#e2e2f0',
+                  background: 'rgba(10,10,10,0.05)', border: '1px solid rgba(10,10,10,0.08)',
+                  color: copied ? '#00ffa3' : '#0A0A0A',
                   fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 600, cursor: 'pointer',
                 }}>{copied ? '✓ Copiato' : '⎘ Copia'}</button>
 
@@ -277,8 +277,8 @@ export default function AccountHeader({ nonEvmWallet }: { nonEvmWallet?: NonEvmW
                     : `${reg?.blockExplorer ?? 'https://basescan.org'}/address/${address}`}
                   target="_blank" rel="noopener noreferrer" style={{
                   flex: 1, padding: '8px 0', borderRadius: 10,
-                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)',
-                  color: '#e2e2f0', fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 600,
+                  background: 'rgba(10,10,10,0.05)', border: '1px solid rgba(10,10,10,0.08)',
+                  color: '#0A0A0A', fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 600,
                   textDecoration: 'none', textAlign: 'center' as const, display: 'block',
                 }}>↗ Explorer</a>
 
@@ -292,14 +292,14 @@ export default function AccountHeader({ nonEvmWallet }: { nonEvmWallet?: NonEvmW
 
             {/* Recent Activity — EVM only */}
             {!isNonEvm && (
-              <div style={{ padding: '14px 18px 16px', background: '#111120' }}>
+              <div style={{ padding: '14px 18px 16px', background: '#FFFFFF' }}>
                 <div style={{
-                  fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, color: '#4a4a6a',
+                  fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, color: 'rgba(10,10,10,0.55)',
                   textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 10,
                 }}>Attività Recente</div>
                 {recentTxs.length === 0 ? (
                   <div style={{ padding: '12px 0', textAlign: 'center' as const }}>
-                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 12, color: '#4a4a6a' }}>Nessuna attività</div>
+                    <div style={{ fontFamily: 'var(--font-display)', fontSize: 12, color: 'rgba(10,10,10,0.55)' }}>Nessuna attività</div>
                   </div>
                 ) : recentTxs.slice(0, 3).map((tx: RecentTx, i: number) => (
                   <a key={tx.tx_hash || i}
@@ -310,7 +310,7 @@ export default function AccountHeader({ nonEvmWallet }: { nonEvmWallet?: NonEvmW
                       padding: '8px 8px', borderRadius: 10,
                       textDecoration: 'none', transition: 'background 0.12s',
                     }}
-                    onMouseEnter={e => (e.currentTarget).style.background = 'rgba(255,255,255,0.04)'}
+                    onMouseEnter={e => (e.currentTarget).style.background = 'rgba(10,10,10,0.04)'}
                     onMouseLeave={e => (e.currentTarget).style.background = 'transparent'}
                   >
                     <div style={{
@@ -319,14 +319,14 @@ export default function AccountHeader({ nonEvmWallet }: { nonEvmWallet?: NonEvmW
                       boxShadow: `0 0 6px ${tx.status === 'completed' ? '#00ffa3' : '#ffb800'}50`,
                     }} />
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 600, color: '#e2e2f0' }}>
+                      <div style={{ fontFamily: 'var(--font-display)', fontSize: 12, fontWeight: 600, color: '#0A0A0A' }}>
                         {tx.gross_amount?.toFixed(6)} {tx.currency}
                       </div>
-                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#4a4a6a', marginTop: 1 }}>
+                      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'rgba(10,10,10,0.55)', marginTop: 1 }}>
                         → {tr(tx.recipient || '', 6, 4)}
                       </div>
                     </div>
-                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: '#4a4a6a' }}>↗</div>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: 10, color: 'rgba(10,10,10,0.55)' }}>↗</div>
                   </a>
                 ))}
               </div>

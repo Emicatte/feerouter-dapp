@@ -3,19 +3,8 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 
-const T = {
-  surface: '#111118',
-  card:    '#0c0c1e',
-  border:  'rgba(255,255,255,0.06)',
-  emerald: '#00ffa3',
-  text:    '#ffffff',
-  muted:   'rgba(255,255,255,0.50)',
-  dim:     'rgba(255,255,255,0.30)',
-  D:       'var(--font-display)',
-  M:       'var(--font-mono)',
-}
-
-const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1]
+import { C, SPRING as EASE } from '@/app/designTokens'
+const T = { ...C, emerald: '#00ffa3', muted: C.sub, dim: 'rgba(10,10,10,0.30)' }
 
 const SUGGESTIONS = ['Alpha-99', 'Luna-42', 'Crypto-77', 'Orion-13', 'Nova-56']
 
@@ -91,9 +80,9 @@ export default function AntiPhishingSetup({ isOpen, onClose, onSave }: AntiPhish
               zIndex: 3001,
               width: '90%',
               maxWidth: 400,
-              background: '#111120',
+              background: '#FFFFFF',
               borderRadius: 20,
-              border: '1px solid rgba(255,255,255,0.10)',
+              border: '1px solid rgba(10,10,10,0.10)',
               boxShadow: '0 40px 100px rgba(0,0,0,0.7)',
               padding: 24,
             }}
@@ -107,7 +96,7 @@ export default function AntiPhishingSetup({ isOpen, onClose, onSave }: AntiPhish
                 onClick={onClose}
                 style={{
                   width: 32, height: 32, borderRadius: 10,
-                  background: 'rgba(255,255,255,0.06)',
+                  background: 'rgba(10,10,10,0.08)',
                   border: `1px solid ${T.border}`,
                   color: T.muted, cursor: 'pointer', fontSize: 14,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -134,8 +123,8 @@ export default function AntiPhishingSetup({ isOpen, onClose, onSave }: AntiPhish
                 width: '100%',
                 padding: '14px 16px',
                 borderRadius: 12,
-                border: `1px solid rgba(255,255,255,0.10)`,
-                background: 'rgba(255,255,255,0.04)',
+                border: `1px solid rgba(10,10,10,0.10)`,
+                background: 'rgba(10,10,10,0.04)',
                 color: T.text,
                 fontFamily: T.M,
                 fontSize: 14,
@@ -155,9 +144,9 @@ export default function AntiPhishingSetup({ isOpen, onClose, onSave }: AntiPhish
                   onClick={() => setCode(s)}
                   style={{
                     padding: '6px 12px', borderRadius: 8,
-                    background: code === s ? 'rgba(139,92,246,0.15)' : 'rgba(255,255,255,0.04)',
-                    border: `1px solid ${code === s ? 'rgba(139,92,246,0.3)' : T.border}`,
-                    color: code === s ? '#a78bfa' : T.muted,
+                    background: code === s ? 'rgba(200,81,44,0.15)' : 'rgba(10,10,10,0.04)',
+                    border: `1px solid ${code === s ? 'rgba(200,81,44,0.3)' : T.border}`,
+                    color: code === s ? '#C8512C' : T.muted,
                     fontFamily: T.M, fontSize: 11,
                     cursor: 'pointer', transition: 'all 0.15s',
                   }}
@@ -177,8 +166,8 @@ export default function AntiPhishingSetup({ isOpen, onClose, onSave }: AntiPhish
                 background: saved
                   ? 'linear-gradient(135deg, #00ffa3, #00cc80)'
                   : code.trim()
-                    ? 'linear-gradient(135deg, #8B5CF6, #a78bfa)'
-                    : 'rgba(255,255,255,0.06)',
+                    ? 'linear-gradient(135deg, #C8512C, #C8512C)'
+                    : 'rgba(10,10,10,0.08)',
                 color: saved ? '#000' : code.trim() ? '#fff' : T.dim,
                 cursor: code.trim() ? 'pointer' : 'not-allowed',
                 transition: 'all 0.2s ease',

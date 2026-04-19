@@ -8,26 +8,11 @@ import type { ChainFamily } from '../../lib/chain-adapters/types'
 //  PALETTE & CONSTANTS
 // ═══════════════════════════════════════════════════════════
 
-export const C = {
-  bg:      '#0a0a0f',
-  surface: '#111118',
-  card:    '#16161f',
-  border:  'rgba(255,255,255,0.06)',
-  text:    '#E2E2F0',
-  sub:     '#8A8FA8',
-  dim:     '#4A4E64',
-  green:   '#00D68F',
-  red:     '#FF4C6A',
-  amber:   '#FFB547',
-  blue:    '#3B82F6',
-  purple:  '#8B5CF6',
-  D:       'var(--font-display)',
-  M:       'var(--font-mono)',
-}
+import { C, EASE } from '../designTokens'
+export { C, EASE }
 
 // Same-origin proxy → see app/api/backend/[...path]/route.ts
 export const BACKEND = '/api/backend'
-export const EASE: [number, number, number, number] = [0.4, 0, 0.2, 1]
 export const RSEND_FEE_PCT = 0.1
 
 // ═══════════════════════════════════════════════════════════
@@ -146,7 +131,7 @@ export const slideVariants = {
 export const inp: React.CSSProperties = {
   width: '100%', padding: '9px 12px', borderRadius: 10,
   boxSizing: 'border-box',
-  background: 'rgba(255,255,255,0.05)',
+  background: 'rgba(10,10,10,0.05)',
   border: `1px solid ${C.border}`,
   color: C.text, fontFamily: C.M, fontSize: 12, outline: 'none',
 }
@@ -201,7 +186,7 @@ export function Sk({ w, h, r = 8 }: { w: string | number; h: number; r?: number 
   return (
     <div style={{
       width: w, height: h, borderRadius: r,
-      background: 'linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.03) 75%)',
+      background: 'linear-gradient(90deg, rgba(10,10,10,0.03) 25%, rgba(10,10,10,0.08) 50%, rgba(10,10,10,0.03) 75%)',
       backgroundSize: '200% 100%',
       animation: 'rpShimmer 1.8s ease infinite',
     }} />
@@ -227,7 +212,7 @@ export function ChartTip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null
   return (
     <div style={{
-      background: '#1a1a24', border: `1px solid ${C.border}`,
+      background: '#FFFFFF', border: `1px solid ${C.border}`,
       borderRadius: 10, padding: '8px 12px',
       boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
     }}>
@@ -258,7 +243,7 @@ export function Tip({ text, children }: { text: string; children: React.ReactNod
         <span style={{
           position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
           padding: '6px 10px', borderRadius: 8, marginBottom: 4,
-          background: '#1a1a24', border: `1px solid ${C.border}`,
+          background: '#FFFFFF', border: `1px solid ${C.border}`,
           color: C.sub, fontFamily: C.M, fontSize: 10,
           whiteSpace: 'nowrap', zIndex: 50,
           boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
@@ -281,7 +266,7 @@ export function ToggleSwitch({ value, onChange }: { value: boolean; onChange: (v
       onClick={() => onChange(!value)}
       style={{
         width: 36, height: 20, borderRadius: 10, border: 'none', cursor: 'pointer',
-        background: value ? C.green : 'rgba(255,255,255,0.08)',
+        background: value ? C.green : 'rgba(10,10,10,0.08)',
         position: 'relative', transition: 'background 0.2s',
       }}
     >
@@ -305,7 +290,7 @@ export function PaginationBtn({ label, disabled, onClick }: { label: string; dis
       disabled={disabled}
       style={{
         padding: '6px 12px', borderRadius: 8,
-        background: disabled ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.06)',
+        background: disabled ? 'rgba(10,10,10,0.04)' : 'rgba(10,10,10,0.08)',
         border: `1px solid ${C.border}`,
         color: disabled ? C.dim : C.text,
         fontFamily: C.M, fontSize: 12, cursor: disabled ? 'not-allowed' : 'pointer',

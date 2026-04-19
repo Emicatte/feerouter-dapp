@@ -1,26 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-
-const C = {
-  bg:      '#0a0a0f',
-  surface: '#111118',
-  card:    '#16161f',
-  border:  'rgba(255,255,255,0.06)',
-  text:    '#E2E2F0',
-  sub:     '#8A8FA8',
-  dim:     '#4A4E64',
-  green:   '#00D68F',
-  red:     '#FF4C6A',
-  amber:   '#FFB547',
-  blue:    '#3B82F6',
-  purple:  '#8B5CF6',
-  D:       'var(--font-display)',
-  M:       'var(--font-mono)',
-  S:       '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-}
-
-const EASE: [number, number, number, number] = [0.4, 0, 0.2, 1]
+import { C, EASE } from '@/app/designTokens'
 
 export default function AboutOverlay() {
   const stats = [
@@ -74,7 +55,7 @@ export default function AboutOverlay() {
         transition={{ delay: 1.3, duration: 0.5, ease: EASE }}
         style={{
           padding: '22px 20px', borderRadius: 16, marginBottom: 28,
-          background: 'linear-gradient(135deg, rgba(59,130,246,0.06) 0%, rgba(139,92,246,0.06) 50%, rgba(255,76,106,0.04) 100%)',
+          background: 'linear-gradient(135deg, rgba(59,130,246,0.06) 0%, rgba(200,81,44,0.06) 50%, rgba(255,76,106,0.04) 100%)',
           border: `1px solid ${C.border}`, position: 'relative', overflow: 'hidden',
         }}
       >
@@ -100,7 +81,7 @@ export default function AboutOverlay() {
                 transition={{ delay: 1.6 + i * 0.1, duration: 0.3 }}
                 style={{
                   padding: '4px 10px', borderRadius: 6,
-                  background: 'rgba(255,255,255,0.04)', border: `1px solid ${C.border}`,
+                  background: 'rgba(10,10,10,0.04)', border: `1px solid ${C.border}`,
                   fontFamily: C.M, fontSize: 9, color: C.dim,
                 }}
               >
@@ -132,7 +113,7 @@ export default function AboutOverlay() {
             transition={{ delay: i * 0.1, duration: 0.4, ease: EASE }}
             style={{
               padding: '16px 10px', borderRadius: 14, textAlign: 'center' as const,
-              background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}`,
+              background: 'rgba(10,10,10,0.02)', border: `1px solid ${C.border}`,
             }}
           >
             <div style={{ fontFamily: C.D, fontSize: 24, fontWeight: 800, color: C.text }}>

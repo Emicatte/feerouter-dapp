@@ -6,15 +6,15 @@ export default function NotFound() {
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      background: '#0a0a0f',
-      color: '#E2E2F0',
+      background: '#FAFAFA',
+      color: '#0A0A0A',
       fontFamily: 'var(--font-display)',
     }}>
       <h1 style={{ fontSize: 72, fontWeight: 800, margin: 0, lineHeight: 1 }}>404</h1>
       <p style={{
         fontFamily: 'var(--font-mono)',
         fontSize: 14,
-        color: '#8A8FA8',
+        color: 'rgba(10,10,10,0.55)',
         marginTop: 12,
       }}>
         Page not found
@@ -25,9 +25,9 @@ export default function NotFound() {
           marginTop: 28,
           padding: '10px 24px',
           borderRadius: 10,
-          background: 'rgba(59,130,246,0.12)',
-          border: '1px solid rgba(59,130,246,0.25)',
-          color: '#3B82F6',
+          background: 'rgba(200,81,44,0.15)',
+          border: '1px solid rgba(200,81,44,0.25)',
+          color: '#C8512C',
           fontFamily: 'var(--font-mono)',
           fontSize: 13,
           textDecoration: 'none',

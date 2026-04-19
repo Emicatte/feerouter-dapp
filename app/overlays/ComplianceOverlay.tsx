@@ -2,43 +2,23 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { motion, useInView } from 'framer-motion'
-
-const C = {
-  bg:      '#0a0a0f',
-  surface: '#111118',
-  card:    '#16161f',
-  border:  'rgba(255,255,255,0.06)',
-  text:    '#E2E2F0',
-  sub:     '#8A8FA8',
-  dim:     '#4A4E64',
-  green:   '#00D68F',
-  red:     '#FF4C6A',
-  amber:   '#FFB547',
-  blue:    '#3B82F6',
-  purple:  '#8B5CF6',
-  D:       'var(--font-display)',
-  M:       'var(--font-mono)',
-}
+import { C, EASE } from '@/app/designTokens'
 
 const GRAD: React.CSSProperties = {
-  background: 'linear-gradient(135deg, #FFFFFF 0%, #60A5FA 60%, #1D4ED8 100%)',
-  WebkitBackgroundClip: 'text',
-  WebkitTextFillColor: 'transparent',
+  color: '#C8512C',
 }
-
-const EASE: [number, number, number, number] = [0.4, 0, 0.2, 1]
 
 // ── SVG Icons for the three pillars ──
 function MiCAIcon({ active }: { active: boolean }) {
   return (
     <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-      <rect x="4" y="8" width="32" height="24" rx="4" stroke={active ? '#3B82F6' : '#4A4E64'} strokeWidth="1.5" fill="none">
+      <rect x="4" y="8" width="32" height="24" rx="4" stroke={active ? '#3B82F6' : 'rgba(10,10,10,0.55)'} strokeWidth="1.5" fill="none">
         <animate attributeName="stroke-opacity" values="0.6;1;0.6" dur="3s" repeatCount="indefinite" />
       </rect>
-      <path d="M12 16h16M12 20h12M12 24h8" stroke={active ? '#60A5FA' : '#6B7280'} strokeWidth="1.2" strokeLinecap="round">
+      <path d="M12 16h16M12 20h12M12 24h8" stroke={active ? '#C8512C' : 'rgba(10,10,10,0.45)'} strokeWidth="1.2" strokeLinecap="round">
         <animate attributeName="stroke-dashoffset" from="40" to="0" dur="1.5s" fill="freeze" />
       </path>
-      <circle cx="32" cy="12" r="4" fill={active ? '#3B82F6' : '#4A4E64'}>
+      <circle cx="32" cy="12" r="4" fill={active ? '#3B82F6' : 'rgba(10,10,10,0.55)'}>
         <animate attributeName="r" values="3.5;4.5;3.5" dur="2s" repeatCount="indefinite" />
       </circle>
       <path d="M30.5 12l1 1 2-2" stroke="white" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
@@ -49,11 +29,11 @@ function MiCAIcon({ active }: { active: boolean }) {
 function DAC8Icon({ active }: { active: boolean }) {
   return (
     <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-      <rect x="8" y="6" width="24" height="28" rx="3" stroke={active ? '#8B5CF6' : '#4A4E64'} strokeWidth="1.5" fill="none" />
-      <path d="M13 12h14M13 16h14M13 20h10M13 24h6" stroke={active ? '#A78BFA' : '#6B7280'} strokeWidth="1" strokeLinecap="round">
+      <rect x="8" y="6" width="24" height="28" rx="3" stroke={active ? '#C8512C' : 'rgba(10,10,10,0.55)'} strokeWidth="1.5" fill="none" />
+      <path d="M13 12h14M13 16h14M13 20h10M13 24h6" stroke={active ? '#C8512C' : 'rgba(10,10,10,0.45)'} strokeWidth="1" strokeLinecap="round">
         <animate attributeName="opacity" values="0.5;1;0.5" dur="2.5s" repeatCount="indefinite" />
       </path>
-      <path d="M26 22l2 2 4-4" stroke={active ? C.green : '#4A4E64'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M26 22l2 2 4-4" stroke={active ? C.green : 'rgba(10,10,10,0.55)'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
@@ -61,10 +41,10 @@ function DAC8Icon({ active }: { active: boolean }) {
 function AMLIcon({ active }: { active: boolean }) {
   return (
     <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-      <path d="M20 6L8 14v10c0 6 5.3 11.6 12 13 6.7-1.4 12-7 12-13V14L20 6z" stroke={active ? C.green : '#4A4E64'} strokeWidth="1.5" fill="none">
+      <path d="M20 6L8 14v10c0 6 5.3 11.6 12 13 6.7-1.4 12-7 12-13V14L20 6z" stroke={active ? C.green : 'rgba(10,10,10,0.55)'} strokeWidth="1.5" fill="none">
         <animate attributeName="stroke-dasharray" values="0,100;80,100" dur="1.5s" fill="freeze" />
       </path>
-      <path d="M16 20l3 3 5-6" stroke={active ? C.green : '#6B7280'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M16 20l3 3 5-6" stroke={active ? C.green : 'rgba(10,10,10,0.45)'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
@@ -82,7 +62,7 @@ function PipelineNode({ step, index, total }: { step: { icon: string; title: str
         transition={{ duration: 0.5, delay: index * 0.15, ease: EASE }}
         style={{
           width: 56, height: 56, borderRadius: 14,
-          background: inView ? 'rgba(59,130,246,0.1)' : 'rgba(255,255,255,0.03)',
+          background: inView ? 'rgba(59,130,246,0.1)' : 'rgba(10,10,10,0.03)',
           border: `1px solid ${inView ? 'rgba(59,130,246,0.3)' : C.border}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 22, transition: 'all 0.5s ease',
@@ -157,7 +137,7 @@ function Tooltip({ text, children }: { text: string; children: React.ReactNode }
           transition={{ duration: 0.15 }}
           style={{
             position: 'absolute', bottom: '110%', left: '50%', transform: 'translateX(-50%)',
-            background: '#1a1a2e', border: `1px solid ${C.border}`, borderRadius: 8,
+            background: '#FAFAFA', border: `1px solid ${C.border}`, borderRadius: 8,
             padding: '6px 10px', whiteSpace: 'nowrap', zIndex: 10,
             fontFamily: C.M, fontSize: 9, color: C.sub, lineHeight: 1.4,
             boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
@@ -259,7 +239,7 @@ export default function ComplianceOverlay() {
                 whileTap={{ scale: 0.98 }}
                 style={{
                   width: '100%', padding: '18px 14px', borderRadius: 14, cursor: 'pointer',
-                  background: expanded === p.key ? 'rgba(59,130,246,0.08)' : 'rgba(255,255,255,0.03)',
+                  background: expanded === p.key ? 'rgba(59,130,246,0.08)' : 'rgba(10,10,10,0.03)',
                   border: `1px solid ${expanded === p.key ? 'rgba(59,130,246,0.25)' : C.border}`,
                   textAlign: 'center', transition: 'all 0.3s ease',
                   display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
@@ -287,7 +267,7 @@ export default function ComplianceOverlay() {
           >
             <div style={{
               marginTop: 10, padding: '18px 16px', borderRadius: 14,
-              background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}`,
+              background: 'rgba(10,10,10,0.02)', border: `1px solid ${C.border}`,
             }}>
               {[
                 { label: 'What it requires', text: p.details.requires },
@@ -362,7 +342,7 @@ export default function ComplianceOverlay() {
               transition={{ delay: i * 0.1, duration: 0.3 }}
               style={{
                 display: 'flex', gap: 8, padding: '5px 0 5px 16px',
-                borderLeft: `2px solid ${f.field === 'ComplianceStatus' ? C.green : 'rgba(139,92,246,0.2)'}`,
+                borderLeft: `2px solid ${f.field === 'ComplianceStatus' ? C.green : 'rgba(200,81,44,0.2)'}`,
                 marginBottom: 4,
               }}
             >
@@ -404,11 +384,11 @@ export default function ComplianceOverlay() {
                 transition={{ delay: i * 0.08, duration: 0.3 }}
                 style={{
                   padding: '7px 12px', borderRadius: 8,
-                  background: 'rgba(255,255,255,0.03)',
+                  background: 'rgba(10,10,10,0.03)',
                   border: `1px solid ${C.border}`,
                   fontFamily: C.M, fontSize: 9, color: C.sub,
                   cursor: 'default',
-                  backgroundImage: 'linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent)',
+                  backgroundImage: 'linear-gradient(90deg, transparent, rgba(10,10,10,0.04), transparent)',
                   backgroundSize: '200% 100%',
                   animation: 'rpShimmer 4s linear infinite',
                   animationDelay: `${i * 0.5}s`,

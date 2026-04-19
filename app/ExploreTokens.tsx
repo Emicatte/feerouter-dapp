@@ -5,22 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { TOKEN_LIST, SUPPORTED_CHAINS } from './tokens/tokenRegistry'
 import TokenDetailView from './TokenDetailView'
 import type { TokenMarket } from '@/lib/types/tokenMarket'
-
-const C = {
-  bg: '#0a0a0f',
-  surface: '#111118',
-  card: '#16161f',
-  border: 'rgba(255,255,255,0.06)',
-  text: '#E2E2F0',
-  sub: '#8A8FA8',
-  dim: '#4A4E64',
-  green: '#00D68F',
-  red: '#FF4C6A',
-  blue: '#3B82F6',
-  purple: '#8B5CF6',
-  D: 'var(--font-display)',
-  M: 'var(--font-mono)',
-}
+import { C } from '@/app/designTokens'
 
 const RANK_ORDER = [
   'bitcoin', 'ethereum', 'tron', 'binancecoin', 'avalanche-2',
@@ -109,8 +94,8 @@ function Sparkline({
           height,
           borderRadius: 4,
           background: loading
-            ? 'linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.06), rgba(255,255,255,0.02))'
-            : 'rgba(255,255,255,0.03)',
+            ? 'linear-gradient(90deg, rgba(10,10,10,0.02), rgba(10,10,10,0.06), rgba(10,10,10,0.02))'
+            : 'rgba(10,10,10,0.03)',
           backgroundSize: loading ? '200% 100%' : undefined,
           animation: loading ? 'rsShimmer 1.4s ease-in-out infinite' : undefined,
         }}
@@ -264,7 +249,7 @@ function TokenLogo({
         flexShrink: 0,
         display: 'block',
         objectFit: 'cover',
-        background: 'rgba(255,255,255,0.04)',
+        background: 'rgba(10,10,10,0.04)',
       }}
     />
   )
@@ -318,7 +303,7 @@ function ChainIcon({ chainId, size = 16 }: { chainId: number; size?: number }) {
         flexShrink: 0,
         display: 'block',
         objectFit: 'cover',
-        background: 'rgba(255,255,255,0.04)',
+        background: 'rgba(10,10,10,0.04)',
       }}
     />
   )
@@ -362,7 +347,7 @@ function ShimmerBar({ width, height = 12 }: { width: number | string; height?: n
         height,
         borderRadius: 4,
         background:
-          'linear-gradient(90deg, rgba(255,255,255,0.03), rgba(255,255,255,0.08), rgba(255,255,255,0.03))',
+          'linear-gradient(90deg, rgba(10,10,10,0.03), rgba(10,10,10,0.08), rgba(10,10,10,0.03))',
         backgroundSize: '200% 100%',
         animation: 'rsShimmer 1.4s ease-in-out infinite',
         verticalAlign: 'middle',
@@ -389,8 +374,8 @@ function FilterPill({
       onMouseEnter={e => {
         if (active) return
         e.currentTarget.style.color = C.text
-        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.16)'
-        e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+        e.currentTarget.style.borderColor = 'rgba(10,10,10,0.16)'
+        e.currentTarget.style.background = 'rgba(10,10,10,0.04)'
       }}
       onMouseLeave={e => {
         if (active) return
@@ -730,10 +715,10 @@ function TableContainer({
     <div
       style={{
         background: isPreview
-          ? 'linear-gradient(135deg, rgba(59,130,246,0.05), rgba(139,92,246,0.05)), rgba(22,22,31,0.6)'
-          : 'rgba(22,22,31,0.6)',
+          ? 'linear-gradient(135deg, rgba(59,130,246,0.05), rgba(200,81,44,0.05)), rgba(255,255,255,0.6)'
+          : 'rgba(255,255,255,0.6)',
         borderRadius: 16,
-        border: `1px solid ${isPreview ? 'rgba(139,92,246,0.12)' : C.border}`,
+        border: `1px solid ${isPreview ? 'rgba(200,81,44,0.12)' : C.border}`,
         overflow: 'hidden',
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
@@ -819,7 +804,7 @@ function TokenRowUI({
     <div
       onClick={onOpen ? () => onOpen(row.coingeckoId) : undefined}
       onMouseEnter={e => {
-        e.currentTarget.style.background = 'rgba(255,255,255,0.03)'
+        e.currentTarget.style.background = 'rgba(10,10,10,0.03)'
         e.currentTarget.style.borderLeftColor = C.purple
       }}
       onMouseLeave={e => {
@@ -833,7 +818,7 @@ function TokenRowUI({
         padding: '14px 18px',
         alignItems: 'center',
         borderLeft: '2px solid transparent',
-        borderBottom: isLast ? 'none' : '1px solid rgba(255,255,255,0.04)',
+        borderBottom: isLast ? 'none' : '1px solid rgba(10,10,10,0.04)',
         transition: 'background 150ms ease, border-left-color 150ms ease',
         cursor: onOpen ? 'pointer' : 'default',
       }}
@@ -914,7 +899,7 @@ function TokenRowUI({
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           <div
             style={{
-              background: 'rgba(255,255,255,0.02)',
+              background: 'rgba(10,10,10,0.02)',
               borderRadius: 6,
               padding: 4,
               display: 'inline-flex',
@@ -940,13 +925,13 @@ function ExploreCTA({ onClick }: { onClick: () => void }) {
       type="button"
       onClick={onClick}
       onMouseEnter={e => {
-        e.currentTarget.style.borderColor = 'rgba(139,92,246,0.6)'
-        e.currentTarget.style.boxShadow = '0 0 24px rgba(139,92,246,0.25)'
+        e.currentTarget.style.borderColor = 'rgba(200,81,44,0.6)'
+        e.currentTarget.style.boxShadow = '0 0 24px rgba(200,81,44,0.25)'
         const arrow = e.currentTarget.querySelector('[data-arrow]') as HTMLSpanElement | null
         if (arrow) arrow.style.transform = 'translateX(4px)'
       }}
       onMouseLeave={e => {
-        e.currentTarget.style.borderColor = 'rgba(139,92,246,0.3)'
+        e.currentTarget.style.borderColor = 'rgba(200,81,44,0.3)'
         e.currentTarget.style.boxShadow = 'none'
         const arrow = e.currentTarget.querySelector('[data-arrow]') as HTMLSpanElement | null
         if (arrow) arrow.style.transform = 'translateX(0)'
@@ -956,8 +941,8 @@ function ExploreCTA({ onClick }: { onClick: () => void }) {
         alignItems: 'center',
         gap: 10,
         padding: '13px 26px',
-        background: 'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(139,92,246,0.15))',
-        border: '1px solid rgba(139,92,246,0.3)',
+        background: 'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(200,81,44,0.15))',
+        border: '1px solid rgba(200,81,44,0.3)',
         borderRadius: 12,
         color: C.text,
         cursor: 'pointer',
@@ -995,8 +980,8 @@ function GhostButton({
       onClick={onClick}
       onMouseEnter={e => {
         e.currentTarget.style.color = C.text
-        e.currentTarget.style.borderColor = 'rgba(255,255,255,0.14)'
-        e.currentTarget.style.background = 'rgba(255,255,255,0.03)'
+        e.currentTarget.style.borderColor = 'rgba(10,10,10,0.14)'
+        e.currentTarget.style.background = 'rgba(10,10,10,0.03)'
       }}
       onMouseLeave={e => {
         e.currentTarget.style.color = C.sub

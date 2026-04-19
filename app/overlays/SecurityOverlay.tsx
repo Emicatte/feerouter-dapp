@@ -2,32 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-
-const C = {
-  bg:      '#0a0a0f',
-  surface: '#111118',
-  card:    '#16161f',
-  border:  'rgba(255,255,255,0.06)',
-  text:    '#E2E2F0',
-  sub:     '#8A8FA8',
-  dim:     '#4A4E64',
-  green:   '#00D68F',
-  red:     '#FF4C6A',
-  amber:   '#FFB547',
-  blue:    '#3B82F6',
-  purple:  '#8B5CF6',
-  D:       'var(--font-display)',
-  M:       'var(--font-mono)',
-  S:       '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-}
+import { C, EASE } from '@/app/designTokens'
 
 const GRAD: React.CSSProperties = {
-  background: 'linear-gradient(135deg, #FFFFFF 0%, #60A5FA 60%, #1D4ED8 100%)',
-  WebkitBackgroundClip: 'text',
-  WebkitTextFillColor: 'transparent',
+  color: '#C8512C',
 }
-
-const EASE: [number, number, number, number] = [0.4, 0, 0.2, 1]
 
 export default function SecurityOverlay() {
   const [expandedLayer, setExpandedLayer] = useState<number | null>(null)
@@ -109,7 +88,7 @@ export default function SecurityOverlay() {
                 whileHover={{ y: -1 }}
                 style={{
                   width: '100%', padding: '14px 16px', borderRadius: 14, cursor: 'pointer',
-                  background: expandedLayer === i ? `${layer.color}10` : 'rgba(255,255,255,0.02)',
+                  background: expandedLayer === i ? `${layer.color}10` : 'rgba(10,10,10,0.02)',
                   border: `1px solid ${expandedLayer === i ? `${layer.color}40` : C.border}`,
                   display: 'flex', alignItems: 'center', gap: 12,
                   transition: 'all 0.25s ease', textAlign: 'left',
@@ -137,7 +116,7 @@ export default function SecurityOverlay() {
               >
                 <div style={{
                   margin: '6px 0 0 48px', padding: '12px 14px', borderRadius: 10,
-                  background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}`,
+                  background: 'rgba(10,10,10,0.02)', border: `1px solid ${C.border}`,
                   fontFamily: C.M, fontSize: 11, color: C.sub, lineHeight: 1.6,
                 }}>
                   {layer.detail}
@@ -148,7 +127,7 @@ export default function SecurityOverlay() {
         </div>
 
         {/* Animated particle rising through layers */}
-        <div style={{ position: 'relative', height: 4, margin: '12px 0', overflow: 'hidden', borderRadius: 2, background: 'rgba(255,255,255,0.03)' }}>
+        <div style={{ position: 'relative', height: 4, margin: '12px 0', overflow: 'hidden', borderRadius: 2, background: 'rgba(10,10,10,0.03)' }}>
           <div style={{
             width: 40, height: '100%',
             background: `linear-gradient(90deg, transparent, ${C.green}, transparent)`,
@@ -173,7 +152,7 @@ export default function SecurityOverlay() {
               transition={{ delay: i * 0.08, duration: 0.35, ease: EASE }}
               style={{
                 padding: '16px', borderRadius: 14,
-                background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}`,
+                background: 'rgba(10,10,10,0.02)', border: `1px solid ${C.border}`,
                 cursor: 'default',
                 gridColumn: i === 0 ? '1 / -1' : undefined,
               }}
@@ -187,7 +166,7 @@ export default function SecurityOverlay() {
         <div style={{
           marginTop: 12, padding: '10px 14px', borderRadius: 8,
           borderLeft: `2px solid ${C.blue}30`,
-          background: 'rgba(255,255,255,0.015)',
+          background: 'rgba(10,10,10,0.015)',
         }}>
           <div style={{ fontFamily: C.M, fontSize: 10, color: C.dim, lineHeight: 1.6 }}>
             // FeeRouterV4.sol — all state-changing functions inherit ReentrancyGuard.

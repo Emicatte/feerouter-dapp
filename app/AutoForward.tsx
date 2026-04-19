@@ -15,14 +15,8 @@ import { mutationHeaders } from '../lib/rsendFetch'
 // Same-origin proxy → see app/api/backend/[...path]/route.ts
 const BACKEND = '/api/backend'
 
-const C = {
-  bg:'#080810', surface:'#0d0d1a', card:'rgba(8,12,30,0.72)',
-  border:'rgba(255,255,255,0.14)', text:'#ffffff',
-  sub:'rgba(255,255,255,0.80)', dim:'rgba(255,255,255,0.90)', pink:'#ff007a',
-  green:'#00ffa3', red:'#ff2d55', blue:'#3B82F6',
-  purple:'#a78bfa', amber:'#ffb800',
-  D:'var(--font-display)', M:'var(--font-mono)',
-}
+import { C as BaseC } from '@/app/designTokens'
+const C = { ...BaseC, pink: '#C8512C', card: 'rgba(255,255,255,0.92)' }
 
 interface Rule {
   id: number; source_wallet: string; destination_wallet: string
@@ -76,7 +70,7 @@ function Pipeline({ source, dest, status, amount, token }: {
 
       {/* Animated pipeline */}
       <div style={{ flex:1, position:'relative', height:4, margin:'0 -2px' }}>
-        <div style={{ position:'absolute', inset:0, background:'rgba(255,255,255,0.04)', borderRadius:2 }} />
+        <div style={{ position:'absolute', inset:0, background:'rgba(10,10,10,0.04)', borderRadius:2 }} />
         {isActive ? (
           <motion.div
             style={{
@@ -197,7 +191,7 @@ export default function AutoForward({ onClose }: Props) {
       <div className="rp-anim-1" style={{ display:'flex', alignItems:'center', justifyContent:'flex-end', marginBottom:10 }}>
         <button onClick={() => setShowCreate(s => !s)} style={{
           padding:'6px 14px', borderRadius:10,
-          background: showCreate ? 'rgba(255,255,255,0.06)' : `${C.purple}10`,
+          background: showCreate ? 'rgba(10,10,10,0.06)' : `${C.purple}10`,
           border:`1px solid ${showCreate ? C.border : `${C.purple}25`}`,
           color: showCreate ? C.dim : C.purple,
           fontFamily:C.D, fontSize:11, fontWeight:600, cursor:'pointer',
@@ -215,13 +209,13 @@ export default function AutoForward({ onClose }: Props) {
             transition={{ type:'spring', bounce:0, duration:0.4 }}
             style={{ overflow:'hidden', marginBottom:10 }}
           >
-            <div className="bf-blur-32s" style={{ background:C.card, border:'1px solid rgba(255,255,255,0.18)', borderRadius:14, padding:14, boxShadow:'0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.15)' }}>
+            <div className="bf-blur-32s" style={{ background:C.card, border:'1px solid rgba(10,10,10,0.12)', borderRadius:14, padding:14, boxShadow:'0 8px 48px rgba(0,0,0,0.08), inset 0 1px 0 rgba(10,10,10,0.04)' }}>
               {/* Destination */}
               <div style={{ marginBottom:8 }}>
                 <label style={{ fontFamily:C.D, fontSize:10, fontWeight:700, color:C.dim, textTransform:'uppercase' as const, letterSpacing:'0.08em', display:'block', marginBottom:4 }}>Destinazione</label>
                 <input value={dest} onChange={e => setDest(e.target.value)} placeholder="0x..." style={{
                   width:'100%', padding:'10px 12px', borderRadius:10, boxSizing:'border-box' as const,
-                  background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.14)', color:C.text,
+                  background:'rgba(10,10,10,0.04)', border:'1px solid rgba(10,10,10,0.12)', color:C.text,
                   fontFamily:C.M, fontSize:12, outline:'none',
                 }} />
               </div>
@@ -232,7 +226,7 @@ export default function AutoForward({ onClose }: Props) {
                   <label style={{ fontFamily:C.M, fontSize:9, color:C.dim, display:'block', marginBottom:3 }}>Min ETH</label>
                   <input type="number" value={threshold} onChange={e => setThreshold(e.target.value)} style={{
                     width:'100%', padding:'8px 10px', borderRadius:8, boxSizing:'border-box' as const,
-                    background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.14)', color:C.text,
+                    background:'rgba(10,10,10,0.04)', border:'1px solid rgba(10,10,10,0.12)', color:C.text,
                     fontFamily:C.M, fontSize:11, outline:'none',
                   }} />
                 </div>
@@ -240,7 +234,7 @@ export default function AutoForward({ onClose }: Props) {
                   <label style={{ fontFamily:C.M, fontSize:9, color:C.dim, display:'block', marginBottom:3 }}>Gas</label>
                   <select value={gasStrategy} onChange={e => setGasStrategy(e.target.value)} style={{
                     width:'100%', padding:'8px 10px', borderRadius:8, boxSizing:'border-box' as const,
-                    background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.14)', color:C.text,
+                    background:'rgba(10,10,10,0.04)', border:'1px solid rgba(10,10,10,0.12)', color:C.text,
                     fontFamily:C.M, fontSize:11, outline:'none',
                   }}>
                     <option value="fast">Fast</option>
@@ -252,7 +246,7 @@ export default function AutoForward({ onClose }: Props) {
                   <label style={{ fontFamily:C.M, fontSize:9, color:C.dim, display:'block', marginBottom:3 }}>Max %</label>
                   <input type="number" value={maxGas} onChange={e => setMaxGas(e.target.value)} style={{
                     width:'100%', padding:'8px 10px', borderRadius:8, boxSizing:'border-box' as const,
-                    background:'rgba(255,255,255,0.07)', border:'1px solid rgba(255,255,255,0.14)', color:C.text,
+                    background:'rgba(10,10,10,0.04)', border:'1px solid rgba(10,10,10,0.12)', color:C.text,
                     fontFamily:C.M, fontSize:11, outline:'none',
                   }} />
                 </div>
@@ -260,8 +254,8 @@ export default function AutoForward({ onClose }: Props) {
 
               <button onClick={createRule} disabled={!dest.startsWith('0x')} style={{
                 width:'100%', padding:'14px', borderRadius:14, border:'none',
-                background: dest.startsWith('0x') ? `linear-gradient(135deg, ${C.purple}, #c084fc)` : 'rgba(255,255,255,0.04)',
-                color: dest.startsWith('0x') ? '#fff' : 'rgba(255,255,255,0.35)',
+                background: dest.startsWith('0x') ? `linear-gradient(135deg, ${C.purple}, #D4724A)` : 'rgba(10,10,10,0.04)',
+                color: dest.startsWith('0x') ? '#fff' : 'rgba(10,10,10,0.35)',
                 fontFamily:C.D, fontSize:14, fontWeight:700, letterSpacing:'-0.01em',
                 cursor: dest.startsWith('0x') ? 'pointer' : 'not-allowed',
                 transition:'all 0.2s',
@@ -281,8 +275,8 @@ export default function AutoForward({ onClose }: Props) {
             <div key={r.id} className="bf-blur-24s160" style={{
               display:'flex', alignItems:'center', gap:10,
               padding:'11px 14px', borderRadius:12,
-              background:C.card, border:'1px solid rgba(255,255,255,0.16)',
-              marginBottom:4, opacity: r.is_active ? 1 : 0.4, boxShadow:'inset 0 1px 0 rgba(255,255,255,0.10)',
+              background:C.card, border:'1px solid rgba(10,10,10,0.12)',
+              marginBottom:4, opacity: r.is_active ? 1 : 0.4, boxShadow:'inset 0 1px 0 rgba(10,10,10,0.04)',
             }}>
               <div style={{ flex:1 }}>
                 <div style={{ fontFamily:C.M, fontSize:11, color:C.text }}>
@@ -294,7 +288,7 @@ export default function AutoForward({ onClose }: Props) {
               </div>
               <button onClick={() => toggleRule(r.id, r.is_active)} style={{
                 padding:'4px 10px', borderRadius:8,
-                background: r.is_active ? `${C.green}10` : 'rgba(255,255,255,0.04)',
+                background: r.is_active ? `${C.green}10` : 'rgba(10,10,10,0.04)',
                 border:`1px solid ${r.is_active ? `${C.green}25` : C.border}`,
                 color: r.is_active ? C.green : C.dim,
                 fontFamily:C.M, fontSize:10, fontWeight:600, cursor:'pointer',
@@ -315,10 +309,10 @@ export default function AutoForward({ onClose }: Props) {
         ) : logs.length === 0 ? (
           <div className="bf-blur-32s" style={{
             padding:28, textAlign:'center' as const,
-            background:C.card, borderRadius:14, border:'1px solid rgba(255,255,255,0.16)', boxShadow:'0 8px 48px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.12)',
+            background:C.card, borderRadius:14, border:'1px solid rgba(10,10,10,0.12)', boxShadow:'0 8px 48px rgba(0,0,0,0.08), inset 0 1px 0 rgba(10,10,10,0.04)',
           }}>
             <div style={{ fontFamily:C.D, fontSize:13, color:C.dim }}>Nessuno sweep</div>
-            <div style={{ fontFamily:C.M, fontSize:10, color:`${C.dim}60`, marginTop:4 }}>
+            <div style={{ fontFamily:C.M, fontSize:10, color:`${C.dim}`, marginTop:4 }}>
               Crea una regola e invia fondi al wallet sorgente
             </div>
           </div>

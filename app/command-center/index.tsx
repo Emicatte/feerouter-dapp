@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useTranslations } from 'next-intl'
 import { motion, AnimatePresence } from 'framer-motion'
 import dynamic from 'next/dynamic'
 import { useAccount, useChainId, useBalance } from 'wagmi'
@@ -38,6 +39,7 @@ export default function CommandCenter({
   deepLink?: string | null
   onDeepLinkConsumed?: () => void
 }) {
+  const t = useTranslations('commandCenter')
   const { address: hookAddr, isConnected } = useAccount()
   const hookChainId = useChainId()
   const address = ownerAddress ?? hookAddr
@@ -111,10 +113,10 @@ export default function CommandCenter({
   }, [])
 
   // ── Tab switch ────────────────────────────────────────
-  const switchTab = (t: Tab) => {
-    if (t === tab) return
+  const switchTab = (next: Tab) => {
+    if (next === tab) return
     setTabLoading(true)
-    setTab(t)
+    setTab(next)
     setTimeout(() => setTabLoading(false), 300)
   }
 
@@ -125,10 +127,10 @@ export default function CommandCenter({
     return (
       <div style={{ textAlign: 'center', padding: 40 }}>
         <div style={{ fontFamily: C.D, fontSize: 15, fontWeight: 600, color: C.text, marginBottom: 4 }}>
-          Connect wallet
+          {t('connectWallet')}
         </div>
         <div style={{ fontFamily: C.M, fontSize: 11, color: C.dim }}>
-          To access Command Center
+          {t('toAccessFlow')}
         </div>
       </div>
     )
@@ -140,7 +142,7 @@ export default function CommandCenter({
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: isMobile ? 8 : 16,
         padding: '6px 12px', marginBottom: 8,
-        background: 'rgba(255,255,255,0.02)',
+        background: 'rgba(10,10,10,0.04)',
         borderRadius: 10, border: `1px solid ${C.border}`,
         ...(isMobile ? { flexWrap: 'wrap' } : {}),
       }}>
@@ -159,9 +161,9 @@ export default function CommandCenter({
         </div>
 
         {[
-          { label: 'Volume', value: stats ? `${stats.total_volume_eth.toFixed(4)} ETH` : '--', extra: stats ? `(${fiat(stats.total_volume_eth, ethPrice)})` : '', color: C.purple },
-          { label: 'Sweeps', value: stats ? String(stats.total_sweeps) : '--', extra: '', color: C.blue },
-          { label: 'Routes', value: String(activeRules), extra: '', color: C.green },
+          { label: t('stats.volume'), value: stats ? `${stats.total_volume_eth.toFixed(4)} ETH` : '--', extra: stats ? `(${fiat(stats.total_volume_eth, ethPrice)})` : '', color: C.purple },
+          { label: t('stats.sweeps'), value: stats ? String(stats.total_sweeps) : '--', extra: '', color: C.blue },
+          { label: t('stats.routes'), value: String(activeRules), extra: '', color: C.green },
         ].map(s => (
           <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <div style={{ width: 4, height: 4, borderRadius: '50%', background: s.color, boxShadow: `0 0 4px ${s.color}50` }} />
@@ -179,25 +181,25 @@ export default function CommandCenter({
         marginBottom: 12,
         ...(isMobile ? { overflowX: 'auto', WebkitOverflowScrolling: 'touch' } : {}),
       }}>
-        {TABS.map(t => (
+        {TABS.map(tabItem => (
           <button
-            key={t.key}
-            onClick={() => switchTab(t.key)}
+            key={tabItem.key}
+            onClick={() => switchTab(tabItem.key)}
             style={{
               flex: isMobile ? 'none' : 1,
               padding: '10px 0',
               ...(isMobile ? { minWidth: 72, paddingLeft: 8, paddingRight: 8 } : {}),
               background: 'transparent', border: 'none',
-              color: tab === t.key ? C.text : C.dim,
-              fontFamily: C.D, fontSize: 11, fontWeight: tab === t.key ? 700 : 500,
+              color: tab === tabItem.key ? C.text : C.dim,
+              fontFamily: C.D, fontSize: 11, fontWeight: tab === tabItem.key ? 700 : 500,
               cursor: 'pointer', position: 'relative',
               transition: 'color 0.15s',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
             }}
           >
-            <span style={{ fontSize: 12 }}>{t.icon}</span>
-            {t.label}
-            {tab === t.key && (
+            <span style={{ fontSize: 12 }}>{tabItem.icon}</span>
+            {t('tabs.' + tabItem.key)}
+            {tab === tabItem.key && (
               <motion.div
                 layoutId="ccTab"
                 style={{

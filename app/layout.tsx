@@ -1,17 +1,10 @@
 import type { Metadata, Viewport } from 'next'
-import { Space_Grotesk, DM_Mono } from 'next/font/google'
+import { DM_Mono } from 'next/font/google'
 import './globals.css'
 import { Providers } from './providers'
 import dynamic from 'next/dynamic'
 
 const FooterGlobe = dynamic(() => import('../components/FooterGlobe'), { ssr: false })
-
-const spaceGrotesk = Space_Grotesk({
-  subsets:  ['latin'],
-  weight:   ['400', '500', '600', '700'],
-  variable: '--font-display',
-  display:  'swap',
-})
 
 const dmMono = DM_Mono({
   subsets:  ['latin'],
@@ -22,8 +15,8 @@ const dmMono = DM_Mono({
 
 export const metadata: Metadata = {
   title:       'RSends',
-  description: 'Automazione finanziaria Web3 non-custodial su Base L2 con split routing e compliance DAC8.',
-  keywords:    ['Web3', 'Base', 'USDC', 'EURC', 'pagamenti', 'crypto', 'B2B', 'split routing', 'DAC8'],
+  description: 'Non-custodial Web3 financial automation on Base L2 with split routing and DAC8 compliance.',
+  keywords:    ['Web3', 'Base', 'USDC', 'EURC', 'payments', 'crypto', 'B2B', 'split routing', 'DAC8'],
   icons: {
     icon: [
       
@@ -44,14 +37,17 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="it" className={`${spaceGrotesk.variable} ${dmMono.variable}`}>
+    <html lang="en" suppressHydrationWarning className={dmMono.variable}>
       <head>
-        
+        <link
+          rel="stylesheet"
+          href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap"
+        />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
       </head>
       <body
-        className={`${spaceGrotesk.className} overflow-x-hidden`}
+        className="overflow-x-hidden"
         style={{ background: '#FAFAFA', minHeight: '100dvh' }}
       >
         <Providers>

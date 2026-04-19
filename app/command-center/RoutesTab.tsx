@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import dynamic from 'next/dynamic'
@@ -42,6 +43,8 @@ function RoutesTab({
   activeFamily: ChainFamily
   isMobile?: boolean
 }) {
+  const t = useTranslations('commandCenter.routes')
+
   // ── Non-EVM guard: auto-forwarding is EVM-only for now ──
   if (activeFamily !== 'evm') {
     return (
@@ -50,11 +53,10 @@ function RoutesTab({
           {activeFamily === 'solana' ? '◎' : '◆'}
         </div>
         <div style={{ fontFamily: C.D, fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4 }}>
-          Auto-forwarding on {activeFamily === 'solana' ? 'Solana' : 'TRON'}
+          {t('nonEvmTitle', { chain: activeFamily === 'solana' ? 'Solana' : 'TRON' })}
         </div>
         <div style={{ fontFamily: C.M, fontSize: 11, color: C.dim, lineHeight: 1.5 }}>
-          Cross-chain automation coming soon.<br/>
-          Currently available on EVM chains.
+          {t('nonEvmDesc')}
         </div>
       </div>
     )
@@ -120,7 +122,7 @@ function RoutesTab({
             transition: 'all 0.15s',
           }}
         >
-          + New Route
+          {t('newRoute')}
         </button>
       </div>
 
@@ -154,6 +156,7 @@ function RoutesTab({
 // ═══════════════════════════════════════════════════════════
 
 function EmptyState({ onStart }: { onStart: () => void }) {
+  const t = useTranslations('commandCenter.routes')
   const features = [
     {
       icon: (
@@ -161,8 +164,8 @@ function EmptyState({ onStart }: { onStart: () => void }) {
           <path d="M5 12h14M12 5l7 7-7 7" stroke={C.green} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       ),
-      title: 'Auto-Forward',
-      desc: 'Incoming funds automatically route to your chosen wallets',
+      title: t('autoForward'),
+      desc: t('autoForwardDesc'),
     },
     {
       icon: (
@@ -170,8 +173,8 @@ function EmptyState({ onStart }: { onStart: () => void }) {
           <path d="M6 12h4M14 8h4M14 16h4M10 12l4-4M10 12l4 4" stroke={C.purple} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       ),
-      title: 'Split Routing',
-      desc: 'Divide payments across multiple wallets with custom ratios',
+      title: t('splitRouting'),
+      desc: t('splitRoutingDesc'),
     },
     {
       icon: (
@@ -179,8 +182,8 @@ function EmptyState({ onStart }: { onStart: () => void }) {
           <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke={C.blue} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       ),
-      title: 'Smart Gas',
-      desc: 'Optimized fees with configurable speed and limits',
+      title: t('smartGas'),
+      desc: t('smartGasDesc'),
     },
   ]
 
@@ -219,7 +222,7 @@ function EmptyState({ onStart }: { onStart: () => void }) {
 
       {/* CTA */}
       <div style={{ fontFamily: C.D, fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 10 }}>
-        No routes yet
+        {t('noRoutesYet')}
       </div>
 
       <motion.button
@@ -234,7 +237,7 @@ function EmptyState({ onStart }: { onStart: () => void }) {
           transition: 'all 0.2s',
         }}
       >
-        Create your first route
+        {t('createFirstRoute')}
       </motion.button>
 
       {/* Feature cards */}
@@ -246,7 +249,7 @@ function EmptyState({ onStart }: { onStart: () => void }) {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.2 + i * 0.08, duration: 0.4, ease: EASE }}
             style={{
-              background: 'rgba(255,255,255,0.03)',
+              background: 'rgba(10,10,10,0.03)',
               border: `1px solid ${C.border}`,
               borderRadius: 14, padding: '14px 10px', textAlign: 'center',
             }}

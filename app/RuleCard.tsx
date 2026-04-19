@@ -8,15 +8,7 @@ import type { ForwardingRule } from '../lib/useForwardingRules'
 import { getRegistry } from '../lib/contractRegistry'
 import { FEE_ROUTER_ABI } from '../lib/feeRouterAbi'
 import { mutationHeaders } from '../lib/rsendFetch'
-
-const C = {
-  bg: '#0a0a0f', surface: '#111118', card: '#16161f',
-  border: 'rgba(255,255,255,0.06)', text: '#E2E2F0',
-  sub: '#8A8FA8', dim: '#4A4E64', green: '#00D68F',
-  red: '#FF4C6A', amber: '#FFB547', blue: '#3B82F6',
-  purple: '#8B5CF6',
-  D: 'var(--font-display)', M: 'var(--font-mono)',
-}
+import { C } from '@/app/designTokens'
 
 function tr(a: string, s = 6, e = 4): string {
   return !a || a.length < s + e + 2 ? a : `${a.slice(0, s)}...${a.slice(-e)}`
@@ -162,7 +154,7 @@ export default function RuleCard({ rule, onToggle, onPause, onResume, onDelete }
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
       style={{
-        background: 'rgba(255,255,255,0.03)',
+        background: 'rgba(10,10,10,0.03)',
         border: `1px solid ${isPaused ? `${C.amber}20` : isActive ? `${C.green}15` : C.border}`,
         borderRadius: 14,
         padding: 14,
@@ -194,7 +186,7 @@ export default function RuleCard({ rule, onToggle, onPause, onResume, onDelete }
           onClick={() => guard(() => Promise.resolve(onToggle(rule.id, rule.is_active)))}
           style={{
             width: 34, height: 18, borderRadius: 9, border: 'none', cursor: 'pointer',
-            background: isActive ? C.green : 'rgba(255,255,255,0.08)',
+            background: isActive ? C.green : 'rgba(10,10,10,0.08)',
             position: 'relative', transition: 'background 0.2s', flexShrink: 0,
           }}
         >
@@ -293,8 +285,8 @@ export default function RuleCard({ rule, onToggle, onPause, onResume, onDelete }
 function Tag({ label, color }: { label: string; color?: string }) {
   return (
     <span style={{
-      fontFamily: 'var(--font-mono)', fontSize: 9, color: color ?? '#8A8FA8',
-      background: `${color ?? '#8A8FA8'}10`, padding: '2px 7px',
+      fontFamily: 'var(--font-mono)', fontSize: 9, color: color ?? 'rgba(10,10,10,0.55)',
+      background: `${color ?? 'rgba(10,10,10,0.55)'}10`, padding: '2px 7px',
       borderRadius: 6, whiteSpace: 'nowrap',
     }}>
       {label}

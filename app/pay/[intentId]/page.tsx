@@ -605,7 +605,7 @@ function PendingView({
           {/* QR Code — generated locally, no external API */}
           <div
             className="rounded-xl p-3"
-            style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
+            style={{ background: 'rgba(10,10,10,0.03)', border: '1px solid rgba(10,10,10,0.08)' }}
           >
             <QRCode
               data={buildEip681Uri(addr, intent.chain, intent.currency, intent.amount)}
@@ -622,8 +622,8 @@ function PendingView({
               onClick={() => onCopy(addr)}
               className="w-full group relative rounded-xl px-3 py-2.5 text-left transition-all"
               style={{
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.06)',
+                background: 'rgba(10,10,10,0.03)',
+                border: '1px solid rgba(10,10,10,0.08)',
               }}
             >
               <span className="block font-mono text-[11px] text-zinc-300 break-all leading-relaxed">
@@ -692,7 +692,7 @@ function Card({ children }: { children: React.ReactNode }) {
       className="rounded-2xl p-6 sm:p-8 animate-[fadeIn_0.3s_ease-out]"
       style={{
         background: 'linear-gradient(145deg, rgba(18,18,18,0.95) 0%, rgba(12,12,12,0.98) 100%)',
-        border: '1px solid rgba(255,255,255,0.06)',
+        border: '1px solid rgba(10,10,10,0.08)',
         boxShadow: '0 25px 50px rgba(0,0,0,0.5)',
       }}
     >

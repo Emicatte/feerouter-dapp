@@ -15,6 +15,7 @@
  */
 
 import { useState, useCallback, useMemo } from 'react'
+import { useTranslations } from 'next-intl'
 import { motion, AnimatePresence } from 'framer-motion'
 import type {
   SplitContract,
@@ -46,6 +47,8 @@ function SplitsTab({
   refresh: () => void
   activeFamily: ChainFamily
 }) {
+  const t = useTranslations('commandCenter.splits')
+
   // ── Non-EVM guard (split system is EVM-only for now) ──
   if (activeFamily !== 'evm') {
     return (
@@ -54,11 +57,10 @@ function SplitsTab({
           {activeFamily === 'solana' ? '◎' : '◆'}
         </div>
         <div style={{ fontFamily: C.D, fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4 }}>
-          N-wallet splits on {activeFamily === 'solana' ? 'Solana' : 'TRON'}
+          {t('nonEvmTitle', { chain: activeFamily === 'solana' ? 'Solana' : 'TRON' })}
         </div>
         <div style={{ fontFamily: C.M, fontSize: 11, color: C.dim, lineHeight: 1.5 }}>
-          Cross-chain splits coming soon.<br/>
-          Currently available on EVM chains.
+          {t('nonEvmDesc')}
         </div>
       </div>
     )
@@ -94,7 +96,7 @@ function SplitsTab({
           onClick={refresh}
           style={{
             padding: '6px 12px', borderRadius: 8,
-            background: 'rgba(255,255,255,0.04)',
+            background: 'rgba(10,10,10,0.04)',
             border: `1px solid ${C.border}`,
             color: C.sub,
             fontFamily: C.M, fontSize: 10, cursor: 'pointer',
@@ -132,6 +134,7 @@ function SplitContractCard({
   deactivateContract: (id: number) => Promise<any>
   listExecutions: (id: number, limit?: number) => Promise<SplitExecution[]>
 }) {
+  const t = useTranslations('commandCenter.splits')
   const [expanded, setExpanded] = useState(false)
   const [executions, setExecutions] = useState<SplitExecution[] | null>(null)
   const [execLoading, setExecLoading] = useState(false)
@@ -179,7 +182,7 @@ function SplitContractCard({
 
   // Status pill — three mutually exclusive states
   const statusInfo = !contract.is_active
-    ? { label: 'DEACTIVATED', color: C.dim, bg: 'rgba(255,255,255,0.04)' }
+    ? { label: 'DEACTIVATED', color: C.dim, bg: 'rgba(10,10,10,0.04)' }
     : contract.is_locked
       ? { label: 'LOCKED', color: C.amber, bg: `${C.amber}10` }
       : { label: 'ACTIVE', color: C.green, bg: `${C.green}10` }
@@ -192,7 +195,7 @@ function SplitContractCard({
       exit={{ opacity: 0, y: -6 }}
       transition={{ duration: 0.25, ease: EASE }}
       style={{
-        background: 'rgba(255,255,255,0.02)',
+        background: 'rgba(10,10,10,0.04)',
         border: `1px solid ${C.border}`,
         borderRadius: 14,
         padding: '12px 14px',
@@ -292,7 +295,7 @@ function SplitContractCard({
                   <span style={{
                     fontFamily: C.M, fontSize: 7, color: C.dim,
                     padding: '1px 4px', borderRadius: 4,
-                    background: 'rgba(255,255,255,0.04)',
+                    background: 'rgba(10,10,10,0.04)',
                     flexShrink: 0,
                   }}>
                     {r.role}
@@ -328,13 +331,13 @@ function SplitContractCard({
           onClick={toggleExpand}
           style={{
             padding: '5px 10px', borderRadius: 8,
-            background: 'rgba(255,255,255,0.04)',
+            background: 'rgba(10,10,10,0.04)',
             border: `1px solid ${C.border}`,
             color: C.sub,
             fontFamily: C.M, fontSize: 10, cursor: 'pointer',
           }}
         >
-          {expanded ? 'Hide audit trail' : 'View audit trail'}
+          {expanded ? t('hideAuditTrail') : t('viewAuditTrail')}
         </button>
         {contract.is_active && (
           <button
@@ -350,7 +353,7 @@ function SplitContractCard({
               opacity: deactivating ? 0.5 : 1,
             }}
           >
-            {deactivating ? 'Deactivating…' : 'Deactivate'}
+            {deactivating ? t('deactivating') : t('deactivate')}
           </button>
         )}
       </div>
@@ -407,7 +410,7 @@ function ExecutionRow({ execution }: { execution: SplitExecution }) {
   return (
     <div style={{
       padding: '6px 8px', marginBottom: 4,
-      background: 'rgba(255,255,255,0.02)',
+      background: 'rgba(10,10,10,0.04)',
       borderRadius: 8, border: `1px solid ${C.border}`,
     }}>
       <div

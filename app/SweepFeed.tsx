@@ -2,14 +2,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion'
 import type { SweepEvent } from '../lib/useSweepWebSocket'
-
-const C = {
-  text: '#E2E2F0', sub: '#8A8FA8', dim: '#4A4E64',
-  green: '#00D68F', red: '#FF4C6A', amber: '#FFB547',
-  blue: '#3B82F6', purple: '#8B5CF6',
-  border: 'rgba(255,255,255,0.06)',
-  D: 'var(--font-display)', M: 'var(--font-mono)',
-}
+import { C } from '@/app/designTokens'
 
 const EVENT_COLORS: Record<string, string> = {
   sweep_completed: C.green,
@@ -52,7 +45,7 @@ interface Props {
 export default function SweepFeed({ events, connected }: Props) {
   return (
     <div style={{
-      background: 'rgba(255,255,255,0.03)',
+      background: 'rgba(10,10,10,0.03)',
       border: `1px solid ${C.border}`,
       borderRadius: 14,
       overflow: 'hidden',

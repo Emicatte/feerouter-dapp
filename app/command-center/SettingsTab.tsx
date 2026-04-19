@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useTranslations } from 'next-intl'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useWriteContract } from 'wagmi'
 import { C, EASE, BACKEND, CHAIN_NAMES, inp, selectStyle, labelStyle, isValidAddr, tr, ToggleSwitch, Sk } from './shared'
@@ -28,6 +29,7 @@ function SettingsTab({
   initialSection?: SettingsSection | null
   onInitialSectionConsumed?: () => void
 }) {
+  const t = useTranslations('commandCenter.settings')
   const [expanded, setExpanded] = useState<SettingsSection | null>(initialSection ?? 'security')
 
   useEffect(() => {
@@ -123,14 +125,14 @@ function SettingsTab({
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
-        alert(err.detail || 'Failed to generate key')
+        alert(err.detail || t('failedToGenerateKey'))
         return
       }
       const data = await res.json()
       setNewKeyPlaintext(data.key)
       setNewKeyLabel('')
       fetchApiKeys()
-    } catch { alert('Failed to generate key') }
+    } catch { alert(t('failedToGenerateKey')) }
     finally { generatingRef.current = false; setGeneratingKey(false) }
   }
 
@@ -228,12 +230,12 @@ function SettingsTab({
         a.download = `dac8_report_${dac8Year}.xml`
         a.click()
         URL.revokeObjectURL(url)
-        setDac8Result('Report downloaded')
+        setDac8Result(t('reportDownloaded'))
       } else {
         setDac8Result(await parseRSendError(res))
       }
     } catch (e) {
-      setDac8Result(e instanceof Error ? e.message : 'Network error')
+      setDac8Result(e instanceof Error ? e.message : t('networkError'))
     } finally {
       dac8Ref.current = false
       setDac8Loading(false)
@@ -265,7 +267,7 @@ function SettingsTab({
       style={{
         width: '100%', display: 'flex', alignItems: 'center', gap: 10,
         padding: '12px 14px', borderRadius: 12,
-        background: expanded === id ? `${color}08` : 'rgba(255,255,255,0.02)',
+        background: expanded === id ? `${color}08` : 'rgba(10,10,10,0.04)',
         border: `1px solid ${expanded === id ? `${color}30` : C.border}`,
         color: expanded === id ? C.text : C.sub,
         fontFamily: C.D, fontSize: 12, fontWeight: 600,
@@ -282,7 +284,7 @@ function SettingsTab({
 
   const cardStyle: React.CSSProperties = {
     padding: '14px', borderRadius: 12,
-    background: 'rgba(255,255,255,0.02)',
+    background: 'rgba(10,10,10,0.04)',
     border: `1px solid ${C.border}`,
   }
 
@@ -292,7 +294,7 @@ function SettingsTab({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
 
       {/* ════════════ SECURITY ════════════ */}
-      <SectionHeader id="security" label="Security" icon="🛡" color={C.blue} />
+      <SectionHeader id="security" label={t('security')} icon="🛡" color={C.blue} />
       <AnimatePresence>
         {expanded === 'security' && (
           <motion.div
@@ -314,9 +316,9 @@ function SettingsTab({
                 ) : limits ? (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
                     {[
-                      { label: 'Per Hour', spent: limits.per_hour?.spent ?? 0, limit: limits.per_hour?.limit ?? 0, color: C.blue },
-                      { label: 'Per Day', spent: limits.per_day?.spent ?? 0, limit: limits.per_day?.limit ?? 0, color: C.purple },
-                      { label: 'Global Daily', spent: limits.global_daily?.spent ?? 0, limit: limits.global_daily?.limit ?? 0, color: C.green },
+                      { label: t('perHour'), spent: limits.per_hour?.spent ?? 0, limit: limits.per_hour?.limit ?? 0, color: C.blue },
+                      { label: t('perDay'), spent: limits.per_day?.spent ?? 0, limit: limits.per_day?.limit ?? 0, color: C.purple },
+                      { label: t('globalDaily'), spent: limits.global_daily?.spent ?? 0, limit: limits.global_daily?.limit ?? 0, color: C.green },
                     ].map(l => {
                       const pct = l.limit > 0 ? Math.min(100, (l.spent / l.limit) * 100) : 0
                       const warn = pct >= 80
@@ -329,7 +331,7 @@ function SettingsTab({
                           <div style={{ fontFamily: C.M, fontSize: 9, color: C.dim, marginBottom: 6 }}>
                             / {l.limit.toFixed(4)} ETH
                           </div>
-                          <div style={{ height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.06)' }}>
+                          <div style={{ height: 3, borderRadius: 2, background: 'rgba(10,10,10,0.08)' }}>
                             <motion.div
                               initial={{ width: 0 }}
                               animate={{ width: `${pct}%` }}
@@ -383,7 +385,7 @@ function SettingsTab({
                       boxShadow: activeRules > 0 ? `0 0 6px ${C.green}60` : 'none',
                     }} />
                     <span style={{ fontFamily: C.D, fontSize: 12, fontWeight: 600, color: C.text }}>
-                      {activeRules > 0 ? 'Closed (Active)' : 'Open (Idle)'}
+                      {activeRules > 0 ? t('closedActive') : t('openIdle')}
                     </span>
                   </div>
                   <div style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>
@@ -397,7 +399,7 @@ function SettingsTab({
       </AnimatePresence>
 
       {/* ════════════ NOTIFICATIONS ════════════ */}
-      <SectionHeader id="notifications" label="Notifications" icon="🔔" color={C.purple} />
+      <SectionHeader id="notifications" label={t('notifications')} icon="🔔" color={C.purple} />
       <AnimatePresence>
         {expanded === 'notifications' && (
           <motion.div
@@ -429,7 +431,7 @@ function SettingsTab({
                         style={{
                           ...cardStyle, textAlign: 'center', cursor: 'pointer',
                           borderColor: notifyChannel === ch ? `${C.purple}50` : C.border,
-                          background: notifyChannel === ch ? `${C.purple}08` : 'rgba(255,255,255,0.02)',
+                          background: notifyChannel === ch ? `${C.purple}08` : 'rgba(10,10,10,0.04)',
                         }}
                       >
                         <div style={{ fontSize: 18, marginBottom: 4 }}>{ch === 'telegram' ? '✈' : '✉'}</div>
@@ -478,7 +480,7 @@ function SettingsTab({
                       cursor: 'pointer', transition: 'all 0.2s',
                     }}
                   >
-                    {notifySaved ? '✓ Saved' : 'Save Preferences'}
+                    {notifySaved ? t('saved') : t('savePreferences')}
                   </button>
                 </>
               )}
@@ -488,7 +490,7 @@ function SettingsTab({
       </AnimatePresence>
 
       {/* ════════════ DISTRIBUTION LISTS ════════════ */}
-      <SectionHeader id="distribution" label="Distribution Lists" icon="📋" color={C.green} />
+      <SectionHeader id="distribution" label={t('distributionLists')} icon="📋" color={C.green} />
       <AnimatePresence>
         {expanded === 'distribution' && (
           <motion.div
@@ -528,7 +530,7 @@ function SettingsTab({
                                 }
                               }}
                               style={{ padding: '2px 8px', borderRadius: 5, border: 'none', background: C.red, color: '#fff', fontFamily: C.M, fontSize: 9, cursor: distDeleting ? 'wait' : 'pointer', opacity: distDeleting ? 0.5 : 1 }}>
-                              {distDeleting ? '...' : 'Yes'}
+                              {distDeleting ? '...' : t('yes')}
                             </button>
                             {!distDeleting && <button onClick={() => setDistConfirmDel(null)}
                               style={{ padding: '2px 8px', borderRadius: 5, border: `1px solid ${C.border}`, background: 'transparent', color: C.dim, fontFamily: C.M, fontSize: 9, cursor: 'pointer' }}>
@@ -614,13 +616,13 @@ function SettingsTab({
                     disabled={!canSaveDist || distSaving}
                     style={{
                       padding: '5px 12px', borderRadius: 8, border: 'none',
-                      background: canSaveDist ? `${C.green}20` : 'rgba(255,255,255,0.04)',
+                      background: canSaveDist ? `${C.green}20` : 'rgba(10,10,10,0.04)',
                       color: canSaveDist ? C.green : C.dim,
                       fontFamily: C.D, fontSize: 10, fontWeight: 600,
                       cursor: canSaveDist ? 'pointer' : 'not-allowed',
                     }}
                   >
-                    {distSaving ? 'Saving...' : 'Create List'}
+                    {distSaving ? t('saving') : t('createList')}
                   </button>
                 </div>
               </div>
@@ -681,7 +683,7 @@ function SettingsTab({
                       whiteSpace: 'nowrap', transition: 'opacity 0.2s',
                     }}
                   >
-                    {generatingKey ? 'Generating...' : 'Generate Key'}
+                    {generatingKey ? t('generating') : t('generateKey')}
                   </button>
                 </div>
               </div>
@@ -712,13 +714,13 @@ function SettingsTab({
                       }}
                       style={{
                         padding: '6px 12px', borderRadius: 6,
-                        background: copiedKeyId === -1 ? C.green : 'rgba(255,255,255,0.06)',
+                        background: copiedKeyId === -1 ? C.green : 'rgba(10,10,10,0.08)',
                         border: 'none', cursor: 'pointer', color: '#fff',
                         fontFamily: C.D, fontSize: 11, whiteSpace: 'nowrap',
                         transition: 'background 0.2s',
                       }}
                     >
-                      {copiedKeyId === -1 ? 'Copied!' : 'Copy'}
+                      {copiedKeyId === -1 ? t('copied') : t('copy')}
                     </button>
                   </div>
                   <button
@@ -747,7 +749,7 @@ function SettingsTab({
                     return (
                       <div key={k.id} style={{
                         padding: '10px 12px', borderRadius: 10,
-                        background: 'rgba(255,255,255,0.02)',
+                        background: 'rgba(10,10,10,0.04)',
                         border: `1px solid ${k.is_active ? C.border : 'rgba(255,76,106,0.2)'}`,
                       }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
@@ -775,7 +777,7 @@ function SettingsTab({
                                   transition: 'opacity 0.2s',
                                 }}
                               >
-                                {revokingId === k.id ? '...' : 'Revoke'}
+                                {revokingId === k.id ? '...' : t('revoke')}
                               </button>
                             )}
                           </div>
@@ -809,7 +811,7 @@ function SettingsTab({
       </AnimatePresence>
 
       {/* ════════════ EXPORT & COMPLIANCE ════════════ */}
-      <SectionHeader id="export" label="Export & Compliance" icon="📊" color={C.amber} />
+      <SectionHeader id="export" label={t('exportCompliance')} icon="📊" color={C.amber} />
       <AnimatePresence>
         {expanded === 'export' && (
           <motion.div
@@ -848,7 +850,7 @@ function SettingsTab({
                       cursor: dac8Loading ? 'wait' : 'pointer',
                     }}
                   >
-                    {dac8Loading ? 'Generating...' : 'Generate XML'}
+                    {dac8Loading ? t('generating') : t('generateXml')}
                   </button>
                 </div>
                 {dac8Result && (
@@ -908,7 +910,7 @@ function SettingsTab({
       </AnimatePresence>
 
       {/* ════════════ DANGER ZONE ════════════ */}
-      <SectionHeader id="danger" label="Danger Zone" icon="⚠" color={C.red} />
+      <SectionHeader id="danger" label={t('dangerZone')} icon="⚠" color={C.red} />
       <AnimatePresence>
         {expanded === 'danger' && (
           <motion.div
@@ -967,7 +969,7 @@ function SettingsTab({
                         cursor: emergencyLoading ? 'wait' : 'pointer',
                       }}
                     >
-                      {emergencyLoading ? 'Stopping...' : 'Confirm Stop All'}
+                      {emergencyLoading ? t('stopping') : t('confirmStopAll')}
                     </button>
                     <button
                       onClick={() => setConfirmEmergency(false)}
@@ -984,7 +986,7 @@ function SettingsTab({
               {/* Info notice */}
               <div style={{
                 padding: '10px 14px', borderRadius: 10,
-                background: 'rgba(255,255,255,0.02)',
+                background: 'rgba(10,10,10,0.04)',
                 border: `1px solid ${C.border}`,
               }}>
                 <div style={{ fontFamily: C.M, fontSize: 9, color: C.dim, lineHeight: 1.6 }}>

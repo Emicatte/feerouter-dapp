@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useTranslations } from 'next-intl'
 import { motion, AnimatePresence } from 'framer-motion'
 import { C, EASE, STATUS_COLORS, smooth, tr, ago, fiat, Sk } from './shared'
 import StatusCards from '../StatusCards'
@@ -20,6 +21,8 @@ function MonitorTab({ gas, stats, activeRules, events, connected, emergencyStop,
   wsStats: { totalEvents: number; reconnects: number }
   activeFamily: ChainFamily
 }) {
+  const t = useTranslations('commandCenter.monitor')
+
   // ── Non-EVM guard: sweep monitor is EVM-only ──
   if (activeFamily !== 'evm') {
     return (
@@ -28,11 +31,10 @@ function MonitorTab({ gas, stats, activeRules, events, connected, emergencyStop,
           {activeFamily === 'solana' ? '◎' : '◆'}
         </div>
         <div style={{ fontFamily: C.D, fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4 }}>
-          Live monitoring on {activeFamily === 'solana' ? 'Solana' : 'TRON'}
+          {t('nonEvmTitle', { chain: activeFamily === 'solana' ? 'Solana' : 'TRON' })}
         </div>
         <div style={{ fontFamily: C.M, fontSize: 11, color: C.dim, lineHeight: 1.5 }}>
-          Cross-chain monitoring coming soon.<br/>
-          Currently available on EVM chains.
+          {t('nonEvmDesc')}
         </div>
       </div>
     )
@@ -56,16 +58,16 @@ function MonitorTab({ gas, stats, activeRules, events, connected, emergencyStop,
   }, [flash])
 
   const gl = gas === null ? { label: '--', color: C.dim }
-    : gas < 0.01 ? { label: 'Optimal', color: C.green }
-    : gas < 0.1 ? { label: 'Normal', color: C.amber }
-    : { label: 'High', color: C.red }
+    : gas < 0.01 ? { label: t('optimal'), color: C.green }
+    : gas < 0.1 ? { label: t('normal'), color: C.amber }
+    : { label: t('high'), color: C.red }
 
   const vol = stats?.total_volume_eth ?? 0
   const cards = [
-    { label: 'Gas', value: gas !== null ? gas.toFixed(4) : '--', unit: 'Gwei', badge: gl.label, color: gl.color },
-    { label: 'Sweeps 24h', value: String(stats?.total_sweeps ?? 0), unit: '', badge: wsStats.totalEvents > 0 ? `${wsStats.totalEvents} ws` : null, color: C.blue },
-    { label: 'Volume 24h', value: `${vol.toFixed(4)} ETH`, unit: '', badge: fiat(vol, ethPrice), color: C.purple },
-    { label: 'Active Routes', value: String(activeRules), unit: '', badge: null, color: C.green },
+    { label: t('gas'), value: gas !== null ? gas.toFixed(4) : '--', unit: 'Gwei', badge: gl.label, color: gl.color },
+    { label: t('sweeps24h'), value: String(stats?.total_sweeps ?? 0), unit: '', badge: wsStats.totalEvents > 0 ? `${wsStats.totalEvents} ws` : null, color: C.blue },
+    { label: t('volume24h'), value: `${vol.toFixed(4)} ETH`, unit: '', badge: fiat(vol, ethPrice), color: C.purple },
+    { label: t('activeRoutes'), value: String(activeRules), unit: '', badge: null, color: C.green },
   ]
 
   // Pipeline destinations
@@ -85,7 +87,7 @@ function MonitorTab({ gas, stats, activeRules, events, connected, emergencyStop,
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.05, ...smooth }}
             style={{
-              background: 'rgba(255,255,255,0.03)', border: `1px solid ${C.border}`,
+              background: 'rgba(10,10,10,0.03)', border: `1px solid ${C.border}`,
               borderRadius: 14, padding: '14px 16px',
             }}
           >
@@ -109,14 +111,14 @@ function MonitorTab({ gas, stats, activeRules, events, connected, emergencyStop,
 
       {/* Pipeline Visualization */}
       <div style={{
-        background: 'rgba(255,255,255,0.03)',
+        background: 'rgba(10,10,10,0.03)',
         border: `1px solid ${flash ? `${C.green}40` : C.border}`,
         borderRadius: 14, padding: '14px 12px', marginBottom: 12,
         transition: 'border-color 0.6s, box-shadow 0.6s',
         boxShadow: flash ? `0 0 20px ${C.green}15, inset 0 0 20px ${C.green}08` : 'none',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-          <span style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.sub }}>Pipeline</span>
+          <span style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.sub }}>{t('pipeline')}</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <div style={{
               width: 5, height: 5, borderRadius: '50%',
@@ -125,7 +127,7 @@ function MonitorTab({ gas, stats, activeRules, events, connected, emergencyStop,
               animation: connected ? 'rpPulse 2s ease infinite' : 'none',
             }} />
             <span style={{ fontFamily: C.M, fontSize: 9, color: connected ? C.green : C.dim }}>
-              {connected ? 'Live' : 'Offline'}
+              {connected ? t('live') : t('offline')}
             </span>
           </div>
         </div>
@@ -175,7 +177,7 @@ function MonitorTab({ gas, stats, activeRules, events, connected, emergencyStop,
           }) : (
             <g>
               <line x1="215" y1={midY} x2="300" y2={midY} stroke={C.dim} strokeWidth="0.8" strokeDasharray="5 3" opacity="0.3" />
-              <circle cx="320" cy={midY} r="14" fill="rgba(255,255,255,0.03)" stroke={C.dim} strokeWidth="0.8" />
+              <circle cx="320" cy={midY} r="14" fill="rgba(10,10,10,0.03)" stroke={C.dim} strokeWidth="0.8" />
               <text x="320" y={midY + 3} textAnchor="middle" fill={C.dim} fontSize="7" fontFamily="var(--font-mono)">---</text>
             </g>
           )}

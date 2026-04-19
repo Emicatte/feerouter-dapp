@@ -24,8 +24,8 @@ export function ChainFamilySwitch({
   return (
     <div style={{
       display: 'flex', gap: 2, padding: 2,
-      background: 'rgba(255,255,255,0.04)', borderRadius: 10,
-      border: '1px solid rgba(255,255,255,0.06)',
+      background: 'rgba(10,10,10,0.04)', borderRadius: 10,
+      border: '1px solid rgba(10,10,10,0.08)',
     }}>
       {FAMILIES.map(f => {
         const isActive = active === f.key
@@ -37,7 +37,7 @@ export function ChainFamilySwitch({
             style={{
               padding: '5px 10px', borderRadius: 8, border: 'none',
               background: isActive ? `${f.color}15` : 'transparent',
-              color: isActive ? f.color : isConn ? '#8A8FA8' : '#4A4E64',
+              color: isActive ? f.color : isConn ? 'rgba(10,10,10,0.55)' : 'rgba(10,10,10,0.4)',
               fontFamily: 'var(--font-display)', fontSize: 10, fontWeight: 600,
               cursor: 'pointer', transition: 'all 0.15s',
               display: 'flex', alignItems: 'center', gap: 4,

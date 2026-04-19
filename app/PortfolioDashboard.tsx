@@ -36,23 +36,10 @@ const SwapModule = dynamic(() => import('./SwapModule'), { ssr: false })
 const AutoForward = dynamic(() => import('./AutoForward'), { ssr: false })
 
 // ═══════════════════════════════════════════════════════════
-//  PALETTE — Uniswap-inspired dark
+//  PALETTE
 // ═══════════════════════════════════════════════════════════
-const C = {
-  bg:      '#131313',
-  surface: '#1b1b1b',
-  card:    '#1e1e1e',
-  border:  'rgba(255,255,255,0.07)',
-  text:    '#E2E2F0',
-  sub:     '#98A1C0',
-  dim:     '#5E5E5E',
-  pink:    '#FC74FE',
-  green:   '#40B66B',
-  red:     '#FD766B',
-  blue:    '#4C82FB',
-  D:       'var(--font-display)',
-  M:       'var(--font-mono)',
-}
+import { C as BaseC } from '@/app/designTokens'
+const C = { ...BaseC, pink: '#C8512C', green: '#40B66B', red: '#FD766B', blue: '#4C82FB', border: 'rgba(10,10,10,0.08)' }
 
 // ═══════════════════════════════════════════════════════════
 //  TYPES
@@ -187,7 +174,7 @@ function TIcon({ symbol, logo, size = 32 }: { symbol: string; logo?: string | nu
   if (logo && !err) return (
     <div style={{
       width: size, height: size, borderRadius: '50%',
-      border: '1px solid rgba(255,255,255,0.08)',
+      border: '1px solid rgba(10,10,10,0.08)',
       overflow: 'hidden', flexShrink: 0, background: C.surface,
     }}>
       <img
@@ -201,7 +188,7 @@ function TIcon({ symbol, logo, size = 32 }: { symbol: string; logo?: string | nu
   return (
     <div style={{
       width: size, height: size, borderRadius: '50%',
-      background: `${c}18`, border: '1px solid rgba(255,255,255,0.06)',
+      background: `${c}18`, border: '1px solid rgba(10,10,10,0.06)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: C.D, fontSize: size * 0.35, fontWeight: 700,
       color: `${c}aa`, flexShrink: 0,
@@ -218,7 +205,7 @@ function Sk({ w, h, r = 8 }: { w: string | number; h: number; r?: number }) {
   return (
     <div style={{
       width: w, height: h, borderRadius: r,
-      background: 'linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.03) 75%)',
+      background: 'linear-gradient(90deg, rgba(10,10,10,0.04) 25%, rgba(10,10,10,0.06) 50%, rgba(10,10,10,0.04) 75%)',
       backgroundSize: '200% 100%',
       animation: 'rpShimmer 1.8s ease infinite',
     }} />
@@ -335,7 +322,7 @@ function CTip({ active, payload, label }: { active?: boolean; payload?: { value:
   return (
     <div style={{
       background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
-      padding: '10px 14px', boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
+      padding: '10px 14px', boxShadow: '0 12px 32px rgba(0,0,0,0.08)',
     }}>
       <div style={{ fontFamily: C.M, fontSize: 10, color: C.dim, marginBottom: 3 }}>
         {label ? new Date(label).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
@@ -358,7 +345,7 @@ function Ident({ addr, size = 40 }: { addr: string; size?: number }) {
     <div style={{
       width: size, height: size, borderRadius: 12,
       background: `conic-gradient(from 30deg, hsl(${h1},65%,50%), hsl(${h2},60%,45%), hsl(${h1},65%,50%))`,
-      border: '2px solid rgba(255,255,255,0.08)', flexShrink: 0,
+      border: '2px solid rgba(10,10,10,0.08)', flexShrink: 0,
     }} />
   )
 }
@@ -453,7 +440,7 @@ function TokenRow({ a, idx, total, isLast }: { a: Asset; idx: number; total: num
         borderBottom: !isLast ? `1px solid ${C.border}` : 'none',
         transition: 'background 0.1s', position: 'relative',
       }}
-      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.02)'; setHover(true) }}
+      onMouseEnter={e => { e.currentTarget.style.background = 'rgba(10,10,10,0.03)'; setHover(true) }}
       onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; setHover(false) }}
     >
       {/* Token info */}
@@ -496,7 +483,7 @@ function TokenRow({ a, idx, total, isLast }: { a: Asset; idx: number; total: num
           position: 'absolute', top: '100%', right: 4, zIndex: 50,
           background: C.card, border: `1px solid ${C.border}`, borderRadius: 14,
           padding: '12px 16px', minWidth: 220,
-          boxShadow: '0 12px 32px rgba(0,0,0,0.6)',
+          boxShadow: '0 12px 32px rgba(0,0,0,0.08)',
           pointerEvents: 'none',
         }}>
           <div style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.text, marginBottom: 8 }}>
@@ -798,7 +785,7 @@ function NonEvmTokens({ portfolio, nevm }: {
             borderBottom: (i < active.length - 1 || zero.length > 0) ? `1px solid ${C.border}` : 'none',
             transition: 'background 0.1s',
           }}
-          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(10,10,10,0.03)'}
           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
           >
             <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -820,7 +807,7 @@ function NonEvmTokens({ portfolio, nevm }: {
             width: '100%', display: 'flex', alignItems: 'center', gap: 6,
             padding: '12px 4px', background: 'transparent', border: 'none', cursor: 'pointer',
           }}
-          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(10,10,10,0.03)'}
           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
           >
             <span style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.dim, textTransform: 'uppercase' as const, letterSpacing: '0.06em' }}>
@@ -1026,7 +1013,7 @@ export default function PortfolioDashboard({ open, onClose, initialTab, override
             className="bf-blur-16"
             style={{
               position: 'absolute', inset: 0,
-              background: 'rgba(0,0,0,0.6)',
+              background: 'rgba(0,0,0,0.3)',
             }}
           />
 
@@ -1039,7 +1026,7 @@ export default function PortfolioDashboard({ open, onClose, initialTab, override
               position: 'relative', zIndex: 1, width: '100%', maxWidth: 920,
               maxHeight: 'calc(100vh - 40px)',
               background: C.bg, borderRadius: 20,
-              boxShadow: '0 40px 120px rgba(0,0,0,0.8)',
+              boxShadow: '0 40px 120px rgba(0,0,0,0.1)',
               overflow: 'hidden', display: 'flex', flexDirection: 'column',
             }}
           >
@@ -1163,7 +1150,7 @@ export default function PortfolioDashboard({ open, onClose, initialTab, override
                       {count > 0 && (
                         <span style={{
                           fontFamily: C.M, fontSize: 9, color: C.sub,
-                          background: 'rgba(255,255,255,0.06)',
+                          background: 'rgba(10,10,10,0.06)',
                           padding: '1px 6px', borderRadius: 8, lineHeight: '14px',
                         }}>
                           {count}
@@ -1555,7 +1542,7 @@ export default function PortfolioDashboard({ open, onClose, initialTab, override
                         borderBottom: (i < activeBalances.length - 1 || zeroBalances.length > 0) ? `1px solid ${C.border}` : 'none',
                         transition: 'background 0.1s',
                       }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(10,10,10,0.03)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
                       <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -1588,7 +1575,7 @@ export default function PortfolioDashboard({ open, onClose, initialTab, override
                         padding: '12px 4px', background: 'transparent', border: 'none',
                         cursor: 'pointer', transition: 'background 0.1s',
                       }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(10,10,10,0.03)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
                       <span style={{
@@ -1653,7 +1640,7 @@ export default function PortfolioDashboard({ open, onClose, initialTab, override
                         borderBottom: i < data.activity.length - 1 ? `1px solid ${C.border}` : 'none',
                         textDecoration: 'none', transition: 'background 0.1s',
                       }}
-                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(10,10,10,0.03)'}
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
                       <div style={{

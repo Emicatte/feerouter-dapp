@@ -2,32 +2,11 @@
 
 import { useState } from 'react'
 import { motion } from 'framer-motion'
-
-const C = {
-  bg:      '#0a0a0f',
-  surface: '#111118',
-  card:    '#16161f',
-  border:  'rgba(255,255,255,0.06)',
-  text:    '#E2E2F0',
-  sub:     '#8A8FA8',
-  dim:     '#4A4E64',
-  green:   '#00D68F',
-  red:     '#FF4C6A',
-  amber:   '#FFB547',
-  blue:    '#3B82F6',
-  purple:  '#8B5CF6',
-  D:       'var(--font-display)',
-  M:       'var(--font-mono)',
-  S:       '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-}
+import { C, EASE } from '@/app/designTokens'
 
 const GRAD: React.CSSProperties = {
-  background: 'linear-gradient(135deg, #FFFFFF 0%, #60A5FA 60%, #1D4ED8 100%)',
-  WebkitBackgroundClip: 'text',
-  WebkitTextFillColor: 'transparent',
+  color: '#C8512C',
 }
-
-const EASE: [number, number, number, number] = [0.4, 0, 0.2, 1]
 
 export default function HowOverlay() {
   const [expandedStep, setExpandedStep] = useState<number | null>(null)
@@ -94,7 +73,7 @@ export default function HowOverlay() {
               <div style={{
                 position: 'absolute', left: 0, top: 18,
                 width: 30, height: 30, borderRadius: 10, flexShrink: 0,
-                background: 'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(139,92,246,0.15))',
+                background: 'linear-gradient(135deg, rgba(59,130,246,0.15), rgba(200,81,44,0.15))',
                 border: `1px solid ${C.blue}30`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontFamily: C.M, fontSize: 10, fontWeight: 700, color: C.blue,
@@ -129,7 +108,7 @@ export default function HowOverlay() {
                 >
                   <div style={{
                     marginTop: 8, padding: '12px 14px', borderRadius: 10,
-                    background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}`,
+                    background: 'rgba(10,10,10,0.02)', border: `1px solid ${C.border}`,
                     fontFamily: C.M, fontSize: 10, color: C.dim, lineHeight: 1.6,
                   }}>
                     {s.detail}
@@ -156,7 +135,7 @@ export default function HowOverlay() {
               transition={{ delay: i * 0.08, duration: 0.35, ease: EASE }}
               style={{
                 padding: '16px', borderRadius: 14,
-                background: 'rgba(255,255,255,0.02)', border: `1px solid ${C.border}`,
+                background: 'rgba(10,10,10,0.02)', border: `1px solid ${C.border}`,
                 cursor: 'default',
                 gridColumn: i === 0 ? '1 / -1' : undefined,
               }}
