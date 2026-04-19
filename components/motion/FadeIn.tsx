@@ -11,7 +11,7 @@ type Props = {
   duration?: number
   className?: string
   style?: React.CSSProperties
-  once?: boolean
+  once?: boolean // false = bidirectional (re-animates on every viewport entry/exit)
 }
 
 const EASE = [0.22, 1, 0.36, 1] as const
@@ -23,12 +23,16 @@ export default function FadeIn({
   duration = 0.8,
   className,
   style,
-  once = true,
+  once = false,
 }: Props) {
   const reduced = useReducedMotion()
 
   const variants: Variants = {
-    hidden: { opacity: 0, y: reduced ? 0 : y },
+    hidden: {
+      opacity: 0,
+      y: reduced ? 0 : y,
+      transition: { duration: reduced ? 0 : duration * 0.6, ease: EASE },
+    },
     visible: {
       opacity: 1,
       y: 0,
@@ -42,7 +46,7 @@ export default function FadeIn({
       style={style}
       initial="hidden"
       whileInView="visible"
-      viewport={{ once, amount: 0.3, margin: '0px 0px -10% 0px' }}
+      viewport={{ once, amount: 0.2, margin: '0px 0px -5% 0px' }}
       variants={variants}
     >
       {children}

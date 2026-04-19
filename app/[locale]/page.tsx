@@ -1215,7 +1215,7 @@ export default function Home() {
 
       {/* ── Explore Tokens Section ──── */}
       <FadeIn y={40} duration={1}>
-        <section style={{ padding: isMobileHome ? '64px 24px' : '96px 96px', maxWidth: 1440 }}>
+        <section style={{ padding: isMobileHome ? '64px 24px' : '96px 96px', maxWidth: 1440, margin: '0 auto' }}>
           <ExploreTokens />
         </section>
       </FadeIn>

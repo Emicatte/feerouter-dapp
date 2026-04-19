@@ -11,11 +11,13 @@ export function StaggerContainer({
   className,
   style,
   staggerDelay = 0.08,
+  once = false,
 }: {
   children: ReactNode
   className?: string
   style?: React.CSSProperties
   staggerDelay?: number
+  once?: boolean
 }) {
   const variants: Variants = {
     hidden: {},
@@ -27,7 +29,7 @@ export function StaggerContainer({
       style={style}
       initial="hidden"
       whileInView="visible"
-      viewport={{ once: true, amount: 0.3 }}
+      viewport={{ once, amount: 0.2 }}
       variants={variants}
     >
       {children}
@@ -48,7 +50,7 @@ export function StaggerItem({
 }) {
   const reduced = useReducedMotion()
   const variants: Variants = {
-    hidden: { opacity: 0, y: reduced ? 0 : y },
+    hidden: { opacity: 0, y: reduced ? 0 : y, transition: { duration: 0.4, ease: EASE } },
     visible: { opacity: 1, y: 0, transition: { duration: 0.7, ease: EASE } },
   }
   return (
