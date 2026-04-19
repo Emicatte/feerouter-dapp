@@ -25,9 +25,17 @@ export async function GET() {
 
   try {
     const ids = getAllCoingeckoIds().join(',')
+    const apiKey = process.env.COINGECKO_API_KEY
+    const headers: HeadersInit = { Accept: 'application/json' }
+    if (apiKey) {
+      headers['x-cg-demo-api-key'] = apiKey
+    } else if (process.env.NODE_ENV !== 'production') {
+      console.warn('[tokens-market] COINGECKO_API_KEY not set — using public tier (risk of 429)')
+    }
+
     const res = await fetch(
       `https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids=${encodeURIComponent(ids)}&sparkline=true&price_change_percentage=24h`,
-      { signal: AbortSignal.timeout(10000), cache: 'no-store' },
+      { signal: AbortSignal.timeout(10000), cache: 'no-store', headers },
     )
     if (!res.ok) throw new Error(`CoinGecko ${res.status}`)
     const coins = await res.json()
