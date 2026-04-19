@@ -7,6 +7,12 @@ const analyzer = withBundleAnalyzer({
   enabled: process.env.ANALYZE === 'true',
 })
 
+// TODO: disable Vercel Toolbar for Production via Dashboard
+// (Project Settings → Advanced → Vercel Toolbar → toggle off for Production).
+// The toolbar script at https://vercel.live/_next-live/feedback/feedback.js is
+// blocked by our CSP (intentional) but still generates console warnings.
+// No runtime flag exists to suppress it from next.config — must be done in the dashboard.
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   webpack: (config) => {
@@ -26,14 +32,16 @@ const nextConfig = {
           value: [
             "default-src 'self'",
             "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-            "img-src 'self' data: https: blob:",
-            "font-src 'self' data: https://fonts.gstatic.com",
-            "connect-src 'self' http://localhost:* ws://localhost:* https://*.infura.io https://*.alchemy.com https://*.llamarpc.com https://*.publicnode.com https://rpc.ankr.com https://mainnet.base.org https://sepolia.base.org https://arb1.arbitrum.io https://mainnet.optimism.io https://polygon-rpc.com https://bsc-dataseed.binance.org https://api.avax.network https://mainnet.era.zksync.io https://forno.celo.org https://rpc.blast.io https://api.trongrid.io https://api.shasta.trongrid.io wss://*.walletconnect.com wss://*.walletconnect.org https://*.walletconnect.org https://*.web3modal.org https://api.coingecko.com https://ipapi.co https://*.railway.app",
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://api.fontshare.com",
+            "font-src 'self' data: https://fonts.gstatic.com https://cdn.fontshare.com",
+            "img-src 'self' data: blob: https:",
+            "connect-src 'self' https://rpagos-backend.onrender.com wss://rpagos-backend.onrender.com https://*.infura.io https://*.alchemy.com https://*.llamarpc.com https://*.publicnode.com https://rpc.ankr.com https://mainnet.base.org https://sepolia.base.org https://arb1.arbitrum.io https://mainnet.optimism.io https://polygon-rpc.com https://bsc-dataseed.binance.org https://api.avax.network https://mainnet.era.zksync.io https://forno.celo.org https://rpc.blast.io https://api.trongrid.io https://api.shasta.trongrid.io wss://*.walletconnect.com wss://*.walletconnect.org https://*.walletconnect.org https://*.web3modal.org https://api.coingecko.com https://ipapi.co",
             "frame-src 'self' https://verify.walletconnect.com https://verify.walletconnect.org",
-            "frame-ancestors 'none'",
+            "worker-src 'self' blob:",
+            "object-src 'none'",
             "base-uri 'self'",
             "form-action 'self'",
+            "frame-ancestors 'none'",
             "upgrade-insecure-requests",
           ].join('; '),
         },

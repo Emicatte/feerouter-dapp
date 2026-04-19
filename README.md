@@ -533,6 +533,50 @@ OTEL_ENDPOINT=                    # OpenTelemetry OTLP endpoint (optional)
 DEBUG=false                       # Enables /docs, verbose logging
 ```
 
+## Landing & Web Deployment
+
+### Landing Routes (next-intl)
+All landing routes are locale-prefixed via `next-intl` (`en`, `it`, `es`, `fr`, `de`). The `Link` component from `@/i18n/navigation` auto-prefixes the active locale.
+
+| Route | Component | Purpose |
+|---|---|---|
+| `/[locale]` | `app/[locale]/page.tsx` | Main landing (hero, mockup, markets, token, "Two ways in") |
+| `/[locale]/docs` | `app/[locale]/docs/page.tsx` | API docs placeholder (server component + metadata) |
+| `/[locale]/app` | Dapp entry | Full dashboard (CommandCenter, Transfer, CrossChain, ...) |
+
+The "One platform. Two ways in." section CTAs are real `<Link>` navigation (no more modal overlays):
+- **For developers** → `/docs` (placeholder page with email CTA + dashboard link)
+- **For businesses** → `/app` (dashboard)
+
+Previously used modal overlays (`ApiDocsOverlay`, `CommandCenterOverlay`) have been removed in favor of real routing — better SEO, real URLs, deep-linkable.
+
+### Smooth Scroll (Lenis)
+Lenis wraps the landing page only (not the dashboard). Config tuned for Mac trackpad inertia to eliminate the stepped-deceleration "scatto":
+
+```ts
+{
+  duration: 1.4,
+  easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+  lerp: 0.1,
+  wheelMultiplier: 0.7,
+  touchMultiplier: 1.5,
+  smoothWheel: true,
+  syncTouch: false,
+}
+```
+
+Plus `overscroll-behavior-y: none` on `html` ([globals.css](app/globals.css)) to kill browser elastic bounce at scroll boundaries.
+
+### Vercel Cache Headers (next.config.mjs)
+
+| Source | Cache-Control | Why |
+|---|---|---|
+| `/:path*` (HTML) | `public, max-age=0, must-revalidate` | Force revalidation — prevents stale HTML after deploy |
+| `/_next/static/:path*` | `public, max-age=31536000, immutable` | Long-term cache for hashed JS/CSS bundles |
+| `/_next/image/:path*` | `public, max-age=86400, stale-while-revalidate=604800` | 1d fresh, 7d SWR for optimized images |
+
+This setup kills aggressive stale-HTML caching on Vercel while keeping cheap asset caching intact.
+
 ## License
 
 Proprietary. All rights reserved.
