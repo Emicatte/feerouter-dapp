@@ -51,6 +51,28 @@ const nextConfig = {
         { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization' },
       ],
     },
+    // ── Cache-Control ──────────────────────────────────────────
+    // HTML pages: never cache, always revalidate
+    {
+      source: '/:path*',
+      headers: [
+        { key: 'Cache-Control', value: 'public, max-age=0, must-revalidate' },
+      ],
+    },
+    // Next.js static assets (hashed filenames): immutable, 1 year
+    {
+      source: '/_next/static/:path*',
+      headers: [
+        { key: 'Cache-Control', value: 'public, max-age=31536000, immutable' },
+      ],
+    },
+    // Next.js optimized images: 1 day + stale-while-revalidate
+    {
+      source: '/_next/image/:path*',
+      headers: [
+        { key: 'Cache-Control', value: 'public, max-age=86400, stale-while-revalidate=604800' },
+      ],
+    },
   ],
 }
 

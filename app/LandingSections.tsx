@@ -6,6 +6,7 @@ import { C } from '@/app/designTokens'
 import FadeIn from '@/components/motion/FadeIn'
 import { StaggerContainer, StaggerItem } from '@/components/motion/Stagger'
 import { useTranslations } from 'next-intl'
+import { Link } from '@/i18n/navigation'
 
 function useIsMobile(bp = 768) {
   const [m, setM] = useState(false)
@@ -19,10 +20,11 @@ function useIsMobile(bp = 768) {
   return m
 }
 
-function CtaButton({ children, color, outlined, style, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement> & { color: string; outlined?: boolean }) {
+function CtaLink({ children, color, outlined, style, href, ...rest }: Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href'> & { color: string; outlined?: boolean; href: string }) {
   const [hov, setHov] = useState(false)
   return (
-    <button
+    <Link
+      href={href}
       onMouseEnter={() => setHov(true)} onMouseLeave={() => setHov(false)}
       style={{
         fontFamily: C.D, fontSize: 14, fontWeight: 600, cursor: 'pointer',
@@ -32,19 +34,16 @@ function CtaButton({ children, color, outlined, style, ...rest }: React.ButtonHT
         color: outlined ? (hov ? '#fff' : color) : '#fff',
         opacity: hov ? 1 : (outlined ? 0.9 : 0.95),
         transform: hov ? 'translateY(-1px)' : 'none',
+        display: 'inline-block',
+        textDecoration: 'none',
         ...style,
       }}
       {...rest}
-    >{children}</button>
+    >{children}</Link>
   )
 }
 
-interface LandingSectionsProps {
-  onOpenDev: () => void
-  onOpenBiz: () => void
-}
-
-export default function LandingSections({ onOpenDev, onOpenBiz }: LandingSectionsProps) {
+export default function LandingSections() {
   const isMobile = useIsMobile()
   const t = useTranslations('twoPaths')
 
@@ -159,7 +158,7 @@ export default function LandingSections({ onOpenDev, onOpenBiz }: LandingSection
                 ))}
               </ul>
               <div style={{ marginTop: 'auto' }}>
-                <CtaButton color={C.text} onClick={onOpenDev}>{t('developers.cta')}</CtaButton>
+                <CtaLink color={C.text} href="/docs">{t('developers.cta')}</CtaLink>
               </div>
             </motion.div>
           </StaggerItem>
@@ -190,7 +189,7 @@ export default function LandingSections({ onOpenDev, onOpenBiz }: LandingSection
                 ))}
               </ul>
               <div style={{ marginTop: 'auto' }}>
-                <CtaButton color={C.text} outlined onClick={onOpenBiz}>{t('businesses.cta')}</CtaButton>
+                <CtaLink color={C.text} outlined href="/app">{t('businesses.cta')}</CtaLink>
               </div>
             </motion.div>
           </StaggerItem>
