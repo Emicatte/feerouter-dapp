@@ -1,9 +1,11 @@
 'use client'
 
-import { ReactNode, useEffect } from 'react'
+import { ReactNode, useEffect, useRef } from 'react'
 import Lenis from 'lenis'
 
-export default function SmoothScroll({ children }: { children: ReactNode }) {
+export default function SmoothScroll({ children, paused = false }: { children: ReactNode; paused?: boolean }) {
+  const lenisRef = useRef<Lenis | null>(null)
+
   useEffect(() => {
     const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     if (prefersReduced) return
@@ -15,6 +17,8 @@ export default function SmoothScroll({ children }: { children: ReactNode }) {
       wheelMultiplier: 1,
       touchMultiplier: 2,
     })
+
+    lenisRef.current = lenis
 
     let rafId: number
     const raf = (time: number) => {
@@ -36,8 +40,19 @@ export default function SmoothScroll({ children }: { children: ReactNode }) {
     return () => {
       cancelAnimationFrame(rafId)
       lenis.destroy()
+      lenisRef.current = null
     }
   }, [])
+
+  useEffect(() => {
+    const lenis = lenisRef.current
+    if (!lenis) return
+    if (paused) {
+      lenis.stop()
+    } else {
+      lenis.start()
+    }
+  }, [paused])
 
   return <>{children}</>
 }

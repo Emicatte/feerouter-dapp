@@ -1108,7 +1108,7 @@ export default function Home() {
   }, [])
 
   return (
-    <SmoothScroll>
+    <SmoothScroll paused={activeOverlay !== null}>
       <ToastContainer />
       {/* Background */}
       <div className="rp-bg" aria-hidden="true">
