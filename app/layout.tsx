@@ -1,13 +1,14 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter, DM_Mono } from 'next/font/google'
+import { Space_Grotesk, DM_Mono } from 'next/font/google'
 import './globals.css'
 import { Providers } from './providers'
 import dynamic from 'next/dynamic'
 
 const FooterGlobe = dynamic(() => import('../components/FooterGlobe'), { ssr: false })
 
-const inter = Inter({
+const spaceGrotesk = Space_Grotesk({
   subsets:  ['latin'],
+  weight:   ['400', '500', '600', '700'],
   variable: '--font-display',
   display:  'swap',
 })
@@ -38,20 +39,20 @@ export const viewport: Viewport = {
   maximumScale: 5,
   // Dark theme: prevents iOS Safari from rendering the status bar
   // in light mode when the app background is dark.
-  themeColor: '#0a0a0f',
+  themeColor: '#FAFAFA',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="it" className={`${inter.variable} ${dmMono.variable}`}>
+    <html lang="it" className={`${spaceGrotesk.variable} ${dmMono.variable}`}>
       <head>
         
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
       </head>
       <body
-        className={`${inter.className} overflow-x-hidden`}
-        style={{ background: '#0a0a0f', minHeight: '100dvh' }}
+        className={`${spaceGrotesk.className} overflow-x-hidden`}
+        style={{ background: '#FAFAFA', minHeight: '100dvh' }}
       >
         <Providers>
           {children}
