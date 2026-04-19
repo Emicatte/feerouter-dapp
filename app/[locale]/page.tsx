@@ -21,8 +21,6 @@ const SecurityOverlay = dynamic(() => import('../overlays/SecurityOverlay'), { s
 const ComplianceOverlay = dynamic(() => import('../overlays/ComplianceOverlay'), { ssr: false })
 const DevelopersOverlay = dynamic(() => import('../overlays/DevelopersOverlay'), { ssr: false })
 const PricingOverlay = dynamic(() => import('../overlays/PricingOverlay'), { ssr: false })
-const ApiDocsOverlay = dynamic(() => import('../overlays/ApiDocsOverlay'), { ssr: false })
-const CommandCenterOverlay = dynamic(() => import('../overlays/CommandCenterOverlay'), { ssr: false })
 const HeroWireframe = dynamic(() => import('@/components/HeroWireframe'), { ssr: false })
 import { useSweepWebSocket } from '../../lib/useSweepWebSocket'
 import { useSweepStats } from '../../lib/useSweepStats'
@@ -50,7 +48,7 @@ import { StaggerContainer, StaggerItem } from '@/components/motion/Stagger'
 
 
 
-type Overlay = null | 'about' | 'how' | 'security' | 'compliance' | 'developers' | 'pricing' | 'apidocs' | 'commandcenter'
+type Overlay = null | 'about' | 'how' | 'security' | 'compliance' | 'developers' | 'pricing'
 
 const GRAD: React.CSSProperties = {
   color: '#C8512C',
@@ -1160,19 +1158,6 @@ export default function Home() {
       <OverlayShell isMobile={isMobileHome} active={activeOverlay === 'pricing'} onClose={() => setActiveOverlay(null)}>
         <PricingOverlay />
       </OverlayShell>
-      {activeOverlay === 'apidocs' && (
-        <ApiDocsOverlay onClose={() => setActiveOverlay(null)} onGoToCommand={() => {
-          setActiveOverlay(null)
-          window.scrollTo({ top: 0, behavior: 'smooth' })
-        }} />
-      )}
-      {activeOverlay === 'commandcenter' && (
-        <CommandCenterOverlay onClose={() => setActiveOverlay(null)} onGoToCommand={() => {
-          setActiveOverlay(null)
-          window.scrollTo({ top: 0, behavior: 'smooth' })
-        }} />
-      )}
-
       {/* Main content — padded below navbar */}
       <main className="main-content" style={{
         minHeight: '100dvh',
@@ -1208,10 +1193,7 @@ export default function Home() {
       </main>
 
       {/* ── B2B Landing Sections ──── */}
-      <LandingSections
-        onOpenDev={() => setActiveOverlay('apidocs')}
-        onOpenBiz={() => setActiveOverlay('commandcenter')}
-      />
+      <LandingSections />
 
       {/* ── Explore Tokens Section ──── */}
       <FadeIn y={40} duration={1}>
