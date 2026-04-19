@@ -8,6 +8,7 @@ import { useAccount, useChainId, useSwitchChain } from 'wagmi'
 import { motion, AnimatePresence } from 'framer-motion'
 import type { Variants, Transition } from 'framer-motion'
 import dynamic from 'next/dynamic'
+import Link from 'next/link'
 
 // STATIC IMPORTS
 import AccountHeader from './AccountHeader'
@@ -876,23 +877,24 @@ function HeroTitle({ isMobile }: { isMobile?: boolean }) {
         flexWrap: 'wrap',
         justifyContent: isMobile ? 'center' : 'flex-start',
       }}>
-        <button
-          onClick={() => {}}
-          style={{
-            padding: '11px 20px',
-            background: C.text,
-            color: C.bg,
-            border: 'none',
-            borderRadius: 3,
-            fontFamily: C.D,
-            fontSize: 14,
-            fontWeight: 500,
-            cursor: 'pointer',
-            letterSpacing: 0,
-          }}
-        >
-          Start building →
-        </button>
+        <Link href="/app" style={{ textDecoration: 'none' }}>
+          <button
+            style={{
+              padding: '11px 20px',
+              background: C.text,
+              color: C.bg,
+              border: 'none',
+              borderRadius: 3,
+              fontFamily: C.D,
+              fontSize: 14,
+              fontWeight: 500,
+              cursor: 'pointer',
+              letterSpacing: 0,
+            }}
+          >
+            Start building →
+          </button>
+        </Link>
         <button
           onClick={() => {}}
           style={{
