@@ -1208,10 +1208,7 @@ export default function Home() {
       </main>
 
       {/* ── B2B Landing Sections ──── */}
-      <LandingSections
-        onOpenDev={() => setActiveOverlay('apidocs')}
-        onOpenBiz={() => setActiveOverlay('commandcenter')}
-      />
+      <LandingSections />
 
       {/* ── Explore Tokens Section ──── */}
       <FadeIn y={40} duration={1}>
