@@ -1436,8 +1436,8 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
   // ── MAIN FORM — Jupiter-style: no header, direct Sell/Buy ──────────
   return (
     <>
-      <div style={noCard ? {} : C.card} className={noCard ? '' : 'bf-blur-32s'}>
-        <div>
+      <div style={noCard ? {} : C.card} className={noCard ? 'max-w-[440px] mx-auto w-full' : 'bf-blur-32s'}>
+        <div className="rp-stagger-host">
 
           {/* ── Card Pay ─────────────────────────────────────── */}
           <div className="rounded-2xl border border-[rgba(200,81,44,0.35)] bg-white px-5 py-4">

@@ -64,6 +64,11 @@
     "fr": "Français",
     "de": "Deutsch"
   },
+  "networkSelector": {
+    "title": "Netzwerk auswählen",
+    "comingSoon": "Demnächst",
+    "confirmInWallet": "Im Wallet bestätigen…"
+  },
   "dapp": {
     "tabs": {
       "send": "Send",

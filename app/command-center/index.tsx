@@ -192,7 +192,7 @@ export default function CommandCenter({
     <div className="mx-auto w-full px-4 py-6">
 
       {/* Unified card: stats | sub-tabs | content */}
-      <div className="rounded-2xl border border-[rgba(200,81,44,0.35)] bg-white overflow-hidden">
+      <div className="rounded-2xl border border-[rgba(200,81,44,0.35)] bg-white overflow-hidden rp-stagger-host">
 
         {/* STATS STRIP — top row */}
         <div className="px-5 py-3 flex items-center justify-between gap-4 border-b border-[rgba(200,81,44,0.15)]">

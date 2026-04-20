@@ -1,0 +1,124 @@
+/* ═══════════════════════════════════════════════════════════════
+ * Tab transition orchestration
+ * Imported by app/[locale]/app/page.tsx
+ * ═══════════════════════════════════════════════════════════════ */
+
+/* ── STAGE ─────────────────────────────────────────────────── */
+.rp-tab-stage {
+  position: relative;
+}
+
+/* ── PANEL WRAPPER ─────────────────────────────────────────── */
+.rp-panel {
+  position: absolute;
+  inset: 0;
+  transition: border-color 280ms ease, box-shadow 280ms ease;
+}
+.rp-panel[data-active="false"] {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+.rp-panel[data-active="true"] {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+}
+
+/* ── ITEMS staggered (targetano solo figli di .rp-stagger-host) ── */
+.rp-panel[data-active="true"] .rp-stagger-host > * {
+  opacity: 1;
+  transform: translateX(0);
+  filter: blur(0);
+  transition:
+    transform 320ms cubic-bezier(0.34, 1.2, 0.64, 1),
+    opacity 240ms ease,
+    filter 240ms ease;
+  will-change: transform, opacity;
+}
+
+/* exit phase: slide opposite direction with 25ms stagger */
+.rp-panel[data-active="true"][data-phase="exit"][data-dir="right"] .rp-stagger-host > * { transform: translateX(-50px); opacity: 0; filter: blur(1.5px); }
+.rp-panel[data-active="true"][data-phase="exit"][data-dir="left"]  .rp-stagger-host > * { transform: translateX(50px);  opacity: 0; filter: blur(1.5px); }
+.rp-panel[data-active="true"][data-phase="exit"] .rp-stagger-host > *:nth-child(1) { transition-delay: 0ms; }
+.rp-panel[data-active="true"][data-phase="exit"] .rp-stagger-host > *:nth-child(2) { transition-delay: 25ms; }
+.rp-panel[data-active="true"][data-phase="exit"] .rp-stagger-host > *:nth-child(3) { transition-delay: 50ms; }
+.rp-panel[data-active="true"][data-phase="exit"] .rp-stagger-host > *:nth-child(4) { transition-delay: 75ms; }
+.rp-panel[data-active="true"][data-phase="exit"] .rp-stagger-host > *:nth-child(5) { transition-delay: 100ms; }
+.rp-panel[data-active="true"][data-phase="exit"] .rp-stagger-host > *:nth-child(n+6) { transition-delay: 120ms; }
+
+/* swap phase — items pre-position off-screen, instant (0ms) */
+.rp-panel[data-active="true"][data-phase="swap"][data-dir="right"] .rp-stagger-host > * { transform: translateX(50px);  opacity: 0; filter: blur(1.5px); transition-duration: 0ms; }
+.rp-panel[data-active="true"][data-phase="swap"][data-dir="left"]  .rp-stagger-host > * { transform: translateX(-50px); opacity: 0; filter: blur(1.5px); transition-duration: 0ms; }
+
+/* enter phase — stagger 35ms with overshoot */
+.rp-panel[data-active="true"][data-phase="enter"] .rp-stagger-host > * { transition-duration: 320ms; }
+.rp-panel[data-active="true"][data-phase="enter"] .rp-stagger-host > *:nth-child(1) { transition-delay: 0ms; }
+.rp-panel[data-active="true"][data-phase="enter"] .rp-stagger-host > *:nth-child(2) { transition-delay: 35ms; }
+.rp-panel[data-active="true"][data-phase="enter"] .rp-stagger-host > *:nth-child(3) { transition-delay: 70ms; }
+.rp-panel[data-active="true"][data-phase="enter"] .rp-stagger-host > *:nth-child(4) { transition-delay: 105ms; }
+.rp-panel[data-active="true"][data-phase="enter"] .rp-stagger-host > *:nth-child(5) { transition-delay: 140ms; }
+.rp-panel[data-active="true"][data-phase="enter"] .rp-stagger-host > *:nth-child(n+6) { transition-delay: 175ms; }
+
+/* ── UI PERIFERICA shift ──────────────────────────────────── */
+.rp-brand,
+.rp-chain-pills,
+.rp-wallet {
+  transition: transform 240ms cubic-bezier(0.32, 0.72, 0.2, 1);
+}
+.rp-chain-pills { transition-delay: 30ms; }
+.rp-wallet { transition-delay: 60ms; }
+
+[data-phase="exit"][data-dir="right"] .rp-brand        { transform: translateX(-2px); }
+[data-phase="exit"][data-dir="right"] .rp-chain-pills  { transform: translateX(-3px); }
+[data-phase="exit"][data-dir="right"] .rp-wallet       { transform: translateX(-4px); }
+[data-phase="exit"][data-dir="left"]  .rp-brand        { transform: translateX(2px); }
+[data-phase="exit"][data-dir="left"]  .rp-chain-pills  { transform: translateX(3px); }
+[data-phase="exit"][data-dir="left"]  .rp-wallet       { transform: translateX(4px); }
+
+/* ── BRAND DOT pulse ─────────────────────────────────────── */
+.rp-brand-dot {
+  transition: transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+[data-phase="exit"] .rp-brand-dot { transform: scale(1.15) rotate(12deg); }
+
+/* ── TAB INDICATOR (rettangolo volante) ────────────────────── */
+.rp-tab-indicator {
+  box-sizing: border-box;
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: rgba(200, 81, 44, 0.1);
+  border: 1px solid rgba(200, 81, 44, 0.25);
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 0;
+  transition:
+    transform 420ms cubic-bezier(0.32, 0.72, 0.2, 1),
+    width 420ms cubic-bezier(0.32, 0.72, 0.2, 1),
+    box-shadow 280ms ease;
+}
+[data-phase="exit"] .rp-tab-indicator,
+[data-phase="enter"] .rp-tab-indicator {
+  box-shadow: 0 0 0 6px rgba(200, 81, 44, 0.08), 0 0 24px rgba(200, 81, 44, 0.25);
+}
+
+/* ── ACCESSIBILITY: riduzione animazioni ──────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .rp-panel .rp-stagger-host > *,
+  .rp-brand,
+  .rp-chain-pills,
+  .rp-wallet,
+  .rp-brand-dot,
+  .rp-tab-indicator {
+    transition-duration: 80ms !important;
+    transition-delay: 0ms !important;
+  }
+  .rp-panel[data-active="true"][data-phase="exit"] .rp-stagger-host > *,
+  .rp-panel[data-active="true"][data-phase="swap"] .rp-stagger-host > *,
+  .rp-panel[data-active="true"][data-phase="enter"] .rp-stagger-host > * {
+    filter: none !important;
+    transform: none !important;
+  }
+}

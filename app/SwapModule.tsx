@@ -399,7 +399,7 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
 
   return (
     <div className={noCard ? '' : 'rounded-2xl border border-[rgba(200,81,44,0.35)] bg-white p-4'}>
-      <div className="mx-auto w-full max-w-[440px] flex flex-col gap-1">
+      <div className="mx-auto w-full max-w-[440px] flex flex-col gap-1 rp-stagger-host">
 
         {/* ── PAY ───────────────────────────────────────────── */}
         {showSettings ? (

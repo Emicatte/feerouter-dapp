@@ -4,6 +4,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
+import { useTranslations } from 'next-intl'
 import { useChainId, useSwitchChain, useAccount, useGasPrice } from 'wagmi'
 import { formatUnits } from 'viem'
 import {
@@ -12,11 +13,21 @@ import {
 
 const ZERO = '0x0000000000000000000000000000000000000000'
 
-const CHAIN_META: Record<number, { color: string; icon: string; isTestnet: boolean }> = {
-  8453:     { color: '#0052FF', icon: '🔵', isTestnet: false },
-  1:        { color: '#627EEA', icon: '⟠',  isTestnet: false },
-  84532:    { color: '#0052FF', icon: '🧪', isTestnet: true  },
-  11155111: { color: '#627EEA', icon: '🧪', isTestnet: true  },
+const CHAIN_META: Record<number, { color: string; iconUrl: string; isTestnet: boolean }> = {
+  // Mainnet
+  1:        { color: '#627EEA', iconUrl: '/chains/ethereum.svg',                                    isTestnet: false },
+  10:       { color: '#FF0420', iconUrl: 'https://icons.llamao.fi/icons/chains/rsz_optimism.jpg',   isTestnet: false },
+  56:       { color: '#F3BA2F', iconUrl: 'https://icons.llamao.fi/icons/chains/rsz_bsc.jpg',        isTestnet: false },
+  137:      { color: '#7B3FE4', iconUrl: 'https://icons.llamao.fi/icons/chains/rsz_polygon.jpg',    isTestnet: false },
+  324:      { color: '#1E69FF', iconUrl: 'https://icons.llamao.fi/icons/chains/rsz_zksync_era.jpg', isTestnet: false },
+  8453:     { color: '#0052FF', iconUrl: '/chains/base.svg',                                        isTestnet: false },
+  42161:    { color: '#28A0F0', iconUrl: '/chains/arbitrum.svg',                                    isTestnet: false },
+  42220:    { color: '#FCFF52', iconUrl: 'https://icons.llamao.fi/icons/chains/rsz_celo.jpg',       isTestnet: false },
+  43114:    { color: '#E84142', iconUrl: 'https://icons.llamao.fi/icons/chains/rsz_avalanche.jpg',  isTestnet: false },
+  81457:    { color: '#FCFC03', iconUrl: 'https://icons.llamao.fi/icons/chains/rsz_blast.jpg',      isTestnet: false },
+  // Testnet — riusano il logo mainnet
+  84532:    { color: '#0052FF', iconUrl: '/chains/base.svg',                                        isTestnet: true  },
+  11155111: { color: '#627EEA', iconUrl: '/chains/ethereum.svg',                                    isTestnet: true  },
 }
 
 interface NetworkSelectorProps {
@@ -30,6 +41,7 @@ export default function NetworkSelector({ onNetworkChange, compact = false }: Ne
   const { switchChain, isPending, error }   = useSwitchChain()
   const { data: gasPrice }                  = useGasPrice()
   const gwei                                = gasPrice ? Number(formatUnits(gasPrice, 9)) : null
+  const t                                   = useTranslations('networkSelector')
   const [open, setOpen]                     = useState(false)
   const [pendingId, setPendingId]           = useState<number | null>(null)
   const [menuPos, setMenuPos]               = useState<{ top: number; right: number }>({ top: 0, right: 0 })
@@ -39,14 +51,14 @@ export default function NetworkSelector({ onNetworkChange, compact = false }: Ne
   const networks = getSupportedChains()
     .map(id => {
       const reg  = getRegistry(id)
-      const meta = CHAIN_META[id] ?? { color: 'rgba(10,10,10,0.55)', icon: '●', isTestnet: false }
+      const meta = CHAIN_META[id] ?? { color: 'rgba(10,10,10,0.55)', iconUrl: '', isTestnet: false }
       if (!reg) return null
       return {
         chainId:     id,
         name:        reg.chainName,
         shortName:   reg.chainName.replace(' Sepolia', '').replace(' Mainnet', ''),
         color:       meta.color,
-        icon:        meta.icon,
+        iconUrl:     meta.iconUrl,
         isTestnet:   meta.isTestnet,
         isL2:        reg.isL2,
         hasContract: reg.feeRouter !== ZERO,
@@ -54,7 +66,7 @@ export default function NetworkSelector({ onNetworkChange, compact = false }: Ne
     })
     .filter(Boolean) as {
       chainId: number; name: string; shortName: string; color: string
-      icon: string; isTestnet: boolean; isL2: boolean; hasContract: boolean
+      iconUrl: string; isTestnet: boolean; isL2: boolean; hasContract: boolean
     }[]
 
   // ── Calcola posizione del menu dal trigger button ──────────────────────
@@ -101,11 +113,11 @@ export default function NetworkSelector({ onNetworkChange, compact = false }: Ne
   const handleSelect = useCallback((chainId: number) => {
     if (chainId === walletChainId) { setOpen(false); return }
     setPendingId(chainId)
-    switchChain({ chainId: chainId as 1 | 8453 | 84532 | 11155111 })
+    switchChain({ chainId: chainId as 1 | 10 | 56 | 137 | 324 | 8453 | 42161 | 42220 | 43114 | 81457 | 84532 | 11155111 })
   }, [walletChainId, switchChain])
 
   const currentNet  = networks.find(n => n.chainId === walletChainId)
-  const currentMeta = CHAIN_META[walletChainId] ?? { color: 'rgba(10,10,10,0.55)', icon: '●', isTestnet: false }
+  const currentMeta = CHAIN_META[walletChainId] ?? { color: 'rgba(10,10,10,0.55)', iconUrl: '', isTestnet: false }
 
   if (!isConnected) return null
 
@@ -199,7 +211,11 @@ export default function NetworkSelector({ onNetworkChange, compact = false }: Ne
               border: '1.5px solid rgba(10,10,10,0.12)',
               borderRadius: 18,
               boxShadow: '0 20px 60px rgba(0,0,0,0.95), 0 0 0 1px rgba(10,10,10,0.05)',
-              overflow: 'hidden',
+              overflowY: 'auto',
+              overflowX: 'hidden',
+              maxHeight: `min(480px, calc(100vh - ${menuPos.top + 20}px))`,
+              scrollbarWidth: 'thin' as const,
+              scrollbarColor: 'rgba(10,10,10,0.2) transparent',
               animation: 'rpFadeUp 0.15s ease both',
             }}
           >
@@ -214,7 +230,7 @@ export default function NetworkSelector({ onNetworkChange, compact = false }: Ne
                 color: 'rgba(10,10,10,0.55)', textTransform: 'uppercase' as const,
                 letterSpacing: '0.08em',
               }}>
-                Seleziona Rete
+                {t('title')}
               </span>
             </div>
 
@@ -260,9 +276,22 @@ export default function NetworkSelector({ onNetworkChange, compact = false }: Ne
                     width: 34, height: 34, borderRadius: 10,
                     background: `${net.color}15`, border: `1.5px solid ${net.color}30`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 16, flexShrink: 0,
+                    flexShrink: 0, overflow: 'hidden',
                   }}>
-                    {net.icon}
+                    {net.iconUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={net.iconUrl}
+                        alt={net.name}
+                        width={22}
+                        height={22}
+                        style={{ width: 22, height: 22, objectFit: 'contain', display: 'block' }}
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div style={{ width: 10, height: 10, borderRadius: '50%', background: net.color }} />
+                    )}
                   </div>
 
                   {/* Nome + badge */}
@@ -293,12 +322,12 @@ export default function NetworkSelector({ onNetworkChange, compact = false }: Ne
                     </div>
                     {disabled && (
                       <span style={{ fontFamily: 'var(--font-display)', fontSize: 10, color: 'rgba(10,10,10,0.55)', display: 'block', marginTop: 1 }}>
-                        Coming Soon
+                        {t('comingSoon')}
                       </span>
                     )}
                     {isSwitching && (
                       <span style={{ fontFamily: 'var(--font-display)', fontSize: 10, color: '#00ffa3', display: 'block', marginTop: 1 }}>
-                        Conferma nel wallet…
+                        {t('confirmInWallet')}
                       </span>
                     )}
                   </div>
