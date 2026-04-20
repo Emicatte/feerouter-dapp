@@ -15,7 +15,7 @@ import type {
   SimulationResult,
   SplitContract,
 } from '../../lib/useSplitContracts'
-import { C, EASE, TabSkeleton } from './shared'
+import { C, TabSkeleton } from './shared'
 
 const RouteWizard = dynamic(() => import('./RouteWizard'), { ssr: false })
 
@@ -157,113 +157,34 @@ function RoutesTab({
 
 function EmptyState({ onStart }: { onStart: () => void }) {
   const t = useTranslations('commandCenter.routes')
-  const features = [
-    {
-      icon: (
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-          <path d="M5 12h14M12 5l7 7-7 7" stroke={C.green} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      ),
-      title: t('autoForward'),
-      desc: t('autoForwardDesc'),
-    },
-    {
-      icon: (
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-          <path d="M6 12h4M14 8h4M14 16h4M10 12l4-4M10 12l4 4" stroke={C.purple} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      ),
-      title: t('splitRouting'),
-      desc: t('splitRoutingDesc'),
-    },
-    {
-      icon: (
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" stroke={C.blue} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      ),
-      title: t('smartGas'),
-      desc: t('smartGasDesc'),
-    },
-  ]
-
   return (
-    <div style={{ textAlign: 'center', padding: '20px 0 10px' }}>
-      {/* SVG illustration */}
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 0.6, ease: EASE }}
-        style={{ marginBottom: 5 }}
-      >
-        <svg width="180" height="100" viewBox="0 0 180 100" style={{ display: 'block', margin: '0 auto' }}>
-          <circle cx="30" cy="50" r="14" fill={`${C.purple}12`} stroke={C.purple} strokeWidth="0.8" />
-          <text x="30" y="53" textAnchor="middle" fill={C.purple} fontSize="10" fontFamily="var(--font-mono)">W</text>
-          <circle cx="90" cy="28" r="11" fill={`${C.green}10`} stroke={C.green} strokeWidth="0.8" />
-          <text x="90" y="31" textAnchor="middle" fill={C.green} fontSize="8" fontFamily="var(--font-mono)">A</text>
-          <circle cx="90" cy="72" r="11" fill={`${C.blue}10`} stroke={C.blue} strokeWidth="0.8" />
-          <text x="90" y="75" textAnchor="middle" fill={C.blue} fontSize="8" fontFamily="var(--font-mono)">B</text>
-          <circle cx="150" cy="50" r="11" fill={`${C.red}10`} stroke={C.red} strokeWidth="0.8" />
-          <text x="150" y="53" textAnchor="middle" fill={C.red} fontSize="8" fontFamily="var(--font-mono)">C</text>
-          <line x1="44" y1="43" x2="79" y2="31" stroke={C.purple} strokeWidth="0.8" strokeDasharray="4 3" opacity="0.5">
-            <animate attributeName="stroke-dashoffset" from="7" to="0" dur="1.5s" repeatCount="indefinite" />
-          </line>
-          <line x1="44" y1="57" x2="79" y2="69" stroke={C.purple} strokeWidth="0.8" strokeDasharray="4 3" opacity="0.5">
-            <animate attributeName="stroke-dashoffset" from="7" to="0" dur="1.5s" repeatCount="indefinite" />
-          </line>
-          <line x1="101" y1="32" x2="139" y2="46" stroke={C.green} strokeWidth="0.8" strokeDasharray="4 3" opacity="0.4">
-            <animate attributeName="stroke-dashoffset" from="7" to="0" dur="1.8s" repeatCount="indefinite" />
-          </line>
-          <line x1="101" y1="68" x2="139" y2="54" stroke={C.blue} strokeWidth="0.8" strokeDasharray="4 3" opacity="0.4">
-            <animate attributeName="stroke-dashoffset" from="7" to="0" dur="1.8s" repeatCount="indefinite" />
-          </line>
-        </svg>
-      </motion.div>
-
-      {/* CTA */}
-      <div style={{ fontFamily: C.D, fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 10 }}>
-        {t('noRoutesYet')}
-      </div>
-
-      <motion.button
-        whileTap={{ scale: 0.97 }}
+    <div className="mx-auto max-w-[560px] text-center py-10">
+      <svg width="140" height="90" viewBox="0 0 140 90" fill="none" className="mx-auto mb-5 block">
+        <line x1="28" y1="45" x2="65" y2="22" stroke="rgba(200,81,44,0.3)" strokeWidth="1" strokeDasharray="3 3"/>
+        <line x1="28" y1="45" x2="65" y2="68" stroke="rgba(200,81,44,0.3)" strokeWidth="1" strokeDasharray="3 3"/>
+        <line x1="65" y1="22" x2="112" y2="45" stroke="rgba(200,81,44,0.3)" strokeWidth="1" strokeDasharray="3 3"/>
+        <line x1="65" y1="68" x2="112" y2="45" stroke="rgba(200,81,44,0.3)" strokeWidth="1" strokeDasharray="3 3"/>
+        <circle cx="28" cy="45" r="11" fill="#FCEBEB" stroke="#E24B4A" strokeWidth="1"/>
+        <text x="28" y="49" textAnchor="middle" fontSize="10" fill="#A32D2D" fontWeight="500">W</text>
+        <circle cx="65" cy="22" r="11" fill="#EAF3DE" stroke="#639922" strokeWidth="1"/>
+        <text x="65" y="26" textAnchor="middle" fontSize="10" fill="#3B6D11" fontWeight="500">A</text>
+        <circle cx="65" cy="68" r="11" fill="#E6F1FB" stroke="#378ADD" strokeWidth="1"/>
+        <text x="65" y="72" textAnchor="middle" fontSize="10" fill="#185FA5" fontWeight="500">B</text>
+        <circle cx="112" cy="45" r="11" fill="#FAECE7" stroke="#D85A30" strokeWidth="1"/>
+        <text x="112" y="49" textAnchor="middle" fontSize="10" fill="#993C1D" fontWeight="500">C</text>
+      </svg>
+      <h3 className="text-[17px] font-medium text-[#2C2C2A] mb-1.5">{t('noRoutesYet')}</h3>
+      {/* TODO(i18n): add `noRoutesYetDesc` key to messages/*.json */}
+      <p className="text-[13px] text-[#888780] mb-5 leading-[1.5]">
+        Create a route to auto-forward incoming funds, split payments, or optimize gas.
+      </p>
+      <button
+        type="button"
         onClick={onStart}
-        style={{
-          padding: '12px 28px', borderRadius: 14, border: 'none',
-          background: `linear-gradient(135deg, ${C.red}, ${C.purple})`,
-          color: '#fff', fontFamily: C.D, fontSize: 14, fontWeight: 700,
-          cursor: 'pointer', letterSpacing: '-0.01em',
-          boxShadow: `0 4px 20px ${C.purple}25`,
-          transition: 'all 0.2s',
-        }}
+        className="px-5 py-2.5 bg-[#C8512C] text-white border-none rounded-[10px] text-[13px] font-medium hover:bg-[#B04424] transition-colors cursor-pointer"
       >
         {t('createFirstRoute')}
-      </motion.button>
-
-      {/* Feature cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginTop: 20 }}>
-        {features.map((f, i) => (
-          <motion.div
-            key={f.title}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 + i * 0.08, duration: 0.4, ease: EASE }}
-            style={{
-              background: 'rgba(10,10,10,0.03)',
-              border: `1px solid ${C.border}`,
-              borderRadius: 14, padding: '14px 10px', textAlign: 'center',
-            }}
-          >
-            <div style={{ marginBottom: 8 }}>{f.icon}</div>
-            <div style={{ fontFamily: C.D, fontSize: 11, fontWeight: 600, color: C.text, marginBottom: 4 }}>
-              {f.title}
-            </div>
-            <div style={{ fontFamily: C.M, fontSize: 9, color: C.dim, lineHeight: 1.4 }}>
-              {f.desc}
-            </div>
-          </motion.div>
-        ))}
-      </div>
+      </button>
     </div>
   )
 }
