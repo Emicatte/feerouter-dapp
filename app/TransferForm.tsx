@@ -499,60 +499,6 @@ function Toast({ message, color=T.amber, onDismiss }: { message:string; color?:s
   )
 }
 
-// ── Quote Panel ────────────────────────────────────────────────────────────
-function QuotePanel({ quote, tokenOut, isSwap }: {
-  quote: ReturnType<typeof useSwapQuote>
-  tokenOut: TokenConfig | null
-  isSwap: boolean
-}) {
-  const t = useTranslations('send')
-
-  if (!quote || !isSwap) return null
-  const { status, netAmountFmt, feeFmt, minAmountOut, poolFee, errorMessage, gasEstimate } = quote
-
-  if (status === 'loading') return (
-    <div style={{ padding:'12px 14px', borderRadius:12, background:'rgba(167,139,250,0.06)', border:`1px solid rgba(167,139,250,0.2)`, display:'flex', alignItems:'center', gap:10 }}>
-      <div className="rp-spinner" style={{ width:14, height:14, border:`2px solid ${T.purple}30`, borderTopColor:'transparent', borderRadius:'50%' }} />
-      <span style={{ fontFamily:T.D, fontSize:13, color:T.purple }}>{t('calculatingQuote')}</span>
-    </div>
-  )
-
-  if (status === 'error_liquidity' || status === 'error_network') return (
-    <div style={{ padding:'12px 14px', borderRadius:12, background:`${T.amber}0a`, border:`1px solid ${T.amber}30` }}>
-      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-        <span>⚠️</span>
-        <span style={{ fontFamily:T.D, fontSize:12, fontWeight:700, color:T.amber }}>
-          {status === 'error_liquidity' ? t('poolInsufficient') : t('quoteUnavailable')}
-        </span>
-      </div>
-      <div style={{ fontFamily:T.D, fontSize:11, color:T.muted, marginTop:4, paddingLeft:20 }}>{errorMessage}</div>
-    </div>
-  )
-
-  if (status !== 'success' || !tokenOut) return null
-
-  const poolFeeLabel = poolFee === 100 ? '0.01%' : poolFee === 500 ? '0.05%' : poolFee === 3000 ? '0.3%' : '1%'
-
-  return (
-    <div style={{ borderRadius:13, overflow:'hidden', border:`1px solid rgba(167,139,250,0.2)`, animation:'rpFadeUp 0.3s var(--ease-spring) both' }}>
-      <div style={{ padding:'8px 14px', background:'rgba(167,139,250,0.08)', fontFamily:T.D, fontSize:11, fontWeight:700, color:T.purple, borderBottom:`1px solid rgba(167,139,250,0.15)`, letterSpacing:'0.04em' }}>
-        ⚡ Uniswap V3 Quote · Pool {poolFeeLabel}
-      </div>
-      {[
-        { l: t('recipientReceives'), v: `${netAmountFmt} ${tokenOut.symbol}`, h: true },
-        { l: t('minSlippage'),  v: `${formatUnits(minAmountOut, tokenOut.decimals).slice(0,10)} ${tokenOut.symbol} (0.5%)`, h: false },
-        { l: t('gatewayFee'),          v: `${feeFmt} ${tokenOut.symbol}`, h: false },
-        ...(gasEstimate ? [{ l: t('estimatedGas'), v: `~${gasEstimate.toString()} units`, h: false }] : []),
-      ].map((r, i, arr) => (
-        <div key={i} style={{ display:'flex', borderLeft:`2px dashed rgba(167,139,250,0.15)` }}>
-          <div style={{ width:'45%', padding:'7px 0 7px 14px', fontFamily:T.D, fontSize:11, fontWeight:500, color:T.muted, borderBottom:i<arr.length-1?`1px solid ${T.border}`:'none' }}>{r.l}</div>
-          <div style={{ width:'55%', padding:'7px 14px', fontFamily:T.M, fontSize:11, fontWeight:r.h?700:500, color:r.h?T.purple:T.muted, borderBottom:i<arr.length-1?`1px solid ${T.border}`:'none' }}>{r.v}</div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
 // ══════════════════════════════════════════════════════════════════════════
 export default function TransferForm({ noCard, externalToken }: { noCard?: boolean; externalToken?: TokenInfo | null }): React.JSX.Element {
   const { address, isConnected } = useAccount()
@@ -1491,352 +1437,6 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
   return (
     <>
       <div style={noCard ? {} : C.card} className={noCard ? '' : 'bf-blur-32s'}>
-        {Boolean(isSwapMode) ? (
-        <div style={{ padding: isMobile ? '12px' : '6px 8px 6px' }}>
-
-
-          {/* ── SELL ─────────────────────────────────────────────── */}
-          <div className="rp-anim-1">
-            <div style={C.box} onClick={() => inputRef.current?.focus()}>
-              {/* Top row: label + balance */}
-              <div style={{ ...C.row, marginBottom:6 }}>
-                <span style={{ fontFamily:T.D, fontSize:13, fontWeight:600, color:T.muted }}>
-                  Pay
-                     </span>
-                {isConnected && tokenIn && (
-                  <button
-                    onClick={e => { e.stopPropagation(); handleMax() }}
-                    style={{ fontFamily:T.M, fontSize:12, color:T.muted, background:'none', border:'none', cursor:'pointer', padding:0, transition:'color 0.15s' }}
-                    onMouseEnter={e => e.currentTarget.style.color=T.emerald}
-                    onMouseLeave={e => e.currentTarget.style.color=T.muted}
-                  >
-                    {fmtBal(tokenIn)} {sym}
-                  </button>
-                )}
-              </div>
-              {/* Bottom row: token pill LEFT — amount RIGHT */}
-              <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-                <div onClick={e => e.stopPropagation()}>
-                  <TokenPill token={tokenIn} busy={busy} onClick={() => setSelectingToken('in')} />
-                </div>
-                <div style={{ flex:1, textAlign:'right' as const }}>
-                  <input
-                    ref={inputRef} type="number" inputMode="decimal" placeholder="0.00" min="0" step="any"
-                    autoComplete="off" autoCorrect="off" spellCheck={false}
-                    value={amount} onChange={e => setAmount(e.target.value)}
-                    onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
-                    disabled={busy}
-                    style={{ fontFamily:T.D, fontSize:isMobile ? 16 : 24, fontWeight:400, letterSpacing:'-0.02em', width:'100%', background:'transparent', border:'none', outline:'none', color:busy?T.muted:T.text, textAlign:'right' as const }}
-                  />
-                  <div style={{ fontFamily:T.M, fontSize:12, color:T.muted, marginTop:2 }}>
-                    {amount && tokenIn ? `$${(parseFloat(amount) * (EUR_RATES[tokenIn.symbol] ?? 1)).toFixed(2)}` : '$0'}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* ── Swap arrow ───────────────────────────────────────── */}
-          <div className="rp-anim-2" style={{ display:'flex', justifyContent:'center', margin:'-4px 0', position:'relative', zIndex:2 }}>
-            <button
-              onClick={() => {
-                if (isSwapMode && tokenIn && tokenOut) {
-                  const tmp = tokenIn; setTokenIn(tokenOut); setTokenOut(tmp); setAmount('')
-                }
-              }}
-              className="bf-blur-16"
-              style={{
-                width:34, height:34, borderRadius:10,
-                background: 'rgba(10,10,10,0.08)',
-                border:'1.5px solid rgba(10,10,10,0.14)',
-                color: T.muted, fontSize:16,
-                cursor: isSwapMode ? 'pointer' : 'default',
-                display:'flex', alignItems:'center', justifyContent:'center',
-                transition:'background 0.2s ease, color 0.2s ease',
-                boxShadow:'0 2px 8px rgba(0,0,0,0.2), inset 0 1px 0 rgba(10,10,10,0.10)',
-              }}
-              onMouseEnter={e => { if (isSwapMode) { e.currentTarget.style.background='rgba(10,10,10,0.14)'; e.currentTarget.style.color=T.text } }}
-              onMouseLeave={e => { e.currentTarget.style.background='rgba(10,10,10,0.08)'; e.currentTarget.style.color=T.muted }}
-            >
-              ⇅
-            </button>
-          </div>
-
-          {/* ── BUY / RECEIVE ────────────────────────────────────── */}
-          <div className="rp-anim-2">
-            <div style={C.box2}>
-              {/* Top row: label + balance */}
-              <div style={{ ...C.row, marginBottom:6 }}>
-                <span style={{ fontFamily:T.D, fontSize:13, fontWeight:600, color:T.muted }}>
-                  {t('receive')}
-                </span>
-                {isConnected && !crossChainOut && (isSwapMode ? tokenOut : tokenIn) && (
-                  <span style={{ fontFamily:T.M, fontSize:12, color:T.muted }}>
-                    {fmtBal(isSwapMode ? tokenOut! : tokenIn!)} {symOut}
-                  </span>
-                )}
-                {crossChainOut && (
-                  <span style={{ fontFamily:T.M, fontSize:11, color: CHAIN_COLORS[crossChainOut.chainId] ?? T.muted }}>
-                    on {CHAIN_NAMES[crossChainOut.chainId] ?? `Chain ${crossChainOut.chainId}`}
-                  </span>
-                )}
-              </div>
-              {/* Bottom row: token pill LEFT — amount RIGHT */}
-              <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-                <div onClick={e => e.stopPropagation()} style={{ position: 'relative' }}>
-                  <TokenPill
-                    token={isSwapMode ? tokenOut : tokenIn}
-                    busy={busy}
-                    accentColor={crossChainOut ? (CHAIN_COLORS[crossChainOut.chainId] ?? '#3B82F6') : (isSwapMode ? T.purple : undefined)}
-                    onClick={() => setSelectingToken('out')}
-                  />
-                  {crossChainOut && (
-                    <div style={{
-                      position: 'absolute', bottom: -3, left: 22,
-                      width: 18, height: 18, borderRadius: '50%',
-                      border: '2px solid #0c0c1e',
-                      overflow: 'hidden', background: '#0c0c1e',
-                    }}>
-                      <ChainLogo chainId={crossChainOut.chainId} size={18} />
-                    </div>
-                  )}
-                </div>
-                <div style={{ flex:1, textAlign:'right' as const }}>
-                  <span style={{ fontFamily:T.D, fontSize:24, fontWeight:400, letterSpacing:'-0.02em', color:T.text, display:'block' }}>
-                    {isSwapMode
-                      ? (swapQuote?.status === 'success' ? swapQuote.netAmountFmt
-                         : swapQuote?.status === 'loading' ? '…' : '0')
-                      : (directQuote ? directQuote.netFmt : '0')
-                    }
-                  </span>
-                  <div style={{ fontFamily:T.M, fontSize:12, color:T.muted, marginTop:2 }}>
-                    {isSwapMode
-                      ? (swapQuote?.status === 'success' ? `$${(parseFloat(swapQuote.netAmountFmt) * (EUR_RATES[symOut] ?? 1)).toFixed(2)}` : '$0')
-                      : (directQuote ? `$${(parseFloat(directQuote.netFmt) * (EUR_RATES[sym] ?? 1)).toFixed(2)}` : '$0')
-                    }
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Quote panel — solo in swap mode */}
-          {isSwapMode && swapQuote && (
-            <div style={{ marginTop:6 }}>
-              <QuotePanel quote={swapQuote} tokenOut={tokenOut} isSwap={isSwapMode} />
-            </div>
-          )}
-
-          {/* Route info banner */}
-          {routeType !== 'direct' && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              padding: '8px 12px', borderRadius: 10,
-              background: 'rgba(10,10,10,0.03)',
-              border: `1px solid ${routeLabels[routeType].color}20`,
-              marginTop: 6,
-            }}>
-              <span style={{ fontSize: 14 }}>{routeLabels[routeType].icon}</span>
-              <span style={{ fontFamily: T.M, fontSize: 10, color: routeLabels[routeType].color }}>
-                {routeLabels[routeType].label}
-              </span>
-              {isCrossChain && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                  <ChainLogo chainId={chainId} size={18} />
-                  <span style={{ fontFamily: T.M, fontSize: 10, color: T.muted }}>&rarr;</span>
-                  <ChainLogo chainId={destChainId} size={18} />
-                  <span style={{ fontFamily: T.M, fontSize: 10, color: T.muted }}>~2-5 min</span>
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* ── RECIPIENT ────────────────────────────────────────── */}
-          <div className="rp-anim-3" style={{ marginTop:6 }}>
-            <div style={{ padding:'10px 14px 6px', borderRadius:14, background:'rgba(10,10,10,0.025)', border:`1px solid ${T.border}` }}>
-              <div style={{ ...C.row, marginBottom:6 }}>
-                <span style={{ fontFamily:T.D, fontSize:11, fontWeight:700, textTransform:'uppercase' as const, letterSpacing:'0.08em', color:T.muted }}>
-                  {t('to')}
-                </span>
-              </div>
-              {clipboardAddress && clipboardAddress.toLowerCase() !== recipient.toLowerCase() && (
-                <div style={{
-                  padding: '8px 12px', borderRadius: 10, marginBottom: 8,
-                  background: `${T.purple}10`,
-                  border: `1px solid ${T.purple}30`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                }}>
-                  <span style={{ fontFamily: T.M, fontSize: 11, color: T.purple }}>
-                    📋 {clipboardAddress.slice(0, 8)}...{clipboardAddress.slice(-6)}
-                  </span>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button
-                      onClick={() => { setRecipient(clipboardAddress); validateAddr(clipboardAddress); setOracleData(null); setOracleDenied(false); dismissClipboard() }}
-                      style={{
-                        padding: '4px 10px', borderRadius: 6, border: 'none',
-                        background: `${T.purple}20`, color: T.purple,
-                        fontFamily: T.D, fontSize: 10, fontWeight: 700, cursor: 'pointer',
-                      }}
-                    >{t('useAddress')}</button>
-                    <button
-                      onClick={dismissClipboard}
-                      style={{
-                        padding: '4px 8px', borderRadius: 6, border: 'none',
-                        background: 'rgba(10,10,10,0.08)', color: T.muted,
-                        fontFamily: T.M, fontSize: 11, cursor: 'pointer',
-                      }}
-                    >✕</button>
-                  </div>
-                </div>
-              )}
-              <AddressIntelligence
-                value={recipient}
-                onChange={(addr: string) => { setRecipient(addr); validateAddr(addr); setOracleData(null); setOracleDenied(false) }}
-                onValidation={(valid: boolean, error: string) => { setAddrError(error) }}
-                chainId={chainId}
-                disabled={busy}
-                inputStyle={{ ...C.input }}
-              />
-              <AddressVerifier address={recipient} />
-            </div>
-          </div>
-
-          {/* Tab lock warning */}
-          {isLocked && (
-            <div style={{ marginTop:6, padding:'10px 12px', borderRadius:12, background:`${T.amber}0d`, border:`1px solid ${T.amber}30`, display:'flex', alignItems:'center', gap:8 }}>
-              <span style={{ fontSize:14 }}>🔒</span>
-              <span style={{ fontFamily:T.D, fontSize:11, fontWeight:700, color:T.amber }}>
-                {t('transactionInProgress')}
-              </span>
-            </div>
-          )}
-
-          {/* Oracle denial */}
-          {oracleDenied && oracleData && !busy && (
-            <div style={{ marginTop:6, padding:'10px 12px', borderRadius:12, background:`${T.red}0d`, border:`1px solid ${T.red}30` }}>
-              <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-                <span style={{ fontFamily:T.D, fontSize:11, fontWeight:700, color:T.red }}>
-                  🚫 {t('blockedAml')}
-                </span>
-              </div>
-              {oracleData.rejectionReason && (
-                <div style={{ fontFamily:T.M, fontSize:10, color:T.muted, marginTop:3 }}>
-                  {oracleData.rejectionReason}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Extras DAC8 — collapsed by default */}
-          {showExtras && (
-            <div style={{ marginTop:6, padding:'12px 14px', borderRadius:14, background:'rgba(10,10,10,0.025)', border:`1px solid ${T.border}`, animation:'rpFadeUp 0.2s var(--ease-spring) both' }}>
-              <div style={{ fontFamily:T.D, fontSize:10, fontWeight:700, textTransform:'uppercase' as const, letterSpacing:'0.08em', color:T.muted, marginBottom:8 }}>
-                MiCA/DAC8
-              </div>
-              <input type="text" placeholder={t('paymentRefPlaceholder')} autoComplete="off" autoCorrect="off" spellCheck={false} value={paymentRef} onChange={e => setPaymentRef(e.target.value)} disabled={busy} style={{ ...C.input, fontSize:16, marginBottom:6 }} />
-              <input type="text" placeholder={t('fiscalId')} autoComplete="off" autoCorrect="off" spellCheck={false} value={fiscalRef} onChange={e => setFiscalRef(e.target.value)} disabled={busy} style={{ ...C.input, fontSize:16 }} />
-              {oracleData?.dac8Reportable && (
-                <div style={{ fontFamily:T.D, fontSize:10, color:T.amber, marginTop:5 }}>⚠ {t('dac8Reportable')}</div>
-              )}
-            </div>
-          )}
-
-          {/* Progress */}
-          {phase === 'wait_send' && <div style={{ marginTop:6 }}><BallisticProgress active={true} /></div>}
-          {(busy || phase === 'error') && (
-            <div style={{ marginTop:6 }}>
-              {busy && <MicroStateBadge phase={phase} silent={false} />}
-              {phase === 'error' && (
-                <TransactionStatusUI phase="error" error={txError} isTestnet={chainId === baseSepolia.id} onReset={reset} />
-              )}
-            </div>
-          )}
-
-          {/* ── Direct Mode banner ──────────────────────────────── */}
-          {!feeRouterAvailable && isConnected && !isWrong && (
-            <div style={{
-              padding: '8px 12px', borderRadius: 10, marginBottom: 8,
-              background: 'rgba(255,183,71,0.06)',
-              border: '1px solid rgba(255,183,71,0.12)',
-            }}>
-              <div style={{ fontFamily: T.M, fontSize: 10, color: '#FFB547', lineHeight: 1.5 }}>
-                <strong>Direct mode</strong> — FeeRouter not deployed on {regChain?.chainName ?? 'this network'}.
-                Transaction will be sent directly without Oracle verification and 0.5% fee.
-              </div>
-            </div>
-          )}
-
-          {/* ── CTA BUTTON ───────────────────────────────────────── */}
-          <div className="rp-anim-4" style={{ marginTop:8 }}>
-            {ctaState === 'disconnected' ? (
-              <ConnectButton.Custom>
-                {({ openConnectModal }) => (
-                  <button
-                    onClick={openConnectModal}
-                    className="rp-btn-primary"
-                    style={{ width:'100%', padding:'18px', borderRadius:14, border:'none', fontFamily:T.D, fontSize:16, fontWeight:700, letterSpacing:'-0.01em', background:'rgba(10,10,10,0.08)', color:T.text, cursor:'pointer', transition:'all 0.15s' }}
-                  >
-                    {t('connectWallet')}
-                  </button>
-                )}
-              </ConnectButton.Custom>
-            ) : (
-              <button
-                onClick={
-                  ctaState === 'wrong_network' ? () => switchChain({ chainId: 8453 })
-                  : ctaState === 'ready' ? () => setShowConfirmation(true)
-                  : undefined
-                }
-                disabled={['busy','insufficient','no_recipient','no_amount','oracle_denied','no_liquidity'].includes(ctaState)}
-                className={ctaState === 'ready' ? 'rp-btn-primary' : ''}
-                style={{
-                  width:'100%', padding:'18px', borderRadius:14, border:'none',
-                  fontFamily:T.D, fontSize:16, fontWeight:700, letterSpacing:'-0.01em',
-                  cursor:['busy','insufficient','no_recipient','no_amount','oracle_denied','no_liquidity'].includes(ctaState)?'not-allowed':'pointer',
-                  background:
-                    ctaState==='ready' && isSwapMode  ? `linear-gradient(135deg, ${T.purple}, #c084fc)`
-                    : ctaState==='ready'              ? `linear-gradient(135deg, ${T.emerald}, #00cc80)`
-                    : ctaState==='wrong_network'      ? `linear-gradient(135deg, ${T.amber}, #ffcc00)`
-                    : ctaState==='oracle_denied'      ? `${T.red}15`
-                    : ctaState==='insufficient'       ? `${T.red}15`
-                    :                                   'rgba(10,10,10,0.04)',
-                  color:
-                    ctaState==='ready'                ? (isSwapMode ? '#fff' : '#000')
-                    : ctaState==='wrong_network'      ? '#000'
-                    : ctaState==='oracle_denied'      ? `${T.red}60`
-                    : ctaState==='insufficient'       ? `${T.red}60`
-                    :                                   'rgba(10,10,10,0.35)',
-                  boxShadow: ctaState==='ready' ? `0 4px 20px ${isSwapMode?T.purple:T.emerald}25` : 'none',
-                  transition:'all 0.2s ease',
-                }}
-              >
-                {busy ? (
-                  <span style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
-                    <span className="rp-spinner" style={{ width:14, height:14, border:`2px solid rgba(10,10,10,0.2)`, borderTopColor:'transparent', borderRadius:'50%', display:'inline-block' }} />
-                    <span>
-                      {phase==='preflight'               ? 'AML Check…'
-                       : phase==='approving'||phase==='wait_approve' ? t('approving')
-                       :                                   t('finalizing')}
-                    </span>
-                  </span>
-                ) : ctaState==='oracle_denied'  ? t('transactionBlockedCta')
-                  : ctaState==='no_liquidity'   ? t('insufficientLiquidityCta')
-                  : ctaState==='wrong_network'  ? (noContract ? t('networkUnavailable', { chain: regChain?.chainName ?? 'Network' }) : t('switchNetwork'))
-                  : ctaState==='insufficient'   ? t('ctaInsufficient', { symbol: displaySym })
-                  : ctaState==='no_recipient'   ? t('enterRecipient')
-                  : ctaState==='no_amount'      ? t('enterAmount')
-                  : needsApproval && !tokenIn?.isNative ? t('ctaApprove', { symbol: displaySym })
-                  : routeType === 'bridge'            ? t('ctaBridge', { from: sym, to: CHAIN_NAMES[destChainId] ?? 'Dest' })
-                  : routeType === 'swapAndBridge'     ? t('ctaSwapBridge', { from: sym, to: crossChainOut?.symbol ?? symOut, dest: CHAIN_NAMES[destChainId] ?? 'Dest' })
-                  : isSwapMode && feeRouterAvailable  ? t('ctaSwapSend', { from: sym, to: symOut })
-                  : isSwapMode                        ? t('ctaSwapDirect', { from: sym, to: symOut })
-                  : feeRouterAvailable                ? t('ctaSend', { symbol: displaySym })
-                  :                                     t('ctaSendDirect', { symbol: displaySym })}
-              </button>
-            )}
-          </div>
-        </div>
-        ) : (
         <div>
 
           {/* ── Card Pay ─────────────────────────────────────── */}
@@ -1921,17 +1521,82 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
             </div>
           </div>
 
-          {/* ── Divider decorativo ──────────────────────────── */}
+          {/* ── Divider (flip tokens) ───────────────────────── */}
           <div className="relative z-[2] flex justify-center -my-2.5">
-            <div
-              aria-hidden
-              className="w-9 h-9 rounded-[10px] bg-white border border-[rgba(200,81,44,0.35)] text-[#C8512C] flex items-center justify-center"
+            <button
+              type="button"
+              aria-label="Flip tokens"
+              onClick={() => {
+                if (!tokenIn || !tokenOut) return
+                const tmp = tokenIn
+                setTokenIn(tokenOut)
+                setTokenOut(tmp)
+                setAmount('')
+              }}
+              disabled={busy || !tokenIn || !tokenOut}
+              className="w-9 h-9 rounded-[10px] bg-white border border-[rgba(200,81,44,0.35)] text-[#C8512C] flex items-center justify-center hover:bg-[#FAFAF7] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path d="M7 2v10M7 12l-3-3M7 12l3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M4 2v10M4 12l-2-2M4 12l2-2M10 12V2M10 2l-2 2M10 2l2 2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
+            </button>
+          </div>
+
+          {/* ── Card Receive ─────────────────────────────────── */}
+          <div className="mt-2 rounded-2xl border border-[rgba(200,81,44,0.35)] bg-white px-5 py-4">
+            <div className="flex items-center justify-between mb-3.5">
+              <span className="text-[12px] font-medium text-[#C8512C] tracking-[0.3px]">Receive</span>
+              <span className="text-[11px] text-[#888780] font-mono">
+                {isSwapMode ? 'Recipient receives' : 'Direct send'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setSelectingToken('out')}
+                disabled={busy}
+                className="flex items-center gap-2 pl-1.5 pr-2.5 py-1.5 rounded-full border border-[rgba(200,81,44,0.2)] bg-[#FAFAF7] text-[#2C2C2A] shrink-0 hover:bg-[#F5F2ED] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <img
+                  src={tokenOut?.logoURI ?? '/tokens/eth.svg'}
+                  alt={tokenOut?.symbol ?? 'ETH'}
+                  width={22}
+                  height={22}
+                  className="w-[22px] h-[22px] rounded-full"
+                />
+                <span className="text-sm font-medium">{tokenOut?.symbol ?? tokenIn?.symbol ?? 'ETH'}</span>
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="opacity-50">
+                  <path d="M2.5 4L5 6.5L7.5 4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+              <span className="flex-1 min-w-0 text-right text-[#2C2C2A] text-[32px] font-medium tabular-nums tracking-[-0.02em]">
+                {isSwapMode
+                  ? (swapQuote?.status === 'success' ? swapQuote.netAmountFmt
+                     : swapQuote?.status === 'loading' ? '…' : '0')
+                  : (directQuote ? directQuote.netFmt : '0')}
+              </span>
+            </div>
+            <div className="flex items-center justify-end mt-2.5">
+              <span className="text-[12px] text-[#888780] font-mono">
+                {isSwapMode
+                  ? (swapQuote?.status === 'success' ? `≈ $${(parseFloat(swapQuote.netAmountFmt) * (EUR_RATES[symOut] ?? 1)).toFixed(2)}` : '≈ $0')
+                  : (directQuote ? `≈ $${(parseFloat(directQuote.netFmt) * (EUR_RATES[sym] ?? 1)).toFixed(2)}` : '≈ $0')}
+              </span>
             </div>
           </div>
+
+          {/* ── Rate strip (solo swap mode) ─────────────────── */}
+          {isSwapMode && swapQuote?.status === 'success' && parseFloat(amount) > 0 && (
+            <div className="mt-2 px-4 py-2.5 rounded-xl border border-[rgba(200,81,44,0.2)] bg-[rgba(200,81,44,0.04)] flex items-center gap-3 text-[11px]">
+              <span className="text-[#888780]">
+                1 {sym} = <span className="text-[#2C2C2A] font-mono">{(parseFloat(swapQuote.amountOutFmt) / parseFloat(amount)).toFixed(4)}</span> {symOut}
+              </span>
+              <span className="text-[#888780]/50">·</span>
+              <span className="text-[#888780]">Fee <span className="text-[#2C2C2A]">0.5%</span></span>
+              <span className="text-[#888780]/50">·</span>
+              <span className="text-[#888780]">Slippage <span className="text-[#2C2C2A]">0.5%</span></span>
+            </div>
+          )}
 
           {/* ── Card Send to ────────────────────────────────── */}
           <div className="rounded-2xl border border-[rgba(200,81,44,0.35)] bg-white px-5 py-4">
@@ -2122,7 +1787,6 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
           </div>
 
         </div>
-        )}
       </div>
 
       {/* Token Selector Modal */}
