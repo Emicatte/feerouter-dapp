@@ -4,7 +4,8 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import { useChainId, useSwitchChain, useAccount } from 'wagmi'
+import { useChainId, useSwitchChain, useAccount, useGasPrice } from 'wagmi'
+import { formatUnits } from 'viem'
 import {
   getRegistry, getSupportedChains,
 } from '../lib/contractRegistry'
@@ -27,6 +28,8 @@ export default function NetworkSelector({ onNetworkChange, compact = false }: Ne
   const { isConnected }                     = useAccount()
   const walletChainId                       = useChainId()
   const { switchChain, isPending, error }   = useSwitchChain()
+  const { data: gasPrice }                  = useGasPrice()
+  const gwei                                = gasPrice ? Number(formatUnits(gasPrice, 9)) : null
   const [open, setOpen]                     = useState(false)
   const [pendingId, setPendingId]           = useState<number | null>(null)
   const [menuPos, setMenuPos]               = useState<{ top: number; right: number }>({ top: 0, right: 0 })
@@ -155,6 +158,11 @@ export default function NetworkSelector({ onNetworkChange, compact = false }: Ne
             }}>
               {currentNet?.shortName ?? `Chain ${walletChainId}`}
             </span>
+            {gwei !== null && (
+              <span className="text-black/50 text-[11px] font-mono font-normal">
+                {gwei.toFixed(3)}
+              </span>
+            )}
             <span style={{
               color: 'rgba(10,10,10,0.55)', fontSize: 9,
               transform: open ? 'rotate(180deg)' : 'none',

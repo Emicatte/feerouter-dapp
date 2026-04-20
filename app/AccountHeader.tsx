@@ -1,7 +1,7 @@
 'use client'
 
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, useTransition } from 'react'
 import { createPortal } from 'react-dom'
 import { useAccount, useBalance, useDisconnect, useChainId } from 'wagmi'
 import { ConnectButton } from '@rainbow-me/rainbowkit'
@@ -9,8 +9,19 @@ import { formatUnits } from 'viem'
 import { getRegistry } from '../lib/contractRegistry'
 import dynamic from 'next/dynamic'
 import { useIsMobile } from '../hooks/useIsMobile'
+import { useLocale } from 'next-intl'
+import { useRouter, usePathname } from '@/i18n/navigation'
+import type { Locale } from '@/i18n/routing'
 
 const PortfolioDashboard = dynamic(() => import('./PortfolioDashboard'), { ssr: false })
+
+const LOCALES: { code: Locale; flag: string }[] = [
+  { code: 'en', flag: 'EN' },
+  { code: 'it', flag: 'IT' },
+  { code: 'es', flag: 'ES' },
+  { code: 'fr', flag: 'FR' },
+  { code: 'de', flag: 'DE' },
+]
 
 // ── Identicon ──────────────────────────────────────────────────────────────
 function addressToColors(address: string): [string, string, string] {
@@ -70,6 +81,12 @@ export default function AccountHeader({ nonEvmWallet }: { nonEvmWallet?: NonEvmW
   const address = isNonEvm ? nonEvmWallet!.address : evmAddress
   const isConnected = isNonEvm ? true : evmConnected
   const disconnect = isNonEvm ? nonEvmWallet!.disconnect : evmDisconnect
+
+  // Locale switcher (moved here from top-right of /[locale]/app)
+  const locale = useLocale()
+  const router = useRouter()
+  const pathname = usePathname()
+  const [, startLocaleTransition] = useTransition()
 
   const [open, setOpen]                 = useState(false)
   const [portfolioOpen, setPortfolioOpen] = useState(false)
@@ -262,6 +279,45 @@ export default function AccountHeader({ nonEvmWallet }: { nonEvmWallet?: NonEvmW
               >
                 ⇅ Swap Token
               </button>
+
+              {/* Language selector — 5 locale flags (inline, no nested dropdown) */}
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10,
+                padding: '8px 10px', borderRadius: 12,
+                background: 'rgba(10,10,10,0.03)', border: '1px solid rgba(10,10,10,0.06)',
+              }}>
+                <span style={{
+                  fontFamily: 'var(--font-display)', fontSize: 10, fontWeight: 700,
+                  color: 'rgba(10,10,10,0.55)', textTransform: 'uppercase' as const, letterSpacing: '0.08em',
+                }}>Language</span>
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 2 }}>
+                  {LOCALES.map((l) => {
+                    const isActive = l.code === locale
+                    return (
+                      <button
+                        key={l.code}
+                        onClick={() => {
+                          const search = typeof window !== 'undefined' ? window.location.search : ''
+                          const hash = typeof window !== 'undefined' ? window.location.hash : ''
+                          startLocaleTransition(() => {
+                            router.replace(pathname + search + hash, { locale: l.code })
+                            setOpen(false)
+                          })
+                        }}
+                        style={{
+                          padding: '4px 7px', borderRadius: 6, border: 'none',
+                          fontFamily: 'var(--font-mono)', fontSize: 10, fontWeight: 700,
+                          background: isActive ? '#0A0A0A' : 'transparent',
+                          color: isActive ? '#fff' : 'rgba(10,10,10,0.5)',
+                          cursor: 'pointer', transition: 'all 0.15s',
+                        }}
+                        onMouseEnter={e => { if (!isActive) e.currentTarget.style.color = '#0A0A0A' }}
+                        onMouseLeave={e => { if (!isActive) e.currentTarget.style.color = 'rgba(10,10,10,0.5)' }}
+                      >{l.flag}</button>
+                    )
+                  })}
+                </div>
+              </div>
 
               {/* Action row */}
               <div style={{ display: 'flex', gap: 8 }}>

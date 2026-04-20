@@ -96,7 +96,7 @@ class Settings(BaseSettings):
     platform_treasury_address: str = ""       # RSends treasury wallet
     platform_fee_enabled: bool = True
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 _HEX_KEY_RE = re.compile(r"^0x[0-9a-fA-F]{64}$")

@@ -73,6 +73,7 @@
     "loadingFlow": "Loading Flow…"
   },
   "swap": {
+    "flip": "Flip tokens",
     "pay": "Pay",
     "receive": "Receive",
     "max": "Max",

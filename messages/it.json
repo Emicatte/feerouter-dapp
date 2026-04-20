@@ -73,6 +73,7 @@
     "loadingFlow": "Caricamento Flow…"
   },
   "swap": {
+    "flip": "Inverti token",
     "pay": "Paga",
     "receive": "Ricevi",
     "max": "Max",

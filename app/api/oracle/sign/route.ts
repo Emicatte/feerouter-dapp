@@ -9,6 +9,8 @@ import { randomBytes }         from 'crypto'
 // ── Config ─────────────────────────────────────────────────────────────────
 const ORACLE_PRIVATE_KEY = process.env.ORACLE_PRIVATE_KEY as Hex | undefined
 const BACKEND_URL = process.env.RPAGOS_BACKEND_URL || 'http://localhost:8000'
+// TEMP DEBUG — remove after verifying BACKEND_URL points to local in dev
+console.log('[oracle/sign] BACKEND_URL =', BACKEND_URL)
 
 // ── Signing Guard — pre-flight check via backend ───────────────────────────
 async function signingGuardCheck(params: {

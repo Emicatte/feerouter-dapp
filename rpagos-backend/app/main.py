@@ -12,6 +12,16 @@
 ═══════════════════════════════════════════════════════════════
 """
 
+# ═══════════════════════════════════════════════════════════════
+# Load .env ONLY in local dev. On Render/production, env vars are
+# injected by the platform — load_dotenv() would be a no-op anyway
+# but we skip it explicitly to avoid surprises.
+# ═══════════════════════════════════════════════════════════════
+import os
+if not os.getenv("RENDER"):
+    from dotenv import load_dotenv
+    load_dotenv()
+
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
