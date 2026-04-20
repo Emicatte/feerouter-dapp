@@ -1,15 +1,15 @@
 /**
  * components/shared/ChainFamilySwitch.tsx — Segmented pill per switchare
- * tra EVM / Solana / Tron. Mostra dot verde se il wallet è connesso.
+ * tra EVM / Solana / Tron.
  */
 'use client'
 
 import type { ChainFamily } from '../../lib/chain-adapters/types'
 
-const FAMILIES: { key: ChainFamily; label: string; icon: string; color: string }[] = [
-  { key: 'evm',    label: 'EVM',    icon: '\u27E0',  color: '#627EEA' },  // Ethereum diamond ⟠
-  { key: 'solana', label: 'Solana', icon: '\u25CE',  color: '#9945FF' },  // ◎
-  { key: 'tron',   label: 'Tron',   icon: '\u25C6',  color: '#FF0013' },  // ◆
+const FAMILIES: { key: ChainFamily; label: string; dot: string }[] = [
+  { key: 'evm',    label: 'EVM', dot: '#378ADD' },
+  { key: 'solana', label: 'SOL', dot: '#7F77DD' },
+  { key: 'tron',   label: 'TRX', dot: '#E24B4A' },
 ]
 
 export function ChainFamilySwitch({
@@ -22,11 +22,7 @@ export function ChainFamilySwitch({
   connections: Record<ChainFamily, { isConnected: boolean }>
 }) {
   return (
-    <div style={{
-      display: 'flex', gap: 2, padding: 2,
-      background: 'rgba(10,10,10,0.04)', borderRadius: 10,
-      border: '1px solid rgba(10,10,10,0.08)',
-    }}>
+    <div className="flex items-center gap-1">
       {FAMILIES.map(f => {
         const isActive = active === f.key
         const isConn = connections[f.key]?.isConnected
@@ -34,25 +30,18 @@ export function ChainFamilySwitch({
           <button
             key={f.key}
             onClick={() => onSelect(f.key)}
-            style={{
-              padding: '5px 10px', borderRadius: 8, border: 'none',
-              background: isActive ? `${f.color}15` : 'transparent',
-              color: isActive ? f.color : isConn ? 'rgba(10,10,10,0.55)' : 'rgba(10,10,10,0.4)',
-              fontFamily: 'var(--font-display)', fontSize: 10, fontWeight: 600,
-              cursor: 'pointer', transition: 'all 0.15s',
-              display: 'flex', alignItems: 'center', gap: 4,
-              opacity: isConn || isActive ? 1 : 0.5,
-            }}
+            aria-current={isActive ? 'true' : undefined}
+            className={[
+              'flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md transition-colors font-display',
+              'focus:outline-none focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:ring-offset-0',
+              isActive
+                ? 'bg-neutral-100 text-black font-medium'
+                : 'text-black/55 hover:text-black hover:bg-black/[0.03]',
+              !isActive && !isConn ? 'opacity-70' : '',
+            ].join(' ')}
           >
-            <span style={{ fontSize: 12 }}>{f.icon}</span>
+            <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ backgroundColor: f.dot }} />
             {f.label}
-            {isConn && (
-              <span style={{
-                width: 5, height: 5, borderRadius: '50%',
-                background: '#00D68F', boxShadow: '0 0 4px #00D68F50',
-                display: 'inline-block',
-              }} />
-            )}
           </button>
         )
       })}

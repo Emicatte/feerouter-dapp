@@ -5,13 +5,17 @@ import { Link } from '@/i18n/navigation'
 import { useTranslations } from 'next-intl'
 import { useAccount, useChainId } from 'wagmi'
 import dynamic from 'next/dynamic'
-import { motion } from 'framer-motion'
 import { C } from '@/app/designTokens'
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary'
-import LanguageSwitcher from '@/components/LanguageSwitcher'
 
 import TransferForm from '@/app/TransferForm'
 import SwapModule from '@/app/SwapModule'
+import { ChainFamilySwitch } from '@/components/shared/ChainFamilySwitch'
+import NetworkSelector from '@/app/NetworkSelector'
+import AccountHeader, { type NonEvmWalletProps } from '@/app/AccountHeader'
+import { useUniversalWallet } from '@/hooks/useUniversalWallet'
+import { useWallet as useSolanaWallet } from '@solana/wallet-adapter-react'
+import { useTron } from '@/app/providers-tron'
 
 // CommandCenter lazy — usa Recharts e WebSocket pesanti
 const CommandCenter = dynamic(() => import('@/app/command-center'), {
@@ -49,10 +53,29 @@ const panelHidden: React.CSSProperties = {
 
 export default function AppPage() {
   const [tab, setTab] = useState<AppTab>('send')
-  const { address, isConnected } = useAccount()
+  const { address } = useAccount()
   const chainId = useChainId()
   const [isMobile, setIsMobile] = useState(false)
   const t = useTranslations('dapp')
+
+  // Universal wallet (EVM / Solana / Tron) — source of truth for activeFamily
+  const wallet = useUniversalWallet()
+  const activeFamily = wallet.activeFamily
+
+  const { disconnect: solanaDisconnect } = useSolanaWallet()
+  const tron = useTron()
+
+  // Build nonEvmWallet prop for AccountHeader when active family is Tron/Solana
+  const nonEvmWallet: NonEvmWalletProps | undefined = (() => {
+    if (activeFamily === 'evm') return undefined
+    const conn = activeFamily === 'tron' ? wallet.connections.tron : wallet.connections.solana
+    if (!conn?.address) return undefined
+    return {
+      family: activeFamily as 'tron' | 'solana',
+      address: conn.address,
+      disconnect: activeFamily === 'tron' ? tron.disconnect : solanaDisconnect,
+    }
+  })()
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768)
@@ -60,6 +83,12 @@ export default function AppPage() {
     window.addEventListener('resize', check)
     return () => window.removeEventListener('resize', check)
   }, [])
+
+  const tabItems: { key: AppTab; label: string }[] = [
+    { key: 'send',    label: t('tabs.send') },
+    { key: 'swap',    label: t('tabs.swap') },
+    { key: 'command', label: t('tabs.flow') },
+  ]
 
   return (
     <>
@@ -74,109 +103,61 @@ export default function AppPage() {
         }} />
       </div>
 
-      {/* Navbar /app */}
-      <nav style={{
-        position: 'fixed', top: 3, left: 0, right: 0, zIndex: 1000,
-        height: isMobile ? 52 : 60,
-        background: 'rgba(250,250,250,0.85)',
-        borderBottom: `1px solid ${C.border}`,
-        backdropFilter: 'blur(16px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(16px) saturate(180%)',
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: isMobile ? '0 12px' : '0 24px',
-      }}>
-        {/* Left: logo */}
-        <Link href="/" style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          textDecoration: 'none',
-        }}>
-          <img src="/favicon.svg" alt="RSends" width={28} height={28} style={{ borderRadius: 7 }} />
-          {!isMobile && (
-            <span style={{
-              fontFamily: C.D, fontSize: 16, fontWeight: 800,
-              color: C.text, letterSpacing: '-0.03em',
-            }}>
-              RSends
-            </span>
-          )}
-        </Link>
+      {/* Navbar /app — flat flex justify-between, logo+tabs left, cluster right */}
+      <nav
+        className="fixed left-0 right-0 z-[1000] flex items-center justify-between gap-4 bg-white/85 border-b border-black/[0.06] backdrop-blur-md px-3 md:px-6"
+        style={{
+          top: 3,
+          height: isMobile ? 52 : 60,
+          WebkitBackdropFilter: 'blur(16px) saturate(180%)',
+        }}
+      >
+        {/* Left: logo + tabs, flat */}
+        <div className="flex items-center gap-6">
+          <Link href="/" className="flex items-center gap-2 no-underline">
+            <img src="/favicon.svg" alt="RSends" width={28} height={28} className="rounded-[7px]" />
+            {!isMobile && (
+              <span className="font-display text-[16px] font-extrabold tracking-[-0.03em]" style={{ color: C.text }}>
+                RSends
+              </span>
+            )}
+          </Link>
 
-        {/* Center: tabs */}
-        <div style={{
-          display: 'flex', gap: 4, alignItems: 'center',
-          position: isMobile ? 'static' : 'absolute',
-          left: '50%',
-          transform: isMobile ? 'none' : 'translateX(-50%)',
-        }}>
-          {([
-            { key: 'send' as AppTab, label: t('tabs.send') },
-            { key: 'swap' as AppTab, label: t('tabs.swap') },
-            { key: 'command' as AppTab, label: t('tabs.flow') },
-          ]).map((item) => (
-            <button
-              key={item.key}
-              onClick={() => setTab(item.key)}
-              style={{
-                position: 'relative',
-                padding: isMobile ? '6px 10px' : '8px 16px',
-                borderRadius: 8,
-                border: 'none',
-                background: 'transparent',
-                color: tab === item.key ? C.text : C.sub,
-                fontFamily: C.D,
-                fontSize: isMobile ? 12 : 13,
-                fontWeight: 500,
-                cursor: 'pointer',
-                transition: 'color 0.2s',
-              }}
-            >
-              {item.label}
-              {tab === item.key && (
-                <motion.div
-                  layoutId="app-tab-indicator"
-                  style={{
-                    position: 'absolute',
-                    bottom: -1,
-                    left: 8, right: 8,
-                    height: 2,
-                    background: C.purple,
-                    borderRadius: 1,
-                  }}
-                  transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                />
-              )}
-            </button>
-          ))}
+          <div className="flex items-center gap-1" role="tablist" aria-label="App sections">
+            {tabItems.map(({ key, label }) => {
+              const active = tab === key
+              return (
+                <button
+                  key={key}
+                  onClick={() => setTab(key)}
+                  role="tab"
+                  aria-selected={active}
+                  aria-current={active ? 'page' : undefined}
+                  className={[
+                    'rounded-md transition-colors font-display',
+                    'focus:outline-none focus-visible:ring-2 focus-visible:ring-black/20 focus-visible:ring-offset-0',
+                    isMobile ? 'px-3 py-1.5 text-[12px]' : 'px-3 py-1.5 text-sm',
+                    active
+                      ? 'bg-neutral-100 text-black font-medium'
+                      : 'text-black/60 hover:text-black hover:bg-black/[0.03]',
+                  ].join(' ')}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
-        {/* Right: language switcher + wallet status */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <LanguageSwitcher />
-          {isConnected && address ? (
-            <div style={{
-              padding: '6px 12px',
-              background: C.surface,
-              border: `1px solid ${C.border}`,
-              borderRadius: 20,
-              fontFamily: C.M,
-              fontSize: 11,
-              color: C.text,
-            }}>
-              {address.slice(0, 6)}…{address.slice(-4)}
-            </div>
-          ) : (
-            <div style={{
-              padding: '6px 12px',
-              background: C.text,
-              color: C.bg,
-              borderRadius: 3,
-              fontFamily: C.D,
-              fontSize: 12,
-              fontWeight: 500,
-            }}>
-              {t('connectWallet')}
-            </div>
-          )}
+        {/* Right: cluster EVM/SOL/TRX | Network | Wallet */}
+        <div className="flex items-center gap-2">
+          <ChainFamilySwitch
+            active={activeFamily}
+            onSelect={(family) => wallet.setActiveFamily(family)}
+            connections={wallet.connections}
+          />
+          <NetworkSelector />
+          <AccountHeader nonEvmWallet={nonEvmWallet} />
         </div>
       </nav>
 
