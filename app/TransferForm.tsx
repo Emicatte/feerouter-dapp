@@ -1837,17 +1837,17 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
           </div>
         </div>
         ) : (
-        <div className="rounded-[20px] bg-[#0B0B0C] p-6 md:p-8">
+        <div>
 
           {/* ── Card Pay ─────────────────────────────────────── */}
-          <div className="rounded-2xl border border-[rgba(200,81,44,0.14)] bg-[#161617] px-5 py-4">
+          <div className="rounded-2xl border border-[rgba(200,81,44,0.35)] bg-white px-5 py-4">
             <div className="flex items-center justify-between mb-3.5">
               <span className="text-[12px] font-medium text-[#C8512C] tracking-[0.3px]">Pay</span>
               {isConnected && tokenIn && (
                 <button
                   type="button"
                   onClick={e => { e.stopPropagation(); handleMax() }}
-                  className="text-[11px] text-white/45 font-mono hover:text-white/70 transition-colors bg-transparent border-none cursor-pointer p-0"
+                  className="text-[11px] text-[#888780] font-mono hover:text-[#2C2C2A] transition-colors bg-transparent border-none cursor-pointer p-0"
                 >
                   Balance {fmtBal(tokenIn)} {sym}
                 </button>
@@ -1859,7 +1859,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
                 type="button"
                 onClick={() => setSelectingToken('in')}
                 disabled={busy}
-                className="flex items-center gap-2 pl-1.5 pr-2.5 py-1.5 rounded-full border border-[#2A2A2D] bg-[#1F1F21] text-white shrink-0 hover:bg-[#25252A] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex items-center gap-2 pl-1.5 pr-2.5 py-1.5 rounded-full border border-[rgba(200,81,44,0.2)] bg-[#FAFAF7] text-[#2C2C2A] shrink-0 hover:bg-[#F5F2ED] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <img
                   src={tokenIn?.logoURI ?? '/tokens/eth.svg'}
@@ -1889,7 +1889,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
                 onFocus={() => setFocused(true)}
                 onBlur={() => setFocused(false)}
                 disabled={busy}
-                className="flex-1 min-w-0 bg-transparent outline-none border-none text-right text-white text-[32px] font-medium tabular-nums tracking-[-0.02em] placeholder:text-white/25"
+                className="flex-1 min-w-0 bg-transparent outline-none border-none text-right text-[#2C2C2A] text-[32px] font-medium tabular-nums tracking-[-0.02em] placeholder:text-[#888780]"
               />
             </div>
 
@@ -1904,8 +1904,8 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
                     className={[
                       'px-2.5 py-1 text-[10px] font-medium rounded-md transition-colors',
                       pct === 100
-                        ? 'bg-[rgba(200,81,44,0.15)] border border-[rgba(200,81,44,0.3)] text-[#E0723E] hover:bg-[rgba(200,81,44,0.25)]'
-                        : 'bg-[rgba(200,81,44,0.1)] border border-[rgba(200,81,44,0.2)] text-[#E0723E] hover:bg-[rgba(200,81,44,0.18)]',
+                        ? 'bg-[rgba(200,81,44,0.12)] border border-[rgba(200,81,44,0.3)] text-[#C8512C] hover:bg-[rgba(200,81,44,0.18)]'
+                        : 'bg-[rgba(200,81,44,0.08)] border border-[rgba(200,81,44,0.2)] text-[#C8512C] hover:bg-[rgba(200,81,44,0.14)]',
                       'disabled:opacity-40 disabled:cursor-not-allowed',
                     ].join(' ')}
                   >
@@ -1913,7 +1913,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
                   </button>
                 ))}
               </div>
-              <span className="text-[12px] text-white/50 font-mono">
+              <span className="text-[12px] text-[#888780] font-mono">
                 {amount && tokenIn
                   ? `$${(parseFloat(amount) * (EUR_RATES[tokenIn.symbol] ?? 1)).toFixed(2)}`
                   : '$0.00'}
@@ -1925,7 +1925,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
           <div className="relative z-[2] flex justify-center -my-2.5">
             <div
               aria-hidden
-              className="w-9 h-9 rounded-[10px] bg-[#161617] border-2 border-[#0B0B0C] text-[#C8512C] flex items-center justify-center"
+              className="w-9 h-9 rounded-[10px] bg-white border border-[rgba(200,81,44,0.35)] text-[#C8512C] flex items-center justify-center"
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M7 2v10M7 12l-3-3M7 12l3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -1934,13 +1934,13 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
           </div>
 
           {/* ── Card Send to ────────────────────────────────── */}
-          <div className="rounded-2xl border border-[#252527] bg-[#161617] px-5 py-4">
+          <div className="rounded-2xl border border-[rgba(200,81,44,0.35)] bg-white px-5 py-4">
             <div className="flex items-center justify-between mb-3">
               <span className="text-[12px] font-medium text-[#C8512C] tracking-[0.3px]">Send to</span>
               <button
                 type="button"
                 onClick={() => setToast({ msg: 'Contacts coming soon' })}
-                className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-medium text-white/60 bg-transparent border border-[#2A2A2D] rounded-md hover:text-white hover:bg-[#1F1F21] transition-colors cursor-pointer"
+                className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-medium text-[#C8512C] bg-transparent border border-[rgba(200,81,44,0.2)] rounded-md hover:bg-[rgba(200,81,44,0.06)] transition-colors cursor-pointer"
               >
                 <svg width="10" height="10" viewBox="0 0 12 12" fill="none"><path d="M2 3h8M2 6h8M2 9h5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
                 Contacts
@@ -1948,22 +1948,22 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
             </div>
 
             {clipboardAddress && clipboardAddress.toLowerCase() !== recipient.toLowerCase() && (
-              <div className="flex items-center justify-between gap-2 mb-3 px-3 py-2 rounded-lg bg-[#1F1F21]/60 border border-[#2A2A2D]">
-                <span className="text-[11px] text-white/65 font-mono">
+              <div className="flex items-center justify-between gap-2 mb-3 px-3 py-2 rounded-lg bg-[rgba(127,119,221,0.06)] border border-[rgba(127,119,221,0.2)]">
+                <span className="text-[11px] text-[#2C2C2A] font-mono">
                   📋 {clipboardAddress.slice(0, 8)}…{clipboardAddress.slice(-6)}
                 </span>
                 <div className="flex gap-1.5">
                   <button
                     type="button"
                     onClick={() => { setRecipient(clipboardAddress); validateAddr(clipboardAddress); setOracleData(null); setOracleDenied(false); dismissClipboard() }}
-                    className="px-2 py-0.5 text-[10px] font-medium text-[#E0723E] bg-[rgba(200,81,44,0.15)] border border-[rgba(200,81,44,0.3)] rounded hover:bg-[rgba(200,81,44,0.22)] transition-colors cursor-pointer"
+                    className="px-2 py-0.5 text-[10px] font-medium text-[#C8512C] bg-[rgba(200,81,44,0.1)] border border-[rgba(200,81,44,0.3)] rounded hover:bg-[rgba(200,81,44,0.18)] transition-colors cursor-pointer"
                   >
                     {t('useAddress')}
                   </button>
                   <button
                     type="button"
                     onClick={dismissClipboard}
-                    className="px-2 py-0.5 text-[10px] text-white/55 bg-transparent border border-[#2A2A2D] rounded hover:text-white hover:bg-[#1F1F21] transition-colors cursor-pointer"
+                    className="px-2 py-0.5 text-[10px] text-[#7F77DD] bg-transparent border border-[rgba(127,119,221,0.2)] rounded hover:bg-[rgba(127,119,221,0.08)] transition-colors cursor-pointer"
                   >
                     ✕
                   </button>
@@ -1972,7 +1972,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
             )}
 
             <div className="flex items-center gap-3">
-              <div className="w-[34px] h-[34px] rounded-[9px] bg-[#1F1F21] flex items-center justify-center text-white/35 shrink-0">
+              <div className="w-[34px] h-[34px] rounded-[9px] bg-[rgba(200,81,44,0.06)] border border-[rgba(200,81,44,0.15)] flex items-center justify-center text-[#C8512C] shrink-0">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                   <circle cx="8" cy="6" r="2.5" stroke="currentColor" strokeWidth="1.3"/>
                   <path d="M3 13c0-2.5 2.2-4 5-4s5 1.5 5 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
@@ -1987,7 +1987,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
                 autoCorrect="off"
                 spellCheck={false}
                 disabled={busy}
-                className="flex-1 min-w-0 bg-transparent outline-none border-none text-white text-[15px] font-mono placeholder:text-white/30"
+                className="flex-1 min-w-0 bg-transparent outline-none border-none text-[#2C2C2A] text-[15px] font-mono placeholder:text-[#888780]"
               />
             </div>
 
@@ -2002,9 +2002,9 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
 
           {/* ── Warning banners ──────────────────────────────── */}
           {isLocked && (
-            <div className="mt-2 flex items-center gap-2 rounded-xl px-3 py-2.5 bg-[rgba(255,183,71,0.08)] border border-[rgba(255,183,71,0.2)]">
+            <div className="mt-2 flex items-center gap-2 rounded-xl px-3 py-2.5 bg-[rgba(217,119,6,0.06)] border border-[rgba(217,119,6,0.2)]">
               <span className="text-sm">🔒</span>
-              <span className="text-[11px] font-medium text-[#FFB547]">{t('transactionInProgress')}</span>
+              <span className="text-[11px] font-medium text-[#B45309]">{t('transactionInProgress')}</span>
             </div>
           )}
 
@@ -2014,14 +2014,14 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
                 <span className="text-[11px] font-medium text-red-400">🚫 {t('blockedAml')}</span>
               </div>
               {oracleData.rejectionReason && (
-                <div className="mt-1 text-[10px] text-white/55 font-mono">{oracleData.rejectionReason}</div>
+                <div className="mt-1 text-[10px] text-[#888780] font-mono">{oracleData.rejectionReason}</div>
               )}
             </div>
           )}
 
           {showExtras && (
-            <div className="mt-2 rounded-xl px-3.5 py-3 bg-[#1F1F21] border border-[#2A2A2D]">
-              <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.08em] text-white/55">MiCA/DAC8</div>
+            <div className="mt-2 rounded-xl px-3.5 py-3 bg-[#FAFAF7] border border-[rgba(200,81,44,0.2)]">
+              <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.08em] text-[#888780]">MiCA/DAC8</div>
               <input
                 type="text"
                 placeholder={t('paymentRefPlaceholder')}
@@ -2031,7 +2031,7 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
                 value={paymentRef}
                 onChange={e => setPaymentRef(e.target.value)}
                 disabled={busy}
-                className="w-full mb-1.5 px-3 py-2 text-sm text-white bg-[#161617] border border-[#2A2A2D] rounded-lg placeholder:text-white/30 outline-none focus:border-[#C8512C]/40 transition-colors"
+                className="w-full mb-1.5 px-3 py-2 text-sm text-[#2C2C2A] bg-white border border-[rgba(200,81,44,0.2)] rounded-lg placeholder:text-[#888780] outline-none focus:border-[#C8512C]/60 transition-colors"
               />
               <input
                 type="text"
@@ -2042,10 +2042,10 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
                 value={fiscalRef}
                 onChange={e => setFiscalRef(e.target.value)}
                 disabled={busy}
-                className="w-full px-3 py-2 text-sm text-white bg-[#161617] border border-[#2A2A2D] rounded-lg placeholder:text-white/30 outline-none focus:border-[#C8512C]/40 transition-colors"
+                className="w-full px-3 py-2 text-sm text-[#2C2C2A] bg-white border border-[rgba(200,81,44,0.2)] rounded-lg placeholder:text-[#888780] outline-none focus:border-[#C8512C]/60 transition-colors"
               />
               {oracleData?.dac8Reportable && (
-                <div className="mt-1.5 text-[10px] text-[#FFB547]">⚠ {t('dac8Reportable')}</div>
+                <div className="mt-1.5 text-[10px] text-[#B45309]">⚠ {t('dac8Reportable')}</div>
               )}
             </div>
           )}
@@ -2061,8 +2061,8 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
           )}
 
           {!feeRouterAvailable && isConnected && !isWrong && (
-            <div className="mt-2 rounded-xl px-3 py-2.5 bg-[rgba(255,183,71,0.06)] border border-[rgba(255,183,71,0.2)]">
-              <div className="text-[10px] leading-[1.5] text-[#FFB547]">
+            <div className="mt-2 rounded-xl px-3 py-2.5 bg-[rgba(217,119,6,0.06)] border border-[rgba(217,119,6,0.2)]">
+              <div className="text-[10px] leading-[1.5] text-[#B45309]">
                 <strong>Direct mode</strong> — FeeRouter not deployed on {regChain?.chainName ?? 'this network'}.
                 Transaction will be sent directly without Oracle verification and 0.5% fee.
               </div>
