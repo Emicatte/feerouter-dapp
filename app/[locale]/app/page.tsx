@@ -169,7 +169,7 @@ export default function AppPage() {
         background: C.bg,
       }}>
         <div style={{
-          maxWidth: tab === 'command' ? 960 : 520,
+          maxWidth: tab === 'command' ? 680 : 520,
           margin: '0 auto',
           padding: '0 20px',
           position: 'relative',
