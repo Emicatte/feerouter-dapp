@@ -26,6 +26,26 @@ const GroupsTab = dynamic(() => import('./GroupsTab'), { loading: () => <TabSkel
 const SettingsTab = dynamic(() => import('./SettingsTab'), { loading: () => <TabSkeleton /> })
 
 
+function FeatureCardsRow({ t }: { t: ReturnType<typeof useTranslations> }) {
+  const cards = [
+    { key: 'autoForward',  icon: <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7h10M10 7l-2-2M10 7l-2 2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg> },
+    { key: 'splitRouting', icon: <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 4l4 3-4 3M7 4l4 3-4 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg> },
+    { key: 'smartGas',     icon: <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2l-3 5h2l-1 5 4-6H7l1-4z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/></svg> },
+  ] as const
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+      {cards.map(c => (
+        <div key={c.key} className="bg-white border border-[rgba(200,81,44,0.2)] rounded-xl px-4 py-3.5">
+          <div className="w-7 h-7 bg-[rgba(200,81,44,0.08)] rounded-[7px] flex items-center justify-center text-[#C8512C] mb-2.5">{c.icon}</div>
+          <div className="text-[13px] font-medium text-[#2C2C2A] mb-[3px]">{t(`routes.${c.key}`)}</div>
+          <div className="text-[11px] text-[#888780] leading-[1.45]">{t(`routes.${c.key}Desc`)}</div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+
 export default function CommandCenter({
   ownerAddress,
   chainId: chainIdProp,
@@ -122,6 +142,20 @@ export default function CommandCenter({
 
   const activeRules = rules.filter(r => r.is_active && !r.is_paused).length
 
+  const familyDot =
+    wallet.activeFamily === 'evm'    ? '#378ADD' :
+    wallet.activeFamily === 'solana' ? '#7F77DD' :
+                                       '#E24B4A'
+
+  const chainLabel =
+    wallet.activeFamily === 'evm'    ? (CHAIN_NAMES[chainId] || 'EVM') :
+    wallet.activeFamily === 'solana' ? 'Solana' :
+                                       'TRON'
+
+  const volumeDisplay = stats ? fiat(stats.total_volume_eth, ethPrice) : '—'
+  const sweepsDisplay = stats ? String(stats.total_sweeps) : '—'
+  const routesDisplay = String(activeRules)
+
   // ── Not connected (any chain family) ──────────────────
   if (!isConnected && !wallet.activeAddress) {
     return (
@@ -137,173 +171,157 @@ export default function CommandCenter({
   }
 
   return (
-    <div style={{ padding: '8px 10px 10px' }}>
-      {/* ══════════ STATS SUMMARY BAR ══════════ */}
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: isMobile ? 8 : 16,
-        padding: '6px 12px', marginBottom: 8,
-        background: 'rgba(10,10,10,0.04)',
-        borderRadius: 10, border: `1px solid ${C.border}`,
-        ...(isMobile ? { flexWrap: 'wrap' } : {}),
-      }}>
-        {/* Chain family badge */}
-        <div style={{
-          padding: '3px 8px', borderRadius: 6,
-          ...(isMobile ? { flex: '1 1 100%', textAlign: 'center' as const } : {}),
-          background: wallet.activeFamily === 'evm' ? '#627EEA15' :
-                      wallet.activeFamily === 'solana' ? '#9945FF15' : '#FF001315',
-          fontFamily: C.D, fontSize: 10, fontWeight: 600,
-          color: wallet.activeFamily === 'evm' ? '#627EEA' :
-                 wallet.activeFamily === 'solana' ? '#9945FF' : '#FF0013',
-        }}>
-          {wallet.activeFamily === 'evm' ? `⟠ ${CHAIN_NAMES[chainId] || 'EVM'}` :
-           wallet.activeFamily === 'solana' ? '◎ Solana' : '◆ TRON'}
+    <div className="mx-auto w-full max-w-[960px] px-4 py-5">
+
+      {/* STATS STRIP */}
+      <div className="mb-4 rounded-2xl border border-[rgba(200,81,44,0.35)] bg-white px-5 py-3.5 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <span className="w-[7px] h-[7px] rounded-full inline-block" style={{ backgroundColor: familyDot }} />
+          <span className="text-[12px] font-medium text-[#2C2C2A]">{chainLabel}</span>
         </div>
 
-        {[
-          { label: t('stats.volume'), value: stats ? `${stats.total_volume_eth.toFixed(4)} ETH` : '--', extra: stats ? `(${fiat(stats.total_volume_eth, ethPrice)})` : '', color: C.purple },
-          { label: t('stats.sweeps'), value: stats ? String(stats.total_sweeps) : '--', extra: '', color: C.blue },
-          { label: t('stats.routes'), value: String(activeRules), extra: '', color: C.green },
-        ].map(s => (
-          <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <div style={{ width: 4, height: 4, borderRadius: '50%', background: s.color, boxShadow: `0 0 4px ${s.color}50` }} />
-            <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{s.label}</span>
-            <span style={{ fontFamily: C.D, fontSize: 12, fontWeight: 700, color: C.text }}>{s.value}</span>
-            {s.extra && <span style={{ fontFamily: C.M, fontSize: 9, color: C.dim }}>{s.extra}</span>}
+        <div className="flex items-center gap-5">
+          <div className="flex flex-col gap-[2px]">
+            <span className="text-[10px] uppercase tracking-[0.5px] font-medium text-[#888780]">{t('stats.volume')}</span>
+            <span className="text-[14px] text-[#2C2C2A] font-mono font-medium">{volumeDisplay}</span>
           </div>
-        ))}
+          <div className="w-px h-[28px] bg-[rgba(136,135,128,0.25)]" />
+          <div className="flex flex-col gap-[2px]">
+            <span className="text-[10px] uppercase tracking-[0.5px] font-medium text-[#888780]">{t('stats.sweeps')}</span>
+            <span className="text-[14px] text-[#2C2C2A] font-mono font-medium">{sweepsDisplay}</span>
+          </div>
+          <div className="w-px h-[28px] bg-[rgba(136,135,128,0.25)]" />
+          <div className="flex flex-col gap-[2px]">
+            <span className="text-[10px] uppercase tracking-[0.5px] font-medium text-[#C8512C]">{t('stats.routes')}</span>
+            <span className="text-[14px] text-[#2C2C2A] font-mono font-medium">{routesDisplay}</span>
+          </div>
+        </div>
       </div>
 
-      {/* ══════════ TAB BAR ══════════ */}
-      <div className={isMobile ? 'hide-scrollbar' : ''} style={{
-        display: 'flex', gap: 0,
-        borderBottom: `1px solid ${C.border}`,
-        marginBottom: 12,
-        ...(isMobile ? { overflowX: 'auto', WebkitOverflowScrolling: 'touch' } : {}),
-      }}>
-        {TABS.map(tabItem => (
-          <button
-            key={tabItem.key}
-            onClick={() => switchTab(tabItem.key)}
-            style={{
-              flex: isMobile ? 'none' : 1,
-              padding: '10px 0',
-              ...(isMobile ? { minWidth: 72, paddingLeft: 8, paddingRight: 8 } : {}),
-              background: 'transparent', border: 'none',
-              color: tab === tabItem.key ? C.text : C.dim,
-              fontFamily: C.D, fontSize: 11, fontWeight: tab === tabItem.key ? 700 : 500,
-              cursor: 'pointer', position: 'relative',
-              transition: 'color 0.15s',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-            }}
+      {/* SUB-TAB BAR */}
+      <div className={isMobile ? 'mb-5 overflow-x-auto hide-scrollbar' : 'mb-5 flex justify-center'}>
+        <div className="inline-flex gap-[2px] p-[3px] rounded-[10px] border border-[rgba(200,81,44,0.2)] bg-white">
+          {TABS.map(({ key, icon }) => {
+            const active = tab === key
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => switchTab(key)}
+                aria-current={active ? 'page' : undefined}
+                className={[
+                  'px-[14px] py-[6px] text-[12px] rounded-[7px] transition-colors font-display whitespace-nowrap',
+                  'focus:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(200,81,44,0.3)]',
+                  'flex items-center gap-1.5',
+                  active
+                    ? 'bg-[rgba(200,81,44,0.1)] text-[#C8512C] font-medium border border-[rgba(200,81,44,0.25)]'
+                    : 'bg-transparent text-[#888780] hover:text-[#2C2C2A] border border-transparent',
+                ].join(' ')}
+              >
+                {!isMobile && <span className="text-[11px] opacity-80">{icon}</span>}
+                <span>{t(`tabs.${key}`)}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* SUB-TAB CONTENT */}
+      <div className="mb-5">
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.div
+            key={tab}
+            variants={tabContent}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={smooth}
           >
-            <span style={{ fontSize: 12 }}>{tabItem.icon}</span>
-            {t('tabs.' + tabItem.key)}
-            {tab === tabItem.key && (
-              <motion.div
-                layoutId="ccTab"
-                style={{
-                  position: 'absolute', bottom: -1, left: '10%', right: '10%',
-                  height: 2, borderRadius: 1,
-                  background: `linear-gradient(90deg, ${C.red}, ${C.purple})`,
-                }}
-                transition={smooth}
-              />
+            {tabLoading ? <TabSkeleton /> : (
+              <>
+                {tab === 'routes' && (
+                  <RoutesTab
+                    address={address!}
+                    chainId={chainId}
+                    balance={balance}
+                    ethPrice={ethPrice}
+                    rules={rules}
+                    loading={rulesLoading}
+                    createRule={createRule}
+                    createRuleBatch={createRuleBatch}
+                    createSplitContract={createSplitContract}
+                    simulateSplit={simulateSplit}
+                    updateRule={updateRule}
+                    deleteRule={deleteRule}
+                    pauseRule={pauseRule}
+                    resumeRule={resumeRule}
+                    distLists={distLists}
+                    activeFamily={wallet.activeFamily}
+                    isMobile={isMobile}
+                  />
+                )}
+                {tab === 'splits' && (
+                  <SplitsTab
+                    contracts={splitContracts}
+                    loading={splitLoading}
+                    deactivateContract={deactivateSplitContract}
+                    listExecutions={listSplitExecutions}
+                    refresh={refreshSplitContracts}
+                    activeFamily={wallet.activeFamily}
+                  />
+                )}
+                {tab === 'monitor' && (
+                  <MonitorTab
+                    gas={gas}
+                    stats={stats}
+                    activeRules={activeRules}
+                    events={events}
+                    connected={connected}
+                    emergencyStop={emergencyStop}
+                    ethPrice={ethPrice}
+                    rules={rules}
+                    wsStats={wsStats}
+                    activeFamily={wallet.activeFamily}
+                  />
+                )}
+                {tab === 'history' && (
+                  <HistoryTab address={address!} ethPrice={ethPrice} stats={stats} rules={rules} activeFamily={wallet.activeFamily} walletAddress={wallet.activeAddress?.raw ?? null} />
+                )}
+                {tab === 'analytics' && (
+                  <AnalyticsTab stats={stats} daily={daily} loading={statsLoading} ethPrice={ethPrice} isVisible={isVisible} />
+                )}
+                {tab === 'groups' && (
+                  <GroupsTab
+                    lists={distLists}
+                    loading={distLoading}
+                    createList={createDistList}
+                    deleteList={deleteDistList}
+                    activeFamily={wallet.activeFamily}
+                  />
+                )}
+                {tab === 'settings' && (
+                  <SettingsTab
+                    address={address!}
+                    chainId={chainId}
+                    rules={rules}
+                    emergencyStop={emergencyStop}
+                    distLists={distLists}
+                    distLoading={distLoading}
+                    createDistList={createDistList}
+                    deleteDistList={deleteDistList}
+                    initialSection={settingsInitialSection as any}
+                    onInitialSectionConsumed={() => setSettingsInitialSection(null)}
+                  />
+                )}
+              </>
             )}
-          </button>
-        ))}
+          </motion.div>
+        </AnimatePresence>
       </div>
 
-      {/* ══════════ TAB CONTENT ══════════ */}
-      <AnimatePresence mode="popLayout" initial={false}>
-        <motion.div
-          key={tab}
-          variants={tabContent}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-          transition={smooth}
-        >
-          {tabLoading ? <TabSkeleton /> : (
-            <>
-              {tab === 'routes' && (
-                <RoutesTab
-                  address={address!}
-                  chainId={chainId}
-                  balance={balance}
-                  ethPrice={ethPrice}
-                  rules={rules}
-                  loading={rulesLoading}
-                  createRule={createRule}
-                  createRuleBatch={createRuleBatch}
-                  createSplitContract={createSplitContract}
-                  simulateSplit={simulateSplit}
-                  updateRule={updateRule}
-                  deleteRule={deleteRule}
-                  pauseRule={pauseRule}
-                  resumeRule={resumeRule}
-                  distLists={distLists}
-                  activeFamily={wallet.activeFamily}
-                  isMobile={isMobile}
-                />
-              )}
-              {tab === 'splits' && (
-                <SplitsTab
-                  contracts={splitContracts}
-                  loading={splitLoading}
-                  deactivateContract={deactivateSplitContract}
-                  listExecutions={listSplitExecutions}
-                  refresh={refreshSplitContracts}
-                  activeFamily={wallet.activeFamily}
-                />
-              )}
-              {tab === 'monitor' && (
-                <MonitorTab
-                  gas={gas}
-                  stats={stats}
-                  activeRules={activeRules}
-                  events={events}
-                  connected={connected}
-                  emergencyStop={emergencyStop}
-                  ethPrice={ethPrice}
-                  rules={rules}
-                  wsStats={wsStats}
-                  activeFamily={wallet.activeFamily}
-                />
-              )}
-              {tab === 'history' && (
-                <HistoryTab address={address!} ethPrice={ethPrice} stats={stats} rules={rules} activeFamily={wallet.activeFamily} walletAddress={wallet.activeAddress?.raw ?? null} />
-              )}
-              {tab === 'analytics' && (
-                <AnalyticsTab stats={stats} daily={daily} loading={statsLoading} ethPrice={ethPrice} isVisible={isVisible} />
-              )}
-              {tab === 'groups' && (
-                <GroupsTab
-                  lists={distLists}
-                  loading={distLoading}
-                  createList={createDistList}
-                  deleteList={deleteDistList}
-                  activeFamily={wallet.activeFamily}
-                />
-              )}
-              {tab === 'settings' && (
-                <SettingsTab
-                  address={address!}
-                  chainId={chainId}
-                  rules={rules}
-                  emergencyStop={emergencyStop}
-                  distLists={distLists}
-                  distLoading={distLoading}
-                  createDistList={createDistList}
-                  deleteDistList={deleteDistList}
-                  initialSection={settingsInitialSection as any}
-                  onInitialSectionConsumed={() => setSettingsInitialSection(null)}
-                />
-              )}
-            </>
-          )}
-        </motion.div>
-      </AnimatePresence>
+      {/* FEATURE CARDS ROW */}
+      <FeatureCardsRow t={t} />
+
     </div>
   )
 }
