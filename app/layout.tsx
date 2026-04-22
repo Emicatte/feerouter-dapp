@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from 'next'
 import { DM_Mono } from 'next/font/google'
 import './globals.css'
 import { Providers } from './providers'
+import { AuthSessionProvider } from '@/components/auth/AuthSessionProvider'
+import { AuthBootstrap } from '@/components/auth/AuthBootstrap'
 import dynamic from 'next/dynamic'
 
 const FooterGlobe = dynamic(() => import('../components/FooterGlobe'), { ssr: false })
@@ -50,10 +52,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         className="overflow-x-hidden"
         style={{ background: '#FAFAFA', minHeight: '100dvh' }}
       >
-        <Providers>
-          {children}
-          <FooterGlobe />
-        </Providers>
+        <AuthSessionProvider>
+          <AuthBootstrap />
+          <Providers>
+            {children}
+            <FooterGlobe />
+          </Providers>
+        </AuthSessionProvider>
       </body>
     </html>
   )

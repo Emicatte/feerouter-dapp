@@ -13,6 +13,10 @@ import SwapModule from '@/app/SwapModule'
 import { ChainFamilySwitch } from '@/components/shared/ChainFamilySwitch'
 import NetworkSelector from '@/app/NetworkSelector'
 import AccountHeader, { type NonEvmWalletProps } from '@/app/AccountHeader'
+import { AuthButtons } from '@/components/auth/AuthButtons'
+import { TransactionPersistence } from '@/components/TransactionPersistence'
+import { ContactsPersistence } from '@/components/ContactsPersistence'
+import { PostLoginMerge } from '@/components/auth/PostLoginMerge'
 import { useUniversalWallet } from '@/hooks/useUniversalWallet'
 import { useWallet as useSolanaWallet } from '@solana/wallet-adapter-react'
 import { useTron } from '@/app/providers-tron'
@@ -200,6 +204,7 @@ export default function AppPage() {
             />
           </div>
           <NetworkSelector />
+          <AuthButtons />
           <div className="rp-wallet">
             <AccountHeader nonEvmWallet={nonEvmWallet} />
           </div>
@@ -266,6 +271,10 @@ export default function AppPage() {
           </div>
         </div>
       </main>
+
+      <TransactionPersistence />
+      <ContactsPersistence />
+      <PostLoginMerge />
     </>
   )
 }

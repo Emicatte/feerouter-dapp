@@ -228,7 +228,7 @@ export default function ChainSelector({
           top: 'calc(100% + 4px)',
           left: 0,
           fontFamily: C.M, fontSize: 9,
-          color: '#ffb800',
+          color: '#ffb700ff',
           whiteSpace: 'nowrap',
         }}>
           Switch to {selectedChain?.name}

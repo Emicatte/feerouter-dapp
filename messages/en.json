@@ -1,4 +1,37 @@
 {
+  "auth": {
+    "signIn": "Log in",
+    "signUp": "Sign up",
+    "signOut": "Sign out",
+    "signInWithGoogle": "Log in with Google",
+    "saveRoute": "Save route",
+    "savedRoutes": "Saved routes",
+    "signInToSave": "Log in to save",
+    "accountMenu": "Account menu",
+    "openDashboard": "Open dashboard",
+    "settings": "Settings",
+    "whySignIn": {
+      "eyebrow": "WHY SIGN IN",
+      "heading": "One account. All your chains. Everywhere.",
+      "subheading": "Sign in to sync your crypto experience across devices — your routes, history, contacts, and alerts follow you wherever you go.",
+      "routes": {
+        "title": "Saved routes",
+        "description": "Name your favorite payment paths and reuse them in one click. No more rebuilding cross-chain flows from scratch."
+      },
+      "history": {
+        "title": "Cross-device history",
+        "description": "Every transaction you've ever made, searchable and filterable. Access from any browser, any device — always in sync."
+      },
+      "contacts": {
+        "title": "Encrypted contacts",
+        "description": "Your address book with labels, notes, and safety warnings. Never paste a wrong address again."
+      },
+      "notifications": {
+        "title": "Smart notifications",
+        "description": "Email alerts when transactions confirm, fail, or when conditions you set are met. Stay in control without watching the screen."
+      }
+    }
+  },
   "nav": {
     "about": "About",
     "howItWorks": "How It Works",
@@ -362,5 +395,289 @@
     "pageSubtitle": "Every token across 11+ chains. Prices update every 30 seconds.",
     "search": "Search by name or ticker…",
     "backToMarkets": "Back to markets"
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Manage your notifications, connected wallets, and account security.",
+    "nav": {
+      "notifications": "Notifications",
+      "wallets": "Wallets",
+      "apiKeys": "API Keys",
+      "security": "Security",
+      "soon": "Soon",
+      "organization": "Organization"
+    },
+    "notifications": {
+      "loading": "Loading your preferences…",
+      "email": {
+        "title": "Email",
+        "description": "We send security and account emails to the address linked to your Google account.",
+        "loginNewDevice": {
+          "label": "New device sign-in alerts",
+          "description": "Get an email whenever your account is accessed from a device or network we haven't seen before."
+        }
+      },
+      "telegram": {
+        "title": "Telegram",
+        "description": "Real-time alerts for transactions and price moves, delivered to your Telegram.",
+        "comingSoon": {
+          "title": "Telegram notifications — coming soon",
+          "description": "We're finishing the Telegram bot. Connect your account here as soon as it's live."
+        }
+      }
+    },
+    "wallets": {
+      "title": "Linked wallets",
+      "subtitle": "Connect the EVM wallets you own. You'll sign a message once per wallet so we can prove ownership — no on-chain transaction, no gas.",
+      "loading": "Loading your wallets…",
+      "countUsed": "{used} of {max} wallets",
+      "teamBanner": "These wallets are linked to {orgName} and visible to all members.",
+      "viewerDisabledHint": "Ask an admin or operator to manage wallets.",
+      "adminOnlyHint": "Only admins can change the primary wallet or unlink.",
+      "addedBy": "Linked by {email}",
+      "autoSuggest": {
+        "title": "Link the wallet you're connected with",
+        "cta": "Link this wallet"
+      },
+      "empty": {
+        "title": "You haven't linked any wallets yet.",
+        "cta": "Connect a wallet"
+      },
+      "linkAnother": "Link another wallet",
+      "linking": "Signing…",
+      "primary": "Primary",
+      "makePrimary": "Set primary",
+      "addLabel": "Add a label",
+      "unlink": "Unlink",
+      "confirmUnlink": "Confirm unlink",
+      "cancel": "Cancel",
+      "errors": {
+        "wallet_already_linked": "This wallet is already linked to your account.",
+        "max_wallets_reached": "You've reached the maximum of 10 linked wallets. Unlink one to add another.",
+        "chain_not_supported": "This chain isn't supported yet. Switch to a supported network in your wallet.",
+        "chain_family_unsupported_v1": "Only EVM wallets can be linked for now. Solana and Tron are coming.",
+        "nonce_expired_or_used": "The signing challenge expired or was already used. Please try again.",
+        "nonce_context_mismatch": "The signing challenge didn't match the wallet. Please try again.",
+        "signature_mismatch": "The signature didn't match the wallet address. Please sign again with the right account.",
+        "signature_malformed": "The signature couldn't be verified. Please try again.",
+        "invalid_address": "That address doesn't look like a valid EVM address.",
+        "cannot_demote_primary": "Promote another wallet to primary first, then you can change this one.",
+        "siwe_unavailable": "Wallet linking is temporarily unavailable. Please try again in a moment.",
+        "not_found": "That wallet wasn't found on your account.",
+        "primary_race": "Another change happened at the same time. Please try again.",
+        "unknown": "Something went wrong. Please try again."
+      }
+    },
+    "apiKeys": {
+      "title": "API Keys",
+      "description": "Create programmatic keys to access your account through the rSends API. Each key is shown once at creation — store it somewhere safe.",
+      "loading": "Loading your keys…",
+      "countUsed": "{used} of {max} keys used",
+      "teamBanner": "These API keys are shared with everyone in {orgName}.",
+      "viewerDisabledHint": "Ask an admin or operator to manage API keys.",
+      "adminOnlyHint": "Only admins can revoke API keys.",
+      "addedBy": "Added by {email}",
+      "createCta": "Create new API key",
+      "limitReached": "You've reached the maximum of {max} active keys. Revoke one to create another.",
+      "empty": {
+        "title": "You haven't created any API keys yet.",
+        "cta": "Create your first key"
+      },
+      "revoke": "Revoke",
+      "confirmRevoke": "Confirm revoke",
+      "cancel": "Cancel",
+      "statusActive": "Active",
+      "statusRevoked": "Revoked",
+      "rateLimit": "{rpm} req/min",
+      "totalRequests": "{count, plural, one {# request} other {# requests}}",
+      "lastUsed": "Last used: {time}",
+      "never": "never",
+      "docs": {
+        "title": "Using your API key",
+        "body": "Pass the key as a Bearer token in the Authorization header. Treat it like a password — anyone with this key can act on your behalf within its scopes."
+      },
+      "errors": {
+        "max_keys_reached": "You've reached the maximum of 5 active keys. Revoke one to create another.",
+        "not_found": "That key wasn't found on your account.",
+        "no_token": "You're not signed in. Please sign in and try again.",
+        "session_expired": "Your session has expired. Please sign in again.",
+        "auth_unavailable": "The auth service is temporarily unavailable. Please try again in a moment.",
+        "unknown": "Something went wrong. Please try again."
+      },
+      "scopes": {
+        "transactions:read": "Read your transaction history",
+        "transactions:write": "Create and send transactions on your behalf",
+        "routes:read": "Read your saved routes",
+        "contacts:read": "Read your saved contacts",
+        "wallets:read": "Read your linked wallets",
+        "account:read": "Read your account profile and settings"
+      },
+      "modal": {
+        "createTitle": "Create a new API key",
+        "labelLabel": "Label",
+        "labelPlaceholder": "e.g. my-backend-prod",
+        "scopesLabel": "Scopes",
+        "scopesHint": "Select only the permissions this key needs. You can revoke it at any time.",
+        "createCta": "Create key",
+        "creating": "Creating…",
+        "cancel": "Cancel",
+        "displayTitle": "Your new API key",
+        "saveWarning": "This is the only time you'll see this key. Copy it now and store it somewhere safe — if you lose it, you'll need to create a new one.",
+        "copy": "Copy",
+        "copied": "Copied!",
+        "savedCheckbox": "I've saved my key somewhere safe",
+        "done": "Done"
+      }
+    },
+    "security": {
+      "title": "Security",
+      "subtitle": "Review where you're signed in, which devices we remember, and manage your account.",
+      "loading": "Loading your security overview…",
+      "sessions": {
+        "title": "Active sessions",
+        "description": "Every device that's currently signed in to your account. Sign out from anything you don't recognise.",
+        "current": "This device",
+        "revoke": "Sign out",
+        "revokeAll": "Sign out everywhere else",
+        "lastActivity": "Last active",
+        "empty": "No active sessions."
+      },
+      "devices": {
+        "title": "Known devices",
+        "description": "Devices we've seen you sign in from. Forgetting a device will trigger a new-device alert the next time it signs in.",
+        "forget": "Forget",
+        "logins": "{count, plural, one {# login} other {# logins}}",
+        "empty": "No known devices yet."
+      },
+      "deletion": {
+        "pendingTitle": "Account deletion scheduled",
+        "pendingBody": "Your account and all associated data will be permanently deleted in {days} days, on {date}. You can still cancel until then.",
+        "cancel": "Keep my account"
+      },
+      "danger": {
+        "title": "Delete account",
+        "description": "Permanently delete your account and every piece of data we hold for you. This cannot be undone.",
+        "cta": "Delete my account"
+      },
+      "deleteModal": {
+        "title": "Delete your account?",
+        "body": "This will permanently erase {email} and every associated record — routes, contacts, transactions, wallets, sessions, and devices. After a 30-day grace period there is no way to recover the account.",
+        "reasonLabel": "Reason (optional)",
+        "reasonPlaceholder": "What made you want to leave? (helps us improve)",
+        "confirmLabel": "Type {phrase} to confirm",
+        "confirmPlaceholder": "DELETE MY ACCOUNT",
+        "confirmCta": "Delete my account",
+        "cancel": "Cancel",
+        "deleting": "Submitting…"
+      },
+      "errors": {
+        "account_deleted": "This account has been deleted and can no longer be accessed.",
+        "invalid_confirmation": "The confirmation phrase didn't match. Please type it exactly.",
+        "cannot_revoke_current_session": "You can't sign out the device you're currently using. Use the sign-out button in the header.",
+        "not_found": "That item wasn't found on your account.",
+        "user_not_found": "We couldn't find your account. Please sign in again.",
+        "no_token": "You're not signed in. Please sign in and try again.",
+        "session_expired": "Your session has expired. Please sign in again.",
+        "auth_unavailable": "The auth service is temporarily unavailable. Please try again in a moment.",
+        "unknown": "Something went wrong. Please try again."
+      }
+    },
+    "organization": {
+      "title": "Organization",
+      "personalBadge": "Personal",
+      "loading": "Loading…",
+      "noActiveOrg": "No active organization.",
+      "general": {
+        "title": "General",
+        "name": "Name",
+        "editCta": "Edit",
+        "plan": "Plan",
+        "freeBadge": "Free"
+      },
+      "members": {
+        "title": "Members",
+        "count": "{current}/{max}",
+        "max": "Max {max}",
+        "roleAdmin": "Admin",
+        "roleOperator": "Operator",
+        "roleViewer": "Viewer",
+        "changeRole": "Change role",
+        "remove": "Remove",
+        "confirmRemove": "Confirm remove",
+        "youBadge": "You"
+      },
+      "invites": {
+        "title": "Pending invites",
+        "empty": "No pending invites.",
+        "pendingBadge": "Pending",
+        "expiresIn": "expires {time}",
+        "revoke": "Revoke",
+        "confirmRevoke": "Confirm revoke",
+        "sendCta": "Invite member"
+      },
+      "modal": {
+        "title": "Invite a new member",
+        "subtitle": "They will receive an email with a link to join this organization.",
+        "emailLabel": "Email",
+        "roleLabel": "Role",
+        "sendCta": "Send invite",
+        "sending": "Sending…",
+        "cancel": "Cancel"
+      },
+      "switcher": {
+        "placeholder": "Select organization",
+        "createCta": "Create new organization",
+        "personalLabel": "Personal"
+      },
+      "dangerZone": {
+        "title": "Danger zone",
+        "leaveOrg": "Leave organization",
+        "deleteOrg": "Delete organization",
+        "deleteDisabledHint": "Coming in a future update."
+      },
+      "errors": {
+        "not_found": "Organization not found.",
+        "not_a_member": "You are not a member of this organization.",
+        "insufficient_role": "You do not have permission to do that.",
+        "cannot_remove_owner": "The organization owner cannot be removed.",
+        "cannot_remove_last_admin": "You cannot remove the last admin.",
+        "cannot_demote_last_admin": "You cannot demote the last admin.",
+        "max_members_reached": "This organization has reached the maximum number of members.",
+        "already_member": "That user is already a member.",
+        "invite_already_pending": "An invite is already pending for that email.",
+        "invalid_role": "Invalid role.",
+        "invalid_email": "Invalid email address.",
+        "no_token": "Sign in to continue.",
+        "unknown": "Something went wrong. Please try again."
+      }
+    }
+  },
+  "invite": {
+    "title": "You've been invited",
+    "subtitle": "Join {org_name} as {role}.",
+    "loadingPreview": "Loading invitation…",
+    "orgLabel": "Organization",
+    "roleLabel": "Role",
+    "inviteEmailLabel": "Invite email",
+    "emailMismatchWarning": "This invite was sent to {invite_email} but you are signed in as {user_email}. Please sign in with the right Google account to accept.",
+    "expiresAt": "Expires {time}",
+    "acceptCta": "Accept invitation",
+    "declineCta": "Decline",
+    "accepting": "Accepting…",
+    "declining": "Declining…",
+    "success": "All set!",
+    "successToMembers": "Redirecting you to your organization…",
+    "declineConfirm": "Confirm decline",
+    "errors": {
+      "invite_not_found": "This invitation link is not valid.",
+      "invite_expired": "This invitation has expired.",
+      "invite_accepted": "This invitation has already been accepted.",
+      "invite_declined": "This invitation has been declined.",
+      "invite_revoked": "This invitation has been revoked.",
+      "invite_email_mismatch": "The invite was sent to a different email address than the one you are signed in with.",
+      "already_member": "You are already a member of this organization.",
+      "max_members_reached": "This organization is full.",
+      "unknown": "Something went wrong. Please try again."
+    }
   }
 }

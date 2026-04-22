@@ -96,6 +96,16 @@ class Settings(BaseSettings):
     platform_treasury_address: str = ""       # RSends treasury wallet
     platform_fee_enabled: bool = True
 
+    # ── End-user Auth (Google OAuth + Session JWT) ───────
+    google_oauth_client_id: str = ""          # Google OAuth 2.0 client ID (web) — `aud` claim of ID tokens
+    auth_jwt_secret: str = ""                 # HS256 secret for access tokens; >=64 chars required in prod
+
+    # ── Email (Resend) ───────────────────────────────────
+    resend_api_key: str = ""                  # Resend API key (re_...) — required when email_dev_mode is False
+    email_from: str = "security@rsends.io"    # From header; falls back to "onboarding@resend.dev" if unset
+    email_dev_mode: bool = True               # If True: log and skip send. Safer default; prod must set False.
+    frontend_url: str = "http://localhost:3000"  # Used for email CTAs (e.g. settings links)
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
@@ -225,6 +235,18 @@ def validate_settings(settings: Settings) -> None:
 
         if settings.debug:
             errors.append("DEBUG=true is forbidden when ENVIRONMENT=production")
+
+        # ── User-auth hardening ──
+        if not settings.google_oauth_client_id:
+            errors.append(
+                "GOOGLE_OAUTH_CLIENT_ID is empty in production. "
+                "End-user Google login cannot verify ID tokens without it."
+            )
+        if len(settings.auth_jwt_secret) < 64:
+            errors.append(
+                f"AUTH_JWT_SECRET is too short ({len(settings.auth_jwt_secret)} chars). "
+                "Must be >= 64 characters (hex-encoded 32 random bytes) in production."
+            )
 
     # ── Print results ─────────────────────────────────────
     for w in warnings:

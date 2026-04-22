@@ -21,6 +21,8 @@ from app.models import aml_models as _aml_models            # noqa: F401 — reg
 from app.models import strategy_models as _strat_models      # noqa: F401 — registra tabella strategies in Base.metadata
 from app.models import split_models as _split_models         # noqa: F401 — registra tabelle split_contracts / split_recipients / split_executions in Base.metadata
 from app.models import api_key_models as _apikey_models      # noqa: F401 — registra tabella api_keys in Base.metadata
+from app.models import auth_models as _auth_models            # noqa: F401 — registra tabelle users / user_sessions / auth_audit_log in Base.metadata
+from app.models import user_routes_models as _user_routes_models  # noqa: F401 — registra tabella user_routes in Base.metadata
 
 settings = get_settings()
 

@@ -1,7 +1,7 @@
 'use client'
 
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import {
   useAccount, useBalance, useReadContracts,
@@ -19,6 +19,7 @@ import { useIsMobile } from '../hooks/useIsMobile'
 import { useTranslations } from 'next-intl'
 import { motion, AnimatePresence } from 'framer-motion'
 import { CHAIN_NAMES } from './command-center/shared'
+import { emitTxSubmitted, emitTxConfirmed } from '@/lib/tx-events'
 
 // Same-origin proxy → see app/api/backend/[...path]/route.ts
 const BACKEND = '/api/backend'
@@ -203,6 +204,10 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
     hash: txHash, query: { enabled: !!txHash && phase === 'swapping' },
   })
 
+  const clientIdRef = useRef<string | null>(null)
+  const lastSubmittedHashRef = useRef<string | null>(null)
+  const lastConfirmedHashRef = useRef<string | null>(null)
+
   useEffect(() => {
     if (isSuccess && phase === 'swapping') {
       setPhase('success')
@@ -210,6 +215,63 @@ export default function SwapModule({ onSwapComplete, portfolioAssets, noCard }: 
       onSwapComplete?.()
     }
   }, [isSuccess, phase])
+
+  // ── Server persistence: emit tx-submitted once per new txHash ──────────
+  useEffect(() => {
+    if (!txHash || phase !== 'swapping' || !address || !tokenIn || !tokenOut) return
+    if (lastSubmittedHashRef.current === txHash) return
+    lastSubmittedHashRef.current = txHash
+
+    const clientId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    clientIdRef.current = clientId
+
+    emitTxSubmitted({
+      clientId,
+      chain_id: chainId,
+      tx_hash: txHash,
+      wallet_address: address,
+      tx_type: 'swap',
+      tx_status: 'confirming',
+      direction: 'out',
+      token_symbol: tokenIn.symbol,
+      token_address: tokenIn.address ?? null,
+      amount_raw: parsedAmount ? parsedAmount.toString() : null,
+      amount_decimal: amount || null,
+      counterparty_address: address,
+      extra_metadata: {
+        source: 'SwapModule',
+        tokenOutSymbol: tokenOut.symbol,
+        tokenOutAddress: tokenOut.address ?? null,
+        slippageBps: Math.round(slippage * 100),
+        minAmountOut:
+          quote?.status === 'success' && quote.minAmountOut
+            ? quote.minAmountOut.toString()
+            : null,
+      },
+      submitted_at: new Date().toISOString(),
+    })
+  }, [txHash, phase, address, chainId, tokenIn, tokenOut, parsedAmount, amount, slippage, quote])
+
+  // ── Server persistence: emit tx-confirmed when phase resolves ──────────
+  useEffect(() => {
+    const clientId = clientIdRef.current
+    if (!txHash || !clientId) return
+    if (lastConfirmedHashRef.current === txHash) return
+    const tx_status: 'confirmed' | 'failed' | null =
+      phase === 'success' ? 'confirmed' : phase === 'error' ? 'failed' : null
+    if (!tx_status) return
+    lastConfirmedHashRef.current = txHash
+    emitTxConfirmed({
+      clientId,
+      tx_hash: txHash,
+      chain_id: chainId,
+      tx_status,
+      confirmed_at: new Date().toISOString(),
+    })
+  }, [phase, txHash, chainId])
 
   // Flip tokens
   const flip = () => {

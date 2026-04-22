@@ -45,6 +45,8 @@ import SplitText from '@/components/motion/SplitText'
 import SmoothScroll from '@/components/SmoothScroll'
 import FadeIn from '@/components/motion/FadeIn'
 import { StaggerContainer, StaggerItem } from '@/components/motion/Stagger'
+import { LandingAuthButtons } from '@/components/auth/LandingAuthButtons'
+import { WhySignInSection } from '@/components/landing/WhySignInSection'
 
 
 
@@ -655,6 +657,7 @@ function Navbar({
               </div>
             </div>
           )}
+          <LandingAuthButtons />
         </div>
     </nav>
 
@@ -1191,6 +1194,11 @@ export default function Home() {
         </div>
 
       </main>
+
+      {/* ── Why Sign In value props ──── */}
+      <FadeIn y={40} duration={1}>
+        <WhySignInSection />
+      </FadeIn>
 
       {/* ── B2B Landing Sections ──── */}
       <LandingSections />

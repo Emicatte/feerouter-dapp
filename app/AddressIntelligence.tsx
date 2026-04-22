@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { isAddress, getAddress } from 'viem'
 import { useTranslations } from 'next-intl'
+import { useUserContacts, serverToLocal } from '@/hooks/useUserContacts'
 
 // ── Theme (matches TransferForm T) ──────────────────────────────────────────
 import { C } from '@/app/designTokens'
@@ -79,21 +80,38 @@ export function recordSuccessfulTx(address: string, label?: string) {
   const contacts = loadContacts()
   const normalized = address.toLowerCase()
   const existing = contacts.find(c => c.address.toLowerCase() === normalized)
+  const now = new Date().toISOString()
   if (existing) {
     existing.txCount += 1
-    existing.lastUsed = new Date().toISOString()
+    existing.lastUsed = now
     if (label) existing.label = label
   } else {
     contacts.push({
       address: getAddress(address),
       label: label || '',
-      lastUsed: new Date().toISOString(),
+      lastUsed: now,
       txCount: 1,
     })
   }
   // Keep max 50 contacts
   if (contacts.length > 50) contacts.splice(0, contacts.length - 50)
   saveContacts(contacts)
+  // Mirror to server when authed (listener is components/ContactsPersistence.tsx)
+  try {
+    const saved = contacts.find(c => c.address.toLowerCase() === normalized)
+    if (saved && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('rsends:contact-recorded', {
+        detail: {
+          address: saved.address,
+          label: saved.label,
+          lastUsed: saved.lastUsed,
+          txCount: saved.txCount,
+        },
+      }))
+    }
+  } catch {
+    // SSR / dispatch unavailable — localStorage is source of truth
+  }
 }
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -110,6 +128,13 @@ export default function AddressIntelligence({
   const wrapRef = useRef<HTMLDivElement>(null)
   const t = useTranslations('send')
 
+  // Dual-mode contacts source: server when authed, localStorage otherwise.
+  const { contacts: serverContacts, isAuthed } = useUserContacts()
+  const allContacts = useMemo<AddressContact[]>(
+    () => (isAuthed ? serverContacts.map(serverToLocal) : loadContacts()),
+    [isAuthed, serverContacts],
+  )
+
   // ── Validate + check contact book ────────────────────────────────────────
   const validate = useCallback((addr: string) => {
     if (!addr) {
@@ -124,18 +149,18 @@ export default function AddressIntelligence({
     }
     // Valid — check if known
     setAddrError(''); setIsValid(true)
-    const contacts = loadContacts()
+    const contacts = allContacts
     const known = contacts.some(c => c.address.toLowerCase() === addr.toLowerCase())
     setIsNew(!known)
     onValidation?.(true, '')
-  }, [onValidation, t])
+  }, [onValidation, t, allContacts])
 
   useEffect(() => { validate(value) }, [value, validate])
 
   // ── Suggestions from contact book ────────────────────────────────────────
   const updateSuggestions = useCallback((query: string) => {
     if (!query || query.length < 2) { setSuggestions([]); return }
-    const contacts = loadContacts()
+    const contacts = allContacts
     const q = query.toLowerCase()
     const matches = contacts
       .filter(c =>
@@ -145,7 +170,7 @@ export default function AddressIntelligence({
       .sort((a, b) => new Date(b.lastUsed).getTime() - new Date(a.lastUsed).getTime())
       .slice(0, 5)
     setSuggestions(matches)
-  }, [])
+  }, [allContacts])
 
   // ── Paste detection ──────────────────────────────────────────────────────
   const handlePaste = useCallback(() => {

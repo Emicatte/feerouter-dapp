@@ -43,6 +43,7 @@ import { logger } from '../lib/logger'
 import { useIsMobile } from '../hooks/useIsMobile'
 import { useTranslations } from 'next-intl'
 import { useLocale } from 'next-intl'
+import { emitTxSubmitted, emitTxConfirmed } from '@/lib/tx-events'
 
 // ── Theme ──────────────────────────────────────────────────────────────────
 import { C } from '@/app/designTokens'
@@ -602,6 +603,10 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
   const { writeContractAsync } = useWriteContract()
   const { sendTransactionAsync } = useSendTransaction()
 
+  const clientIdRef = useRef<string | null>(null)
+  const lastSubmittedHashRef = useRef<string | null>(null)
+  const lastConfirmedHashRef = useRef<string | null>(null)
+
   // ── Quote engine — alimentato da isSwapMode ───────────────────────────
   const swapQuote = useSwapQuote({
     chainId,
@@ -705,6 +710,66 @@ export default function TransferForm({ noCard, externalToken }: { noCard?: boole
   const { isSuccess: sendOk } = useWaitForTransactionReceipt({
     hash: sendHash, query: { enabled: !!sendHash && phase === 'wait_send' },
   })
+
+  // ── Server persistence: emit tx-submitted once per new sendHash ────────
+  useEffect(() => {
+    if (!sendHash || phase !== 'wait_send' || !address || !tokenIn) return
+    if (lastSubmittedHashRef.current === sendHash) return
+    lastSubmittedHashRef.current = sendHash
+
+    const clientId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    clientIdRef.current = clientId
+
+    const rawAmount = parseAmtIn()
+    const outTokenSym = isSwapMode && tokenOut
+      ? tokenOut.symbol
+      : (crossChainOut ? crossChainOut.symbol : tokenIn.symbol)
+
+    emitTxSubmitted({
+      clientId,
+      chain_id: chainId,
+      tx_hash: sendHash,
+      wallet_address: address,
+      tx_type: isCrossChain ? 'bridge' : (isSwapMode ? 'swap' : 'transfer'),
+      tx_status: 'confirming',
+      direction: 'out',
+      token_symbol: tokenIn.symbol,
+      token_address: tokenIn.address ?? null,
+      amount_raw: rawAmount ? rawAmount.toString() : null,
+      amount_decimal: amount || null,
+      counterparty_address: recipient && isAddress(recipient) ? recipient : null,
+      extra_metadata: {
+        isSwapMode,
+        isCrossChain,
+        destChainId,
+        tokenOutSymbol: outTokenSym,
+        tokenOutAddress: isSwapMode && tokenOut ? tokenOut.address ?? null : null,
+        directERC20Mode,
+      },
+      submitted_at: new Date().toISOString(),
+    })
+  }, [sendHash, phase, address, chainId, tokenIn, tokenOut, crossChainOut, isSwapMode, isCrossChain, destChainId, directERC20Mode, recipient, amount, parseAmtIn])
+
+  // ── Server persistence: emit tx-confirmed when phase resolves ──────────
+  useEffect(() => {
+    const clientId = clientIdRef.current
+    if (!sendHash || !clientId) return
+    if (lastConfirmedHashRef.current === sendHash) return
+    const tx_status: 'confirmed' | 'failed' | null =
+      phase === 'done' ? 'confirmed' : phase === 'error' ? 'failed' : null
+    if (!tx_status) return
+    lastConfirmedHashRef.current = sendHash
+    emitTxConfirmed({
+      clientId,
+      tx_hash: sendHash,
+      chain_id: chainId,
+      tx_status,
+      confirmed_at: new Date().toISOString(),
+    })
+  }, [phase, sendHash, chainId])
 
   const execSwap = useCallback(async (oracle: OracleResponse) => {
     const r = parseAmtIn(); if (!r || !tokenIn || !tokenOut || !registry) return

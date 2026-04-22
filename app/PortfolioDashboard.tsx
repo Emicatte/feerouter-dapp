@@ -39,6 +39,7 @@ const AutoForward = dynamic(() => import('./AutoForward'), { ssr: false })
 //  PALETTE
 // ═══════════════════════════════════════════════════════════
 import { C as BaseC } from '@/app/designTokens'
+import { useUserTransactions } from '@/hooks/useUserTransactions'
 const C = { ...BaseC, pink: '#C8512C', green: '#40B66B', red: '#FD766B', blue: '#4C82FB', border: 'rgba(10,10,10,0.08)' }
 
 // ═══════════════════════════════════════════════════════════
@@ -931,6 +932,9 @@ export default function PortfolioDashboard({ open, onClose, initialTab, override
 
   useEffect(() => { if (initialTab && open) setTab(initialTab) }, [initialTab, open])
 
+  // ── RSends server-synced transactions (authed users) ────────────────
+  const { transactions: rsendsTxs, isAuthed: rsendsAuthed } = useUserTransactions()
+
   // Tab switch with skeleton
   const switchTab = (t: Tab) => {
     if (t === tab) return
@@ -1487,6 +1491,60 @@ export default function PortfolioDashboard({ open, onClose, initialTab, override
                     )
                   })}
                 </div>
+
+                {/* My RSends — server-synced cross-device history (authed) */}
+                {rsendsAuthed && rsendsTxs.length > 0 && (
+                  <div style={{ marginTop: 24 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                      <div>
+                        <span style={{ fontFamily: C.D, fontSize: 16, fontWeight: 600, color: C.text }}>My RSends Transactions</span>
+                        <span style={{ fontFamily: C.D, fontSize: 12, color: C.dim, marginLeft: 8 }}>{rsendsTxs.length}</span>
+                      </div>
+                      <span style={{ fontFamily: C.M, fontSize: 10, color: C.dim }}>Synced across devices</span>
+                    </div>
+                    {rsendsTxs.slice(0, 8).map((tx, i) => {
+                      const isConfirmed = tx.tx_status === 'confirmed'
+                      const isFailed = tx.tx_status === 'failed' || tx.tx_status === 'cancelled'
+                      const isPending = !isConfirmed && !isFailed
+                      const dot = isConfirmed ? C.green : isFailed ? C.red : C.dim
+                      const amountStr = tx.amount_decimal ?? tx.amount_raw ?? '—'
+                      const sym = tx.token_symbol ?? ''
+                      return (
+                        <a
+                          key={tx.id + i}
+                          href={`${reg?.blockExplorer ?? 'https://basescan.org'}/tx/${tx.tx_hash}`}
+                          target="_blank" rel="noopener noreferrer"
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 12,
+                            padding: '12px 0', borderBottom: `1px solid ${C.border}`,
+                            textDecoration: 'none',
+                          }}
+                        >
+                          <div style={{
+                            width: 32, height: 32, borderRadius: '50%',
+                            background: `${dot}14`,
+                            border: `1px solid ${dot}33`,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: 12, color: dot, flexShrink: 0, fontFamily: C.M,
+                          }}>
+                            {tx.tx_type.charAt(0).toUpperCase()}
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontFamily: C.D, fontSize: 13, fontWeight: 500, color: C.text }}>
+                              {tx.tx_type.charAt(0).toUpperCase() + tx.tx_type.slice(1)} {amountStr} {sym}
+                            </div>
+                            <div style={{ fontFamily: C.M, fontSize: 10, color: C.dim, marginTop: 2 }}>
+                              {isPending ? tx.tx_status : (tx.counterparty_address ? `→ ${ta(tx.counterparty_address)}` : ta(tx.tx_hash))}
+                            </div>
+                          </div>
+                          <span style={{ fontFamily: C.M, fontSize: 10, color: C.dim }}>
+                            {ago(tx.confirmed_at ?? tx.submitted_at)}
+                          </span>
+                        </a>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             </div>
           )}

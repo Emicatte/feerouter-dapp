@@ -303,6 +303,28 @@ from app.api.aml_routes import aml_router
 app.include_router(aml_router)
 from app.api.api_key_routes import api_key_router
 app.include_router(api_key_router)
+from app.api.auth_routes import router as auth_router
+app.include_router(auth_router)
+from app.api.auth_email_routes import router as auth_email_router
+app.include_router(auth_email_router)
+from app.api.user_routes import router as user_routes_router
+app.include_router(user_routes_router)
+from app.api.user_tx_routes import router as user_tx_routes_router
+app.include_router(user_tx_routes_router)
+from app.api.user_contacts_routes import router as user_contacts_router
+app.include_router(user_contacts_router)
+from app.api.notification_routes import router as notifications_router
+app.include_router(notifications_router)
+from app.api.user_wallets_routes import router as user_wallets_router
+app.include_router(user_wallets_router)
+from app.api.user_account_routes import router as user_account_router
+app.include_router(user_account_router)
+from app.api.user_api_keys_routes import router as user_api_keys_router
+app.include_router(user_api_keys_router)
+from app.api.organizations_routes import router as organizations_router
+app.include_router(organizations_router)
+from app.api.org_invites_public_routes import router as org_invites_public_router
+app.include_router(org_invites_public_router)
 
 
 # ── Health checks ────────────────────────────────────────

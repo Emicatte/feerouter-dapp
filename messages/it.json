@@ -1,4 +1,37 @@
 {
+  "auth": {
+    "signIn": "Accedi",
+    "signUp": "Registrati",
+    "signOut": "Esci",
+    "signInWithGoogle": "Accedi con Google",
+    "saveRoute": "Salva rotta",
+    "savedRoutes": "Rotte salvate",
+    "signInToSave": "Accedi per salvare",
+    "accountMenu": "Menu account",
+    "openDashboard": "Apri dashboard",
+    "settings": "Impostazioni",
+    "whySignIn": {
+      "eyebrow": "PERCHÉ REGISTRARSI",
+      "heading": "Un account. Tutte le chain. Ovunque.",
+      "subheading": "Accedi per sincronizzare la tua esperienza crypto tra dispositivi: route, cronologia, contatti e alert ti seguono ovunque tu vada.",
+      "routes": {
+        "title": "Route salvate",
+        "description": "Dai un nome ai tuoi percorsi di pagamento preferiti e riusali con un click. Niente più flussi cross-chain da ricostruire ogni volta."
+      },
+      "history": {
+        "title": "Cronologia cross-device",
+        "description": "Ogni transazione che hai fatto, filtrabile e ricercabile. Accessibile da qualsiasi browser, qualsiasi dispositivo — sempre sincronizzata."
+      },
+      "contacts": {
+        "title": "Contatti cifrati",
+        "description": "La tua rubrica con etichette, note e warning di sicurezza. Mai più un indirizzo incollato sbagliato."
+      },
+      "notifications": {
+        "title": "Notifiche intelligenti",
+        "description": "Email quando le transazioni si confermano, falliscono, o quando si verificano le condizioni che imposti. Resti in controllo senza fissare lo schermo."
+      }
+    }
+  },
   "nav": {
     "about": "Chi siamo",
     "howItWorks": "Come funziona",
@@ -362,5 +395,289 @@
     "pageSubtitle": "Ogni token su oltre 11 chain. I prezzi si aggiornano ogni 30 secondi.",
     "search": "Cerca per nome o ticker…",
     "backToMarkets": "Torna a markets"
+  },
+  "settings": {
+    "title": "Impostazioni",
+    "subtitle": "Gestisci notifiche, wallet collegati e sicurezza dell'account.",
+    "nav": {
+      "notifications": "Notifiche",
+      "wallets": "Wallet",
+      "apiKeys": "Chiavi API",
+      "security": "Sicurezza",
+      "soon": "Presto",
+      "organization": "Organizzazione"
+    },
+    "notifications": {
+      "loading": "Caricamento delle preferenze…",
+      "email": {
+        "title": "Email",
+        "description": "Inviamo email di sicurezza e di account all'indirizzo collegato al tuo account Google.",
+        "loginNewDevice": {
+          "label": "Avvisi di accesso da un nuovo dispositivo",
+          "description": "Ricevi un'email quando il tuo account viene usato da un dispositivo o una rete mai visti prima."
+        }
+      },
+      "telegram": {
+        "title": "Telegram",
+        "description": "Avvisi in tempo reale su transazioni e variazioni di prezzo, direttamente su Telegram.",
+        "comingSoon": {
+          "title": "Notifiche Telegram — in arrivo",
+          "description": "Stiamo ultimando il bot Telegram. Collega il tuo account qui non appena sarà disponibile."
+        }
+      }
+    },
+    "wallets": {
+      "title": "Wallet collegati",
+      "subtitle": "Collega i tuoi wallet EVM. Firmerai un messaggio una sola volta per ogni wallet per dimostrarne la proprietà — nessuna transazione on-chain, nessuna gas fee.",
+      "loading": "Caricamento dei tuoi wallet…",
+      "countUsed": "{used} di {max} wallet",
+      "teamBanner": "Questi wallet sono collegati a {orgName} e visibili a tutti i membri.",
+      "viewerDisabledHint": "Chiedi a un admin o operatore di gestire i wallet.",
+      "adminOnlyHint": "Solo gli admin possono cambiare il wallet principale o scollegarlo.",
+      "addedBy": "Collegato da {email}",
+      "autoSuggest": {
+        "title": "Collega il wallet a cui sei connesso",
+        "cta": "Collega questo wallet"
+      },
+      "empty": {
+        "title": "Non hai ancora collegato nessun wallet.",
+        "cta": "Connetti un wallet"
+      },
+      "linkAnother": "Collega un altro wallet",
+      "linking": "Firma in corso…",
+      "primary": "Principale",
+      "makePrimary": "Imposta come principale",
+      "addLabel": "Aggiungi un'etichetta",
+      "unlink": "Scollega",
+      "confirmUnlink": "Conferma scollegamento",
+      "cancel": "Annulla",
+      "errors": {
+        "wallet_already_linked": "Questo wallet è già collegato al tuo account.",
+        "max_wallets_reached": "Hai raggiunto il massimo di 10 wallet collegati. Scollegane uno per aggiungerne un altro.",
+        "chain_not_supported": "Questa chain non è ancora supportata. Cambia rete nel tuo wallet.",
+        "chain_family_unsupported_v1": "Per ora è possibile collegare solo wallet EVM. Solana e Tron arriveranno presto.",
+        "nonce_expired_or_used": "La sfida di firma è scaduta o già usata. Riprova.",
+        "nonce_context_mismatch": "La sfida di firma non corrisponde al wallet. Riprova.",
+        "signature_mismatch": "La firma non corrisponde all'indirizzo del wallet. Firma di nuovo con l'account giusto.",
+        "signature_malformed": "Non è stato possibile verificare la firma. Riprova.",
+        "invalid_address": "Questo indirizzo non sembra un EVM valido.",
+        "cannot_demote_primary": "Promuovi prima un altro wallet a principale, poi potrai modificare questo.",
+        "siwe_unavailable": "Il collegamento dei wallet è momentaneamente non disponibile. Riprova tra poco.",
+        "not_found": "Questo wallet non è stato trovato sul tuo account.",
+        "primary_race": "È avvenuta un'altra modifica contemporaneamente. Riprova.",
+        "unknown": "Qualcosa è andato storto. Riprova."
+      }
+    },
+    "apiKeys": {
+      "title": "Chiavi API",
+      "description": "Crea chiavi programmatiche per accedere al tuo account tramite l'API rSends. Ogni chiave è mostrata una sola volta alla creazione — conservala in un posto sicuro.",
+      "loading": "Caricamento delle tue chiavi…",
+      "countUsed": "{used} di {max} chiavi usate",
+      "teamBanner": "Queste chiavi API sono condivise con tutti in {orgName}.",
+      "viewerDisabledHint": "Chiedi a un admin o operatore di gestire le chiavi API.",
+      "adminOnlyHint": "Solo gli admin possono revocare le chiavi API.",
+      "addedBy": "Aggiunta da {email}",
+      "createCta": "Crea nuova chiave API",
+      "limitReached": "Hai raggiunto il massimo di {max} chiavi attive. Revoca una per crearne un'altra.",
+      "empty": {
+        "title": "Non hai ancora creato nessuna chiave API.",
+        "cta": "Crea la tua prima chiave"
+      },
+      "revoke": "Revoca",
+      "confirmRevoke": "Conferma revoca",
+      "cancel": "Annulla",
+      "statusActive": "Attiva",
+      "statusRevoked": "Revocata",
+      "rateLimit": "{rpm} req/min",
+      "totalRequests": "{count, plural, one {# richiesta} other {# richieste}}",
+      "lastUsed": "Ultimo uso: {time}",
+      "never": "mai",
+      "docs": {
+        "title": "Usare la tua chiave API",
+        "body": "Passa la chiave come Bearer token nell'header Authorization. Trattala come una password — chiunque la possieda può agire a tuo nome entro i suoi scope."
+      },
+      "errors": {
+        "max_keys_reached": "Hai raggiunto il massimo di 5 chiavi attive. Revoca una per crearne un'altra.",
+        "not_found": "Questa chiave non è stata trovata sul tuo account.",
+        "no_token": "Non sei autenticato. Accedi e riprova.",
+        "session_expired": "La tua sessione è scaduta. Accedi di nuovo.",
+        "auth_unavailable": "Il servizio di autenticazione non è disponibile. Riprova tra un momento.",
+        "unknown": "Qualcosa è andato storto. Riprova."
+      },
+      "scopes": {
+        "transactions:read": "Leggere la cronologia delle tue transazioni",
+        "transactions:write": "Creare e inviare transazioni a tuo nome",
+        "routes:read": "Leggere le tue rotte salvate",
+        "contacts:read": "Leggere i tuoi contatti salvati",
+        "wallets:read": "Leggere i tuoi wallet collegati",
+        "account:read": "Leggere il profilo e le impostazioni del tuo account"
+      },
+      "modal": {
+        "createTitle": "Crea una nuova chiave API",
+        "labelLabel": "Etichetta",
+        "labelPlaceholder": "es. my-backend-prod",
+        "scopesLabel": "Scope",
+        "scopesHint": "Seleziona solo i permessi necessari per questa chiave. Puoi revocarla in qualsiasi momento.",
+        "createCta": "Crea chiave",
+        "creating": "Creazione…",
+        "cancel": "Annulla",
+        "displayTitle": "La tua nuova chiave API",
+        "saveWarning": "Questa è l'unica volta in cui vedrai questa chiave. Copiala ora e conservala in un posto sicuro — se la perdi, dovrai crearne una nuova.",
+        "copy": "Copia",
+        "copied": "Copiato!",
+        "savedCheckbox": "Ho salvato la mia chiave in un posto sicuro",
+        "done": "Fatto"
+      }
+    },
+    "security": {
+      "title": "Sicurezza",
+      "subtitle": "Controlla dove hai effettuato l'accesso, quali dispositivi ricordiamo e gestisci il tuo account.",
+      "loading": "Caricamento panoramica sicurezza…",
+      "sessions": {
+        "title": "Sessioni attive",
+        "description": "Tutti i dispositivi attualmente connessi al tuo account. Disconnetti quelli che non riconosci.",
+        "current": "Questo dispositivo",
+        "revoke": "Disconnetti",
+        "revokeAll": "Disconnetti ovunque altrove",
+        "lastActivity": "Ultima attività",
+        "empty": "Nessuna sessione attiva."
+      },
+      "devices": {
+        "title": "Dispositivi conosciuti",
+        "description": "Dispositivi da cui abbiamo già visto un accesso. Dimenticarne uno attiverà un avviso al prossimo accesso.",
+        "forget": "Dimentica",
+        "logins": "{count, plural, one {# accesso} other {# accessi}}",
+        "empty": "Nessun dispositivo conosciuto."
+      },
+      "deletion": {
+        "pendingTitle": "Eliminazione account programmata",
+        "pendingBody": "Il tuo account e tutti i dati associati verranno eliminati definitivamente tra {days} giorni, il {date}. Puoi ancora annullare fino ad allora.",
+        "cancel": "Mantieni il mio account"
+      },
+      "danger": {
+        "title": "Elimina account",
+        "description": "Elimina definitivamente il tuo account e tutti i dati che conserviamo. Questa azione è irreversibile.",
+        "cta": "Elimina il mio account"
+      },
+      "deleteModal": {
+        "title": "Eliminare il tuo account?",
+        "body": "Questo eliminerà definitivamente {email} e tutti i dati associati — rotte, contatti, transazioni, wallet, sessioni e dispositivi. Dopo 30 giorni di tolleranza non sarà più possibile recuperarlo.",
+        "reasonLabel": "Motivo (facoltativo)",
+        "reasonPlaceholder": "Cosa ti ha fatto decidere di lasciarci? (ci aiuta a migliorare)",
+        "confirmLabel": "Digita {phrase} per confermare",
+        "confirmPlaceholder": "DELETE MY ACCOUNT",
+        "confirmCta": "Elimina il mio account",
+        "cancel": "Annulla",
+        "deleting": "Invio in corso…"
+      },
+      "errors": {
+        "account_deleted": "Questo account è stato eliminato e non è più accessibile.",
+        "invalid_confirmation": "La frase di conferma non corrisponde. Digitala esattamente.",
+        "cannot_revoke_current_session": "Non puoi disconnettere il dispositivo che stai usando. Usa il pulsante nella barra in alto.",
+        "not_found": "Elemento non trovato nel tuo account.",
+        "user_not_found": "Non abbiamo trovato il tuo account. Accedi di nuovo.",
+        "no_token": "Non sei autenticato. Accedi e riprova.",
+        "session_expired": "La tua sessione è scaduta. Accedi di nuovo.",
+        "auth_unavailable": "Il servizio di autenticazione non è disponibile. Riprova tra un momento.",
+        "unknown": "Qualcosa è andato storto. Riprova."
+      }
+    },
+    "organization": {
+      "title": "Organizzazione",
+      "personalBadge": "Personale",
+      "loading": "Caricamento…",
+      "noActiveOrg": "Nessuna organizzazione attiva.",
+      "general": {
+        "title": "Generale",
+        "name": "Nome",
+        "editCta": "Modifica",
+        "plan": "Piano",
+        "freeBadge": "Free"
+      },
+      "members": {
+        "title": "Membri",
+        "count": "{current}/{max}",
+        "max": "Max {max}",
+        "roleAdmin": "Admin",
+        "roleOperator": "Operatore",
+        "roleViewer": "Visualizzatore",
+        "changeRole": "Cambia ruolo",
+        "remove": "Rimuovi",
+        "confirmRemove": "Conferma rimozione",
+        "youBadge": "Tu"
+      },
+      "invites": {
+        "title": "Inviti in sospeso",
+        "empty": "Nessun invito in sospeso.",
+        "pendingBadge": "In sospeso",
+        "expiresIn": "scade {time}",
+        "revoke": "Revoca",
+        "confirmRevoke": "Conferma revoca",
+        "sendCta": "Invita membro"
+      },
+      "modal": {
+        "title": "Invita un nuovo membro",
+        "subtitle": "Riceverà un'email con un link per unirsi a questa organizzazione.",
+        "emailLabel": "Email",
+        "roleLabel": "Ruolo",
+        "sendCta": "Invia invito",
+        "sending": "Invio…",
+        "cancel": "Annulla"
+      },
+      "switcher": {
+        "placeholder": "Seleziona organizzazione",
+        "createCta": "Crea nuova organizzazione",
+        "personalLabel": "Personale"
+      },
+      "dangerZone": {
+        "title": "Zona pericolosa",
+        "leaveOrg": "Abbandona organizzazione",
+        "deleteOrg": "Elimina organizzazione",
+        "deleteDisabledHint": "Disponibile in un aggiornamento futuro."
+      },
+      "errors": {
+        "not_found": "Organizzazione non trovata.",
+        "not_a_member": "Non sei membro di questa organizzazione.",
+        "insufficient_role": "Non hai i permessi necessari.",
+        "cannot_remove_owner": "Il proprietario dell'organizzazione non può essere rimosso.",
+        "cannot_remove_last_admin": "Non puoi rimuovere l'ultimo admin.",
+        "cannot_demote_last_admin": "Non puoi declassare l'ultimo admin.",
+        "max_members_reached": "Questa organizzazione ha raggiunto il numero massimo di membri.",
+        "already_member": "Quell'utente è già membro.",
+        "invite_already_pending": "Esiste già un invito in sospeso per quell'email.",
+        "invalid_role": "Ruolo non valido.",
+        "invalid_email": "Indirizzo email non valido.",
+        "no_token": "Accedi per continuare.",
+        "unknown": "Qualcosa è andato storto. Riprova."
+      }
+    }
+  },
+  "invite": {
+    "title": "Sei stato invitato",
+    "subtitle": "Unisciti a {org_name} come {role}.",
+    "loadingPreview": "Caricamento invito…",
+    "orgLabel": "Organizzazione",
+    "roleLabel": "Ruolo",
+    "inviteEmailLabel": "Email invito",
+    "emailMismatchWarning": "Questo invito è stato inviato a {invite_email} ma hai effettuato l'accesso come {user_email}. Accedi con l'account Google corretto per accettare.",
+    "expiresAt": "Scade {time}",
+    "acceptCta": "Accetta invito",
+    "declineCta": "Rifiuta",
+    "accepting": "Accettazione…",
+    "declining": "Rifiuto…",
+    "success": "Fatto!",
+    "successToMembers": "Ti stiamo reindirizzando alla tua organizzazione…",
+    "declineConfirm": "Conferma rifiuto",
+    "errors": {
+      "invite_not_found": "Questo link di invito non è valido.",
+      "invite_expired": "Questo invito è scaduto.",
+      "invite_accepted": "Questo invito è già stato accettato.",
+      "invite_declined": "Questo invito è stato rifiutato.",
+      "invite_revoked": "Questo invito è stato revocato.",
+      "invite_email_mismatch": "L'invito è stato inviato a un indirizzo email diverso da quello con cui hai effettuato l'accesso.",
+      "already_member": "Sei già membro di questa organizzazione.",
+      "max_members_reached": "Questa organizzazione è piena.",
+      "unknown": "Qualcosa è andato storto. Riprova."
+    }
   }
 }

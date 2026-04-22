@@ -28,3 +28,6 @@ Thumbs.db
 # Logs
 *.log
 .vercel
+
+# Claude Code worktrees (parallel checkouts, NOT project source)
+.claude/worktrees/

@@ -8,12 +8,16 @@
 
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { WalletState } from '../../types/wallet';
 import type { SerializedTransaction, TxType, TxStatus } from '../../types/transaction';
 import { truncateAddress } from '../../lib/utils/format';
 import { getChain } from '../../config/chains';
+import {
+  useUserTransactions,
+  type ServerTransaction,
+} from '@/hooks/useUserTransactions';
 
 /** A tracked transaction for display in the modal */
 export interface RecentTransaction {
@@ -268,6 +272,52 @@ function formatRelativeTime(timestamp: number): string {
   return `${days}d ago`;
 }
 
+/** Map a server transaction into the SerializedTransaction shape for display. */
+function toSerializedTransaction(row: ServerTransaction): SerializedTransaction {
+  const fallbackTypes: Record<string, TxType> = {
+    bridge: 'transfer',
+    split: 'transfer',
+  };
+  const mappedType =
+    (fallbackTypes[row.tx_type] as TxType | undefined) ??
+    ((['swap', 'approve', 'transfer', 'wrap', 'unwrap'] as const).includes(
+      row.tx_type as TxType,
+    )
+      ? (row.tx_type as TxType)
+      : 'transfer');
+
+  const mappedStatus: TxStatus =
+    row.tx_status === 'pending' ||
+    row.tx_status === 'confirming' ||
+    row.tx_status === 'confirmed' ||
+    row.tx_status === 'failed' ||
+    row.tx_status === 'cancelled'
+      ? (row.tx_status as TxStatus)
+      : 'pending';
+
+  const ts = Date.parse(row.confirmed_at ?? row.submitted_at);
+
+  const meta = row.extra_metadata ?? {};
+  const metadata: Record<string, unknown> = {
+    ...meta,
+    tokenSymbol: meta.tokenSymbol ?? row.token_symbol,
+    tokenIn: meta.tokenIn ?? row.token_symbol,
+    tokenOut: meta.tokenOut ?? meta.tokenOutSymbol,
+  };
+
+  return {
+    hash: (row.tx_hash.startsWith('0x')
+      ? (row.tx_hash as `0x${string}`)
+      : (`0x${row.tx_hash}` as `0x${string}`)),
+    chainId: row.chain_id,
+    type: mappedType,
+    status: mappedStatus,
+    timestamp: Number.isFinite(ts) ? ts : Date.now(),
+    metadata,
+    confirmations: row.block_number ? 1 : 0,
+  };
+}
+
 /** Build a description string from a tracked transaction */
 function buildTxDescription(tx: SerializedTransaction): string {
   const typeLabel = TX_TYPE_LABELS[tx.type] ?? tx.type;
@@ -311,6 +361,22 @@ export function AccountModal({
   const chain = wallet.chainId ? getChain(wallet.chainId) : undefined;
   const explorerUrl = chain?.blockExplorers?.[0]?.url;
   const symbol = nativeSymbol ?? chain?.nativeCurrency?.symbol ?? 'ETH';
+
+  const {
+    transactions: serverTxs,
+    isAuthed,
+    clearAll,
+  } = useUserTransactions();
+
+  const serverDisplayTxs = useMemo(
+    () => serverTxs.slice(0, 10).map(toSerializedTransaction),
+    [serverTxs],
+  );
+  const displayTransactions: SerializedTransaction[] =
+    isAuthed && serverDisplayTxs.length > 0
+      ? serverDisplayTxs
+      : trackedTransactions ?? [];
+  const effectiveClearHistory = isAuthed ? clearAll : onClearHistory;
 
   /** Copy the full address to the clipboard */
   const copyAddress = useCallback(async () => {
@@ -439,10 +505,10 @@ export function AccountModal({
                   <p className="text-xs font-medium uppercase tracking-wider text-gray-400">
                     Recent Transactions
                   </p>
-                  {trackedTransactions && trackedTransactions.length > 0 && onClearHistory && (
+                  {displayTransactions.length > 0 && effectiveClearHistory && (
                     <button
                       type="button"
-                      onClick={onClearHistory}
+                      onClick={effectiveClearHistory}
                       className="text-xs text-gray-500 transition-colors hover:text-gray-300"
                     >
                       Clear all
@@ -451,9 +517,9 @@ export function AccountModal({
                 </div>
 
                 {/* Enhanced tracked transactions (PROMPT 5) */}
-                {trackedTransactions && trackedTransactions.length > 0 ? (
+                {displayTransactions.length > 0 ? (
                   <div className="max-h-64 space-y-2 overflow-y-auto">
-                    {trackedTransactions.slice(0, 10).map((tx) => {
+                    {displayTransactions.slice(0, 10).map((tx) => {
                       const isPending =
                         tx.status === 'pending' ||
                         tx.status === 'confirming' ||

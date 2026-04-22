@@ -56,6 +56,15 @@ ENDPOINT_LIMITS: list[tuple[str, str, int, int, str]] = [
     ("POST", "/api/v1/dac8/generate",                 5,    60,  "ip"),
     ("POST", "/api/v1/webhooks/alchemy",           1000,    60,  "ip"),
     ("GET",  "/api/v1/audit/log",                    30,    60,  "ip"),
+    # End-user auth (Google OAuth + session mgmt)
+    ("POST", "/api/v1/auth/google",                   5,   600,  "ip"),   # 5 per 10min
+    ("POST", "/api/v1/auth/refresh",                 20,    60,  "ip"),   # 20/min
+    ("POST", "/api/v1/auth/logout",                  30,    60,  "ip"),   # 30/min
+    # User-scoped saved-routes CRUD (defense in depth over the auth gate)
+    ("POST",   "/api/v1/user/routes",                30,    60,  "ip"),
+    ("PATCH",  "/api/v1/user/routes",                60,    60,  "ip"),
+    ("DELETE", "/api/v1/user/routes",                30,    60,  "ip"),
+    ("GET",    "/api/v1/user/routes",               120,    60,  "ip"),
 ]
 
 # Public checkout polling: when X-Checkout-Public header present

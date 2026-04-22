@@ -97,6 +97,7 @@ celery.conf.update(
         "app.tasks.periodic_tasks.cleanup_old_locks": {"queue": "analytics"},
         "app.tasks.notification_tasks.send_notification_task": {"queue": "notify"},
         "app.tasks.notification_tasks.send_daily_digest": {"queue": "notify"},
+        "app.tasks.email_tasks.send_new_device_email_task": {"queue": "notify"},
         "app.tasks.webhook_tasks.process_webhook_deliveries": {"queue": "notify"},
         "app.tasks.webhook_tasks.expire_pending_intents": {"queue": "notify"},
         "app.tasks.matching_tasks.match_transaction_task": {"queue": "default"},
@@ -110,8 +111,10 @@ celery.conf.update(
         "app.tasks.sweep_tasks",
         "app.tasks.periodic_tasks",
         "app.tasks.notification_tasks",
+        "app.tasks.email_tasks",
         "app.tasks.webhook_tasks",
         "app.tasks.matching_tasks",
+        "app.tasks.deletion_tasks",
     ],
 )
 
@@ -188,5 +191,11 @@ celery.conf.beat_schedule = {
     "expire-pending-intents": {
         "task": "app.tasks.webhook_tasks.expire_pending_intents",
         "schedule": 60.0,  # every 60 seconds
+    },
+    "run-scheduled-account-deletions": {
+        # GDPR art. 17 hard-delete cron — scans users past their 30-day
+        # grace window and purges them (row-drop cascades to all children).
+        "task": "tasks.run_scheduled_deletions",
+        "schedule": crontab(hour=3, minute=0),  # daily 03:00 UTC
     },
 }
