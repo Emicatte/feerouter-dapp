@@ -8,6 +8,7 @@ import {
   type KnownDevice,
 } from '@/hooks/useAccountSecurity'
 import { DeleteAccountModal } from './DeleteAccountModal'
+import { SignInMethodsSection } from './SignInMethodsSection'
 
 const ORANGE = '#C8512C'
 const INK = '#2C2C2A'
@@ -160,6 +161,8 @@ export function SecuritySettings() {
         }}
         t={t}
       />
+
+      <SignInMethodsSection />
 
       {!deletionPending ? (
         <DangerZone
