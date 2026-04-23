@@ -319,6 +319,8 @@ from app.api.user_wallets_routes import router as user_wallets_router
 app.include_router(user_wallets_router)
 from app.api.user_account_routes import router as user_account_router
 app.include_router(user_account_router)
+from app.api.account_settings_routes import router as account_linking_router
+app.include_router(account_linking_router)
 from app.api.user_api_keys_routes import router as user_api_keys_router
 app.include_router(user_api_keys_router)
 from app.api.organizations_routes import router as organizations_router
