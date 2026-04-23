@@ -520,9 +520,15 @@ async def check_email(db: AsyncSession, email: str) -> dict:
         await db.execute(select(User).where(User.email == email))
     ).scalar_one_or_none()
     if user is None:
-        return {"exists": False, "has_google": False, "has_password": False}
+        return {
+            "exists": False,
+            "has_google": False,
+            "has_password": False,
+            "has_github": False,
+        }
     return {
         "exists": True,
         "has_google": user.google_sub is not None,
         "has_password": user.password_hash is not None,
+        "has_github": user.github_sub is not None,
     }

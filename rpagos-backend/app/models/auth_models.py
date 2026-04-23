@@ -74,6 +74,8 @@ class User(Base):
 
     id = Column(_UUID(), primary_key=True)
     google_sub = Column(Text, nullable=True, unique=True, index=True)
+    github_sub = Column(Text, nullable=True, unique=True, index=True)
+    github_username = Column(Text, nullable=True)
     email = Column(Text, nullable=False, index=True)
     email_verified = Column(Boolean, nullable=False, default=False)
     email_verified_at = Column(TIMESTAMP(timezone=True), nullable=True)

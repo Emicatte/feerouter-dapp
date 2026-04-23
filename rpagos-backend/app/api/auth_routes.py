@@ -29,6 +29,7 @@ from app.middleware.rate_limit import _redis_count, _redis_record
 from app.models.auth_models import User, UserSession
 from app.models.auth_schemas import (
     AuthResponse,
+    GitHubLoginRequest,
     GoogleLoginRequest,
     UserMeResponse,
 )
@@ -251,6 +252,178 @@ async def google_login(
         google_sub=user.google_sub,
         ip_address=ip, user_agent=ua,
         correlation_id=correlation_id,
+    )
+
+    _set_auth_cookies(response, session_id=session_id, refresh_token=refresh_token)
+
+    return AuthResponse(
+        access_token=access_token,
+        expires_in=ACCESS_TOKEN_TTL,
+        user=_user_to_response(user),
+    )
+
+
+# ══════════════════════════════════════════════════════════════
+#  POST /api/v1/auth/github
+# ══════════════════════════════════════════════════════════════
+
+@router.post("/github", response_model=AuthResponse)
+async def github_login(
+    payload: GitHubLoginRequest,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> AuthResponse:
+    from app.services.github_oauth_service import (
+        GitHubOAuthError,
+        verify_github_access_token,
+    )
+
+    ip = get_real_client_ip(request)
+    ua = request.headers.get("User-Agent", "unknown")[:500]
+    correlation_id = _correlation_id(request)
+
+    # ── Verify GitHub access token + fetch profile ──
+    try:
+        profile = await verify_github_access_token(payload.access_token)
+    except GitHubOAuthError as e:
+        await record_auth_event(
+            event_type="login_failure",
+            ip_address=ip, user_agent=ua,
+            correlation_id=correlation_id,
+            details={"code": f"github_{e.code}", "message": e.detail},
+        )
+        status = 401 if e.code == "invalid_token" else 400
+        if e.code in ("github_api_error", "network_error"):
+            status = 503
+        raise HTTPException(
+            status_code=status,
+            detail={"code": f"github_{e.code}", "message": e.detail},
+        )
+
+    # ── Lookup by github_sub first ──
+    res = await db.execute(select(User).where(User.github_sub == profile.sub))
+    user = res.scalar_one_or_none()
+
+    is_new_user = user is None
+    if user is None:
+        # Account linking guard: if email already bound to another provider,
+        # refuse. Multi-provider merge is out of scope (Prompt 15+).
+        email_res = await db.execute(
+            select(User).where(User.email == profile.email)
+        )
+        collision = email_res.scalar_one_or_none()
+        if collision is not None:
+            await record_auth_event(
+                event_type="login_failure",
+                user_id=str(collision.id),
+                ip_address=ip, user_agent=ua,
+                correlation_id=correlation_id,
+                details={
+                    "code": "email_already_registered",
+                    "github_sub": profile.sub,
+                    "github_username": profile.username,
+                },
+            )
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "email_already_registered",
+                    "message": "This email is already registered with another sign-in method",
+                },
+            )
+
+        user = User(
+            id=str(uuid4()),
+            github_sub=profile.sub,
+            github_username=profile.username,
+            email=profile.email,
+            email_verified=True,
+            email_verified_at=datetime.now(timezone.utc),
+            display_name=profile.display_name or profile.username,
+            avatar_url=profile.avatar_url,
+            last_login_at=datetime.now(timezone.utc),
+            last_login_ip=ip,
+        )
+        db.add(user)
+        await db.flush()
+    else:
+        if user.status != "active":
+            await record_auth_event(
+                event_type="login_failure",
+                user_id=str(user.id),
+                ip_address=ip, user_agent=ua,
+                correlation_id=correlation_id,
+                details={
+                    "code": "account_suspended",
+                    "status": user.status,
+                    "github_sub": user.github_sub,
+                },
+            )
+            raise HTTPException(
+                status_code=403,
+                detail={"code": "account_suspended"},
+            )
+        user.last_login_at = datetime.now(timezone.utc)
+        user.last_login_ip = ip
+        user.github_username = profile.username
+        if profile.avatar_url:
+            user.avatar_url = profile.avatar_url
+        if profile.display_name:
+            user.display_name = profile.display_name
+
+    # ── Create Redis-authoritative session ──
+    try:
+        session_id, access_token, refresh_token, refresh_hash = await create_session(
+            user_id=str(user.id), ip=ip, user_agent=ua,
+        )
+    except AuthError as e:
+        await record_auth_event(
+            event_type="login_failure",
+            user_id=str(user.id),
+            ip_address=ip, user_agent=ua,
+            correlation_id=correlation_id,
+            details={"code": e.code, "github_sub": user.github_sub},
+        )
+        raise HTTPException(status_code=503, detail={"code": e.code})
+
+    # ── Persist session backup row (audit) ──
+    session_row = UserSession(
+        id=str(uuid4()),
+        user_id=user.id,
+        session_id=session_id,
+        refresh_token_hash=refresh_hash,
+        expires_at=datetime.now(timezone.utc) + timedelta(seconds=REFRESH_TOKEN_TTL),
+        ip_address=ip,
+        user_agent=ua,
+    )
+    db.add(session_row)
+    await db.commit()
+
+    # Auto-create the personal org for first-time sign-ins (idempotent).
+    if is_new_user:
+        try:
+            from app.services.org_service import create_personal_org
+            await create_personal_org(db, user)
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            log.exception(
+                "personal_org_creation_failed",
+                extra={"user_id": str(user.id)},
+            )
+
+    await record_auth_event(
+        event_type="login_success",
+        user_id=str(user.id), session_id=session_id,
+        ip_address=ip, user_agent=ua,
+        correlation_id=correlation_id,
+        details={
+            "provider": "github",
+            "github_sub": user.github_sub,
+            "github_username": user.github_username,
+            "is_new_user": is_new_user,
+        },
     )
 
     _set_auth_cookies(response, session_id=session_id, refresh_token=refresh_token)

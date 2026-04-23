@@ -82,6 +82,7 @@ class CheckEmailResponse(BaseModel):
     exists: bool
     has_google: bool
     has_password: bool
+    has_github: bool
 
 
 class LoginResponse(BaseModel):

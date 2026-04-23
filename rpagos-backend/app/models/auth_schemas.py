@@ -9,6 +9,10 @@ class GoogleLoginRequest(BaseModel):
     nonce: Optional[str] = Field(default=None, max_length=256)
 
 
+class GitHubLoginRequest(BaseModel):
+    access_token: str = Field(min_length=20, max_length=512)
+
+
 class UserMeResponse(BaseModel):
     id: str
     email: str
