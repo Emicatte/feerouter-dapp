@@ -39,6 +39,20 @@ EXEMPT_PATHS = {
     "/api/v1/webhooks/alchemy",  # Usa HMAC, non API key
     "/ws/",  # WebSocket
     "/api/v1/keys",  # Key management uses wallet address, not API key
+    # ── JWT-authenticated user & org endpoints ──
+    "/api/v1/auth",            # OAuth + email login/signup/refresh/logout/me
+    "/api/v1/user/",           # routes, transactions, contacts, notifications,
+                               # wallets, account, api-keys (JWT via require_user_id)
+    "/api/v1/organizations",   # org CRUD + memberships + invites (JWT)
+    "/api/v1/invites",         # invite preview/accept/decline (JWT)
+    # ── Wallet-signature auth (X-Wallet-Address + X-Wallet-Signature) ──
+    "/api/v1/distributions",   # require_wallet_auth
+    "/api/v1/forwarding",      # sweeper forwarding/*, require_wallet_auth
+    # ── Admin token / internal ──
+    "/api/v1/audit",           # X-Admin-Token
+    "/api/internal/signing",   # called by Next.js oracle, internal-only
+    # ── HMAC-signed ingestion ──
+    "/api/v1/tx/callback",     # verify_signature() (HMAC)
 }
 
 def is_exempt(path: str) -> bool:
