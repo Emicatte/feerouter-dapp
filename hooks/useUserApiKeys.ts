@@ -142,7 +142,17 @@ export function useUserApiKeys() {
             }),
           },
         )
-        await reload()
+        // Mutation succeeded. Reload is best-effort — a transient failure
+        // here must not surface as a mutation error and must not cascade
+        // into apiCall's 401-triggered signout path.
+        try {
+          await reload()
+        } catch (reloadErr) {
+          console.warn(
+            '[useUserApiKeys] reload after createKey failed:',
+            reloadErr,
+          )
+        }
         return result
       } catch (e) {
         const code = e instanceof Error ? e.message : 'unknown'
@@ -173,7 +183,17 @@ export function useUserApiKeys() {
             body: JSON.stringify({ label }),
           },
         )
-        await reload()
+        // Mutation succeeded. Reload is best-effort — a transient failure
+        // here must not surface as a mutation error and must not cascade
+        // into apiCall's 401-triggered signout path.
+        try {
+          await reload()
+        } catch (reloadErr) {
+          console.warn(
+            '[useUserApiKeys] reload after updateLabel failed:',
+            reloadErr,
+          )
+        }
       } catch (e) {
         setKeys(prev)
         const code = e instanceof Error ? e.message : 'unknown'
@@ -195,7 +215,17 @@ export function useUserApiKeys() {
         await apiCall<void>(`/api/v1/user/api-keys/${id}`, token, {
           method: 'DELETE',
         })
-        await reload()
+        // Mutation succeeded. Reload is best-effort — a transient failure
+        // here must not surface as a mutation error and must not cascade
+        // into apiCall's 401-triggered signout path.
+        try {
+          await reload()
+        } catch (reloadErr) {
+          console.warn(
+            '[useUserApiKeys] reload after revokeKey failed:',
+            reloadErr,
+          )
+        }
       } catch (e) {
         const code = e instanceof Error ? e.message : 'unknown'
         setError(code)
