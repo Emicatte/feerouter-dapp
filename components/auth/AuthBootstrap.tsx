@@ -16,6 +16,10 @@ import { useEffect, useRef } from 'react'
 export function AuthBootstrap() {
   const { data: session, update } = useSession()
   const exchanging = useRef(false)
+  // Per-token dedupe: session.update() is async and the next re-render can
+  // fire this effect before access_token has propagated, with id_token still
+  // set → without this guard we'd POST /auth/google twice and trip 429.
+  const processedTokens = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     const s = session as {
@@ -28,6 +32,8 @@ export function AuthBootstrap() {
     const accessToken = s?.access_token
     if (accessToken || exchanging.current) return
     if (!idToken && !githubAccessToken) return
+    const key = idToken ?? githubAccessToken!
+    if (processedTokens.current.has(key)) return
 
     exchanging.current = true
     void (async () => {
@@ -47,6 +53,7 @@ export function AuthBootstrap() {
         if (!res.ok) return
         const data = (await res.json()) as { access_token?: string }
         if (!data.access_token) return
+        processedTokens.current.add(key)
         await update({ access_token: data.access_token })
       } catch {
         /* swallow: the next sign-in attempt will retry */
