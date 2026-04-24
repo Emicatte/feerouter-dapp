@@ -4,6 +4,7 @@ import { getTranslations } from 'next-intl/server'
 import { authOptions } from '@/lib/auth-options'
 import { SettingsSidebar } from '@/components/settings/SettingsSidebar'
 import { OrgSwitcher } from '@/components/settings/OrgSwitcher'
+import AuthHeader from '@/components/auth/AuthHeader'
 
 export default async function SettingsLayout({
   children,
@@ -21,7 +22,8 @@ export default async function SettingsLayout({
 
   return (
     <div style={{ minHeight: '100vh', background: '#FAFAFA' }}>
-      <div className="max-w-5xl mx-auto px-6 py-10">
+      <AuthHeader />
+      <div className="max-w-5xl mx-auto px-6 py-10" style={{ paddingTop: '5rem' }}>
         <header className="mb-8 flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h1 className="text-3xl font-bold" style={{ color: '#2C2C2A' }}>
