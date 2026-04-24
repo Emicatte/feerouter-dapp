@@ -46,9 +46,8 @@ export interface DeletionRequestInput {
 
 export function useAccountSecurity() {
   const { data: session, status } = useSession()
-  const tokenRef = useRef<string | undefined>(
-    (session as { access_token?: string } | null)?.access_token,
-  )
+  const accessToken = (session as { access_token?: string } | null)?.access_token
+  const tokenRef = useRef<string | undefined>(accessToken)
 
   const [accountStatus, setAccountStatus] = useState<AccountStatus | null>(null)
   const [sessions, setSessions] = useState<ActiveSession[]>([])
@@ -75,7 +74,7 @@ export function useAccountSecurity() {
   const clearError = useCallback(() => setError(null), [])
 
   const reloadStatus = useCallback(async () => {
-    if (status !== 'authenticated') return
+    if (status !== 'authenticated' || !accessToken) return
     try {
       const data = await apiCall<AccountStatus>(
         '/api/v1/user/account/status',
@@ -87,10 +86,10 @@ export function useAccountSecurity() {
       setError(code)
       console.error('[useAccountSecurity] reloadStatus', e)
     }
-  }, [status])
+  }, [status, accessToken])
 
   const reloadSessions = useCallback(async () => {
-    if (status !== 'authenticated') return
+    if (status !== 'authenticated' || !accessToken) return
     try {
       const data = await apiCall<{ sessions: ActiveSession[] }>(
         '/api/v1/user/account/sessions',
@@ -102,10 +101,10 @@ export function useAccountSecurity() {
       setError(code)
       console.error('[useAccountSecurity] reloadSessions', e)
     }
-  }, [status])
+  }, [status, accessToken])
 
   const reloadDevices = useCallback(async () => {
-    if (status !== 'authenticated') return
+    if (status !== 'authenticated' || !accessToken) return
     try {
       const data = await apiCall<{ devices: KnownDevice[] }>(
         '/api/v1/user/account/known-devices',
@@ -117,10 +116,10 @@ export function useAccountSecurity() {
       setError(code)
       console.error('[useAccountSecurity] reloadDevices', e)
     }
-  }, [status])
+  }, [status, accessToken])
 
   const reloadAll = useCallback(async () => {
-    if (status !== 'authenticated') {
+    if (status !== 'authenticated' || !accessToken) {
       setAccountStatus(null)
       setSessions([])
       setDevices([])
@@ -133,7 +132,7 @@ export function useAccountSecurity() {
     } finally {
       setLoading(false)
     }
-  }, [status, reloadStatus, reloadSessions, reloadDevices])
+  }, [status, accessToken, reloadStatus, reloadSessions, reloadDevices])
 
   useEffect(() => {
     void reloadAll()

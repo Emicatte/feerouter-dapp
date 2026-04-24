@@ -64,9 +64,8 @@ export function localToServer(c: AddressContactLike): CreateContactPayload {
 
 export function useUserContacts() {
   const { data: session, status } = useSession()
-  const tokenRef = useRef<string | undefined>(
-    (session as { access_token?: string } | null)?.access_token,
-  )
+  const accessToken = (session as { access_token?: string } | null)?.access_token
+  const tokenRef = useRef<string | undefined>(accessToken)
   const [contacts, setContacts] = useState<ServerContact[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -85,7 +84,7 @@ export function useUserContacts() {
   }, [])
 
   const reload = useCallback(async () => {
-    if (status !== 'authenticated') {
+    if (status !== 'authenticated' || !accessToken) {
       setContacts([])
       return
     }
@@ -102,7 +101,7 @@ export function useUserContacts() {
     } finally {
       setLoading(false)
     }
-  }, [status])
+  }, [status, accessToken])
 
   useEffect(() => {
     void reload()

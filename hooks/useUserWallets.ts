@@ -46,9 +46,8 @@ export interface VerifyAndLinkInput {
 
 export function useUserWallets() {
   const { data: session, status } = useSession()
-  const tokenRef = useRef<string | undefined>(
-    (session as { access_token?: string } | null)?.access_token,
-  )
+  const accessToken = (session as { access_token?: string } | null)?.access_token
+  const tokenRef = useRef<string | undefined>(accessToken)
   const { activeOrg, role: currentUserRole } = useCurrentOrg()
 
   const [wallets, setWallets] = useState<UserWallet[]>([])
@@ -74,7 +73,7 @@ export function useUserWallets() {
   }, [])
 
   const reload = useCallback(async () => {
-    if (status !== 'authenticated') {
+    if (status !== 'authenticated' || !accessToken) {
       setWallets([])
       return
     }
@@ -95,7 +94,7 @@ export function useUserWallets() {
     } finally {
       setLoading(false)
     }
-  }, [status])
+  }, [status, accessToken])
 
   useEffect(() => {
     void reload()

@@ -17,9 +17,8 @@ export interface SavedRoute {
 
 export function useUserRoutes() {
   const { data: session, status } = useSession()
-  const tokenRef = useRef<string | undefined>(
-    (session as { access_token?: string } | null)?.access_token,
-  )
+  const accessToken = (session as { access_token?: string } | null)?.access_token
+  const tokenRef = useRef<string | undefined>(accessToken)
   const [routes, setRoutes] = useState<SavedRoute[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -39,7 +38,7 @@ export function useUserRoutes() {
   }, [])
 
   const reload = useCallback(async () => {
-    if (status !== 'authenticated') {
+    if (status !== 'authenticated' || !accessToken) {
       setRoutes([])
       return
     }
@@ -53,7 +52,7 @@ export function useUserRoutes() {
     } finally {
       setLoading(false)
     }
-  }, [status])
+  }, [status, accessToken])
 
   useEffect(() => {
     void reload()

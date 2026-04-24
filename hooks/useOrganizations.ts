@@ -33,9 +33,8 @@ export interface UpdateOrgInput {
 
 export function useOrganizations() {
   const { data: session, status } = useSession()
-  const tokenRef = useRef<string | undefined>(
-    (session as { access_token?: string } | null)?.access_token,
-  )
+  const accessToken = (session as { access_token?: string } | null)?.access_token
+  const tokenRef = useRef<string | undefined>(accessToken)
 
   const [organizations, setOrganizations] = useState<OrganizationListItem[]>([])
   const [activeOrgId, setActiveOrgId] = useState<string | null>(null)
@@ -59,7 +58,7 @@ export function useOrganizations() {
   }, [])
 
   const reload = useCallback(async () => {
-    if (status !== 'authenticated') {
+    if (status !== 'authenticated' || !accessToken) {
       setOrganizations([])
       setActiveOrgId(null)
       return
@@ -80,7 +79,7 @@ export function useOrganizations() {
     } finally {
       setLoading(false)
     }
-  }, [status])
+  }, [status, accessToken])
 
   useEffect(() => {
     void reload()

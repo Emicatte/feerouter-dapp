@@ -14,9 +14,8 @@ export interface AuthMethods {
 
 export function useAccountMethods() {
   const { data: session, status } = useSession()
-  const tokenRef = useRef<string | undefined>(
-    (session as { access_token?: string } | null)?.access_token,
-  )
+  const accessToken = (session as { access_token?: string } | null)?.access_token
+  const tokenRef = useRef<string | undefined>(accessToken)
 
   const [methods, setMethods] = useState<AuthMethods | null>(null)
   const [loading, setLoading] = useState<boolean>(false)
@@ -41,7 +40,7 @@ export function useAccountMethods() {
   const clearError = useCallback(() => setError(null), [])
 
   const reload = useCallback(async () => {
-    if (status !== 'authenticated') {
+    if (status !== 'authenticated' || !accessToken) {
       setMethods(null)
       return
     }
@@ -60,7 +59,7 @@ export function useAccountMethods() {
     } finally {
       setLoading(false)
     }
-  }, [status])
+  }, [status, accessToken])
 
   useEffect(() => {
     void reload()

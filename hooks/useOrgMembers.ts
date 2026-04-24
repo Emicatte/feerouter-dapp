@@ -39,9 +39,8 @@ export interface InviteMemberInput {
 
 export function useOrgMembers(orgId: string | null) {
   const { data: session, status } = useSession()
-  const tokenRef = useRef<string | undefined>(
-    (session as { access_token?: string } | null)?.access_token,
-  )
+  const accessToken = (session as { access_token?: string } | null)?.access_token
+  const tokenRef = useRef<string | undefined>(accessToken)
 
   const [members, setMembers] = useState<MembershipItem[]>([])
   const [maxAllowed, setMaxAllowed] = useState<number>(10)
@@ -66,7 +65,7 @@ export function useOrgMembers(orgId: string | null) {
   }, [])
 
   const reload = useCallback(async () => {
-    if (status !== 'authenticated' || !orgId) {
+    if (status !== 'authenticated' || !accessToken || !orgId) {
       setMembers([])
       setInvites([])
       return
@@ -94,7 +93,7 @@ export function useOrgMembers(orgId: string | null) {
     } finally {
       setLoading(false)
     }
-  }, [status, orgId])
+  }, [status, accessToken, orgId])
 
   useEffect(() => {
     void reload()

@@ -46,9 +46,8 @@ export interface CreateApiKeyInput {
 
 export function useUserApiKeys() {
   const { data: session, status } = useSession()
-  const tokenRef = useRef<string | undefined>(
-    (session as { access_token?: string } | null)?.access_token,
-  )
+  const accessToken = (session as { access_token?: string } | null)?.access_token
+  const tokenRef = useRef<string | undefined>(accessToken)
   const { activeOrg, role: currentUserRole } = useCurrentOrg()
 
   const [keys, setKeys] = useState<ApiKeyListItem[]>([])
@@ -75,7 +74,7 @@ export function useUserApiKeys() {
   }, [])
 
   const reload = useCallback(async () => {
-    if (status !== 'authenticated') {
+    if (status !== 'authenticated' || !accessToken) {
       setKeys([])
       return
     }
@@ -96,7 +95,7 @@ export function useUserApiKeys() {
     } finally {
       setLoading(false)
     }
-  }, [status])
+  }, [status, accessToken])
 
   useEffect(() => {
     void reload()
@@ -114,7 +113,7 @@ export function useUserApiKeys() {
   }, [reload])
 
   const loadAvailableScopes = useCallback(async () => {
-    if (status !== 'authenticated') return
+    if (status !== 'authenticated' || !accessToken) return
     try {
       const data = await apiCall<{ scopes: string[] }>(
         '/api/v1/user/api-keys/available-scopes',
@@ -124,7 +123,7 @@ export function useUserApiKeys() {
     } catch (e) {
       console.error('[useUserApiKeys] loadAvailableScopes', e)
     }
-  }, [status])
+  }, [status, accessToken])
 
   const createKey = useCallback(
     async (input: CreateApiKeyInput): Promise<ApiKeyCreateResult> => {

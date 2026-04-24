@@ -89,9 +89,8 @@ interface BulkImportResponse {
 
 export function useUserTransactions(filters: TxFilters = {}) {
   const { data: session, status } = useSession()
-  const tokenRef = useRef<string | undefined>(
-    (session as { access_token?: string } | null)?.access_token,
-  )
+  const accessToken = (session as { access_token?: string } | null)?.access_token
+  const tokenRef = useRef<string | undefined>(accessToken)
   const [transactions, setTransactions] = useState<ServerTransaction[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -124,7 +123,7 @@ export function useUserTransactions(filters: TxFilters = {}) {
   )
 
   const reload = useCallback(async () => {
-    if (status !== 'authenticated') {
+    if (status !== 'authenticated' || !accessToken) {
       setTransactions([])
       cursorRef.current = null
       setHasMore(false)
@@ -147,14 +146,14 @@ export function useUserTransactions(filters: TxFilters = {}) {
     } finally {
       setLoading(false)
     }
-  }, [status, buildQuery])
+  }, [status, accessToken, buildQuery])
 
   useEffect(() => {
     void reload()
   }, [reload])
 
   const loadMore = useCallback(async () => {
-    if (status !== 'authenticated' || !cursorRef.current || loading) return
+    if (status !== 'authenticated' || !accessToken || !cursorRef.current || loading) return
     setLoading(true)
     try {
       const q = buildQuery(cursorRef.current)
@@ -170,7 +169,7 @@ export function useUserTransactions(filters: TxFilters = {}) {
     } finally {
       setLoading(false)
     }
-  }, [status, loading, buildQuery])
+  }, [status, accessToken, loading, buildQuery])
 
   const create = useCallback(async (payload: CreateTxPayload) => {
     if (status !== 'authenticated') return null
