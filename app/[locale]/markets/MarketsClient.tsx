@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useCoinGecko } from '@/hooks/useCoinGecko';
 import AnimatedNumber from '@/components/motion/AnimatedNumber';
 import { Link } from '@/i18n/navigation';
@@ -70,6 +71,8 @@ function formatPrice(n: number): string {
 
 export default function MarketsClient() {
   const t = useTranslations('markets');
+  const sp = useSearchParams();
+  const chainHint = sp.get('chain');
   const [page, setPage] = useState(1);
   const [query, setQuery] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('market_cap_rank');
@@ -165,6 +168,20 @@ export default function MarketsClient() {
             {t('pageSubtitle')}
           </p>
         </div>
+
+        {/* Chain hint chip (from landing carousel deep-link) */}
+        {chainHint && (
+          <div className="mb-6 flex items-center gap-2 text-sm">
+            <span className="text-[#0A0A0A]/60">Chain hint:</span>
+            <span className="font-semibold text-[#0A0A0A] capitalize">{chainHint}</span>
+            <Link
+              href="/markets"
+              className="text-xs text-[#C8512C] underline hover:no-underline ml-1"
+            >
+              Clear
+            </Link>
+          </div>
+        )}
 
         {/* Search + status */}
         <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">

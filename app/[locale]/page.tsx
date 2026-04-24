@@ -44,9 +44,9 @@ import { C, EASE } from '@/app/designTokens'
 import SplitText from '@/components/motion/SplitText'
 import SmoothScroll from '@/components/SmoothScroll'
 import FadeIn from '@/components/motion/FadeIn'
-import { StaggerContainer, StaggerItem } from '@/components/motion/Stagger'
 import { LandingAuthButtons } from '@/components/auth/LandingAuthButtons'
 import { WhySignInSection } from '@/components/landing/WhySignInSection'
+import SupportedNetworksCarousel from '@/components/landing/SupportedNetworksCarousel'
 
 
 
@@ -829,12 +829,6 @@ function OverlayShell({ active, onClose, children, isMobile }: { active: boolean
 function HeroTitle({ isMobile }: { isMobile?: boolean }) {
   const t = useTranslations('hero')
   const HERO_EASE = [0.22, 1, 0.36, 1] as [number, number, number, number]
-  const metrics = [
-    { value: '12', label: t('metrics.chainsLive') },
-    { value: '3-level', label: t('metrics.amlScreening') },
-    { value: 'DAC8', label: t('metrics.euReady') },
-    { value: '0', label: t('metrics.custodialRisk') },
-  ]
 
   return (
     <div style={{
@@ -962,41 +956,19 @@ function HeroTitle({ isMobile }: { isMobile?: boolean }) {
           background: C.border,
           maxWidth: 1600,
           marginTop: 50,
-          marginBottom: 32,
+          marginBottom: 8,
         }}
       />
 
-      {/* Metrics — stagger 1.5s */}
-      <StaggerContainer
-        staggerDelay={0.12}
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: isMobile ? 24 : 56,
-          maxWidth: 1100,
-        }}
+      {/* Supported Networks carousel — replaces old metrics row */}
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8, delay: 1.5, ease: HERO_EASE }}
+        style={{ marginLeft: isMobile ? -20 : -96, marginRight: isMobile ? -20 : -96 }}
       >
-        {metrics.map((m) => (
-          <StaggerItem key={m.label}>
-            <div style={{
-              fontFamily: C.D,
-              fontSize: isMobile ? 32 : 44,
-              fontWeight: 600,
-              color: C.text,
-              letterSpacing: '-0.02em',
-              lineHeight: 1,
-              marginBottom: 8,
-            }}>{m.value}</div>
-            <div style={{
-              fontFamily: C.M,
-              fontSize: 12,
-              color: C.sub,
-              letterSpacing: '0.14em',
-              textTransform: 'uppercase' as const,
-            }}>{m.label}</div>
-          </StaggerItem>
-        ))}
-      </StaggerContainer>
+        <SupportedNetworksCarousel />
+      </motion.div>
     </div>
   )
 }
