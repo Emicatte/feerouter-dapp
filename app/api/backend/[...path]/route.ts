@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+export const maxDuration = 30
+
 /**
  * Catch-all proxy to the Python rpagos-backend.
  *
@@ -78,7 +80,7 @@ async function proxyRequest(
       body,
       // Server-to-server: no caching, no credentials shenanigans.
       cache: 'no-store',
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(25000),
     })
 
     // Forward response body and status verbatim. We use .text() (not .json())

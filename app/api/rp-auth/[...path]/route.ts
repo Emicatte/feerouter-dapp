@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+export const maxDuration = 30
+
 /**
  * Cookie-aware proxy to the RPagos backend.
  *
@@ -60,7 +62,7 @@ async function proxyRequest(
       headers,
       body,
       cache: 'no-store',
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(25000),
     })
 
     const data = await backendRes.text()

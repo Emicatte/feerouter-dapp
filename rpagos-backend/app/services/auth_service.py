@@ -17,6 +17,7 @@ import hashlib
 import json
 import logging
 import secrets
+import threading
 import time
 from typing import Optional, Tuple
 
@@ -62,14 +63,57 @@ class AuthError(Exception):
 
 # ─── Google ID token verification ─────────────────────────────
 
-_g_request_cache: Optional[g_requests.Request] = None
+# Module-level JWKS cache. google-auth's verify_oauth2_token calls
+# request(url=GOOGLE_CERTS_URL) on every token verification. Its in-process
+# cert cache dies on every worker restart (frequent on Render free-tier), so
+# we layer a 1h TTL cache keyed by URL to amortize the outbound HTTPS fetch
+# (free-tier egress can stall 10-30 s, overrunning upstream proxy timeouts).
+_certs_cache: dict[str, tuple[float, object]] = {}
+_certs_lock = threading.Lock()
+_CERTS_TTL_S = 3600
 
 
-def _google_request() -> g_requests.Request:
-    """Cached google.auth.transport.requests.Request (internally caches keys)."""
+class _CachingRequest(g_requests.Request):
+    # threading.Lock (not asyncio.Lock) because this is driven from inside
+    # asyncio.to_thread. Also bounds the outbound timeout to 60 s so a
+    # stuck fetch surfaces as an error well inside Vercel's 25 s cap.
+    def __call__(
+        self,
+        url,
+        method="GET",
+        body=None,
+        headers=None,
+        timeout=60,
+        **kwargs,
+    ):
+        now = time.monotonic()
+        if method == "GET":
+            with _certs_lock:
+                hit = _certs_cache.get(url)
+                if hit and hit[0] > now:
+                    return hit[1]
+        resp = super().__call__(
+            url,
+            method=method,
+            body=body,
+            headers=headers,
+            timeout=timeout,
+            **kwargs,
+        )
+        if method == "GET" and 200 <= resp.status < 300:
+            with _certs_lock:
+                _certs_cache[url] = (now + _CERTS_TTL_S, resp)
+        return resp
+
+
+_g_request_cache: Optional[_CachingRequest] = None
+
+
+def _google_request() -> _CachingRequest:
+    """Cached Request instance with per-URL JWKS caching."""
     global _g_request_cache
     if _g_request_cache is None:
-        _g_request_cache = g_requests.Request()
+        _g_request_cache = _CachingRequest()
     return _g_request_cache
 
 
