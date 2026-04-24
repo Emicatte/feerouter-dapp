@@ -67,6 +67,7 @@ export function useAccountMethods() {
 
   const _mutate = useCallback(
     async (path: string, body?: unknown) => {
+      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       try {
@@ -87,7 +88,7 @@ export function useAccountMethods() {
         setSaving(false)
       }
     },
-    [reload],
+    [reload, accessToken],
   )
 
   const addPassword = useCallback(

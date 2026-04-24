@@ -101,6 +101,7 @@ export function useOrgMembers(orgId: string | null) {
 
   const inviteMember = useCallback(
     async (input: InviteMemberInput): Promise<InviteItem> => {
+      if (!accessToken) throw new Error('session_not_ready')
       if (!orgId) throw new Error('no_active_org')
       setSaving(true)
       setError(null)
@@ -123,11 +124,12 @@ export function useOrgMembers(orgId: string | null) {
         setSaving(false)
       }
     },
-    [orgId, reload],
+    [orgId, reload, accessToken],
   )
 
   const changeRole = useCallback(
     async (targetUserId: string, role: OrgRole): Promise<void> => {
+      if (!accessToken) throw new Error('session_not_ready')
       if (!orgId) throw new Error('no_active_org')
       setSaving(true)
       setError(null)
@@ -149,11 +151,12 @@ export function useOrgMembers(orgId: string | null) {
         setSaving(false)
       }
     },
-    [orgId, reload],
+    [orgId, reload, accessToken],
   )
 
   const removeMember = useCallback(
     async (targetUserId: string): Promise<void> => {
+      if (!accessToken) throw new Error('session_not_ready')
       if (!orgId) throw new Error('no_active_org')
       setSaving(true)
       setError(null)
@@ -172,11 +175,12 @@ export function useOrgMembers(orgId: string | null) {
         setSaving(false)
       }
     },
-    [orgId, reload],
+    [orgId, reload, accessToken],
   )
 
   const revokeInvite = useCallback(
     async (inviteId: string): Promise<void> => {
+      if (!accessToken) throw new Error('session_not_ready')
       if (!orgId) throw new Error('no_active_org')
       setSaving(true)
       setError(null)
@@ -195,7 +199,7 @@ export function useOrgMembers(orgId: string | null) {
         setSaving(false)
       }
     },
-    [orgId, reload],
+    [orgId, reload, accessToken],
   )
 
   return {

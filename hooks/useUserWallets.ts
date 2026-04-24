@@ -113,6 +113,7 @@ export function useUserWallets() {
 
   const requestChallenge = useCallback(
     async (address: string, chainId: number): Promise<WalletChallenge> => {
+      if (!accessToken) throw new Error('session_not_ready')
       setError(null)
       return apiCall<WalletChallenge>(
         '/api/v1/user/wallets/challenge',
@@ -127,11 +128,12 @@ export function useUserWallets() {
         },
       )
     },
-    [],
+    [accessToken],
   )
 
   const verifyAndLink = useCallback(
     async (input: VerifyAndLinkInput): Promise<UserWallet> => {
+      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       try {
@@ -160,11 +162,12 @@ export function useUserWallets() {
         setSaving(false)
       }
     },
-    [reload],
+    [reload, accessToken],
   )
 
   const setPrimary = useCallback(
     async (id: string): Promise<void> => {
+      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       const prev = wallets
@@ -190,11 +193,12 @@ export function useUserWallets() {
         setSaving(false)
       }
     },
-    [wallets, reload],
+    [wallets, reload, accessToken],
   )
 
   const updateLabel = useCallback(
     async (id: string, label: string): Promise<void> => {
+      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       const prev = wallets
@@ -220,11 +224,12 @@ export function useUserWallets() {
         setSaving(false)
       }
     },
-    [wallets, reload],
+    [wallets, reload, accessToken],
   )
 
   const unlink = useCallback(
     async (id: string): Promise<void> => {
+      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       try {
@@ -240,7 +245,7 @@ export function useUserWallets() {
         setSaving(false)
       }
     },
-    [reload],
+    [reload, accessToken],
   )
 
   return {

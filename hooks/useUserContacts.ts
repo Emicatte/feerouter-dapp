@@ -110,6 +110,7 @@ export function useUserContacts() {
   const upsert = useCallback(
     async (payload: CreateContactPayload) => {
       if (status !== 'authenticated') return null
+      if (!accessToken) throw new Error('session_not_ready')
       try {
         const c = await apiCall<ServerContact>(
           '/api/v1/user/contacts',
@@ -131,12 +132,13 @@ export function useUserContacts() {
         return null
       }
     },
-    [status],
+    [status, accessToken],
   )
 
   const update = useCallback(
     async (id: string, patch: UpdateContactPayload) => {
       if (status !== 'authenticated') return null
+      if (!accessToken) throw new Error('session_not_ready')
       try {
         const c = await apiCall<ServerContact>(
           `/api/v1/user/contacts/${id}`,
@@ -150,12 +152,13 @@ export function useUserContacts() {
         return null
       }
     },
-    [status],
+    [status, accessToken],
   )
 
   const remove = useCallback(
     async (id: string) => {
       if (status !== 'authenticated') return
+      if (!accessToken) throw new Error('session_not_ready')
       try {
         await apiCall<void>(`/api/v1/user/contacts/${id}`, tokenRef.current, {
           method: 'DELETE',
@@ -165,11 +168,12 @@ export function useUserContacts() {
       }
       setContacts((prev) => prev.filter((x) => x.id !== id))
     },
-    [status],
+    [status, accessToken],
   )
 
   const clearAll = useCallback(async () => {
     if (status !== 'authenticated') return
+    if (!accessToken) throw new Error('session_not_ready')
     try {
       await apiCall<void>('/api/v1/user/contacts', tokenRef.current, {
         method: 'DELETE',
@@ -178,11 +182,12 @@ export function useUserContacts() {
       /* 204 body empty */
     }
     setContacts([])
-  }, [status])
+  }, [status, accessToken])
 
   const bulkImport = useCallback(
     async (items: CreateContactPayload[]) => {
       if (status !== 'authenticated' || items.length === 0) return null
+      if (!accessToken) throw new Error('session_not_ready')
       try {
         const res = await apiCall<BulkImportResponse>(
           '/api/v1/user/contacts/bulk-import',
@@ -196,7 +201,7 @@ export function useUserContacts() {
         return null
       }
     },
-    [status, reload],
+    [status, accessToken, reload],
   )
 
   return {

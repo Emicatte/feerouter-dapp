@@ -69,6 +69,7 @@ export function useNotificationPreferences() {
   const toggle = useCallback(
     async (key: BoolKey, value: boolean) => {
       if (status !== 'authenticated' || !preferences) return
+      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       const prev = preferences
       setPreferences({ ...preferences, [key]: value })
@@ -86,7 +87,7 @@ export function useNotificationPreferences() {
         setSaving(false)
       }
     },
-    [status, preferences],
+    [status, accessToken, preferences],
   )
 
   return {

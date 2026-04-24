@@ -127,6 +127,7 @@ export function useUserApiKeys() {
 
   const createKey = useCallback(
     async (input: CreateApiKeyInput): Promise<ApiKeyCreateResult> => {
+      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       try {
@@ -151,11 +152,12 @@ export function useUserApiKeys() {
         setSaving(false)
       }
     },
-    [reload],
+    [reload, accessToken],
   )
 
   const updateLabel = useCallback(
     async (id: string, label: string): Promise<void> => {
+      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       const prev = keys
@@ -181,11 +183,12 @@ export function useUserApiKeys() {
         setSaving(false)
       }
     },
-    [keys, reload],
+    [keys, reload, accessToken],
   )
 
   const revokeKey = useCallback(
     async (id: string): Promise<void> => {
+      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       try {
@@ -201,7 +204,7 @@ export function useUserApiKeys() {
         setSaving(false)
       }
     },
-    [reload],
+    [reload, accessToken],
   )
 
   return {

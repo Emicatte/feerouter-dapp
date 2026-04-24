@@ -140,6 +140,7 @@ export function useAccountSecurity() {
 
   const revokeSession = useCallback(
     async (sessionId: string) => {
+      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       try {
@@ -157,10 +158,11 @@ export function useAccountSecurity() {
         setSaving(false)
       }
     },
-    [reloadSessions],
+    [reloadSessions, accessToken],
   )
 
   const revokeAllOthers = useCallback(async () => {
+    if (!accessToken) throw new Error('session_not_ready')
     setSaving(true)
     setError(null)
     try {
@@ -178,10 +180,11 @@ export function useAccountSecurity() {
     } finally {
       setSaving(false)
     }
-  }, [reloadSessions])
+  }, [reloadSessions, accessToken])
 
   const forgetDevice = useCallback(
     async (deviceId: string) => {
+      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       try {
@@ -199,11 +202,12 @@ export function useAccountSecurity() {
         setSaving(false)
       }
     },
-    [reloadDevices],
+    [reloadDevices, accessToken],
   )
 
   const requestDeletion = useCallback(
     async (input: DeletionRequestInput) => {
+      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       try {
@@ -235,10 +239,11 @@ export function useAccountSecurity() {
         setSaving(false)
       }
     },
-    [],
+    [accessToken],
   )
 
   const cancelDeletion = useCallback(async () => {
+    if (!accessToken) throw new Error('session_not_ready')
     setSaving(true)
     setError(null)
     try {
@@ -263,7 +268,7 @@ export function useAccountSecurity() {
     } finally {
       setSaving(false)
     }
-  }, [])
+  }, [accessToken])
 
   return {
     status: accountStatus,

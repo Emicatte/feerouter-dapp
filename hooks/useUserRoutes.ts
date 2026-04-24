@@ -60,6 +60,7 @@ export function useUserRoutes() {
 
   const save = useCallback(
     async (name: string, config: Record<string, unknown>, isFavorite = false) => {
+      if (!accessToken) throw new Error('session_not_ready')
       const created = await apiCall<SavedRoute>(
         '/api/v1/user/routes',
         tokenRef.current,
@@ -75,15 +76,16 @@ export function useUserRoutes() {
       setRoutes((r) => [created, ...r])
       return created
     },
-    [],
+    [accessToken],
   )
 
   const remove = useCallback(async (id: string) => {
+    if (!accessToken) throw new Error('session_not_ready')
     await apiCall<void>(`/api/v1/user/routes/${id}`, tokenRef.current, {
       method: 'DELETE',
     })
     setRoutes((r) => r.filter((x) => x.id !== id))
-  }, [])
+  }, [accessToken])
 
   return {
     routes,

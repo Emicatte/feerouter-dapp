@@ -173,6 +173,7 @@ export function useUserTransactions(filters: TxFilters = {}) {
 
   const create = useCallback(async (payload: CreateTxPayload) => {
     if (status !== 'authenticated') return null
+    if (!accessToken) throw new Error('session_not_ready')
     try {
       const tx = await apiCall<ServerTransaction>(
         '/api/v1/user/transactions',
@@ -193,10 +194,11 @@ export function useUserTransactions(filters: TxFilters = {}) {
       setError(e instanceof Error ? e.message : String(e))
       return null
     }
-  }, [status])
+  }, [status, accessToken])
 
   const update = useCallback(async (id: string, patch: UpdateTxPayload) => {
     if (status !== 'authenticated') return null
+    if (!accessToken) throw new Error('session_not_ready')
     try {
       const tx = await apiCall<ServerTransaction>(
         `/api/v1/user/transactions/${id}`,
@@ -209,28 +211,31 @@ export function useUserTransactions(filters: TxFilters = {}) {
       setError(e instanceof Error ? e.message : String(e))
       return null
     }
-  }, [status])
+  }, [status, accessToken])
 
   const remove = useCallback(async (id: string) => {
     if (status !== 'authenticated') return
+    if (!accessToken) throw new Error('session_not_ready')
     await apiCall<void>(`/api/v1/user/transactions/${id}`, tokenRef.current, {
       method: 'DELETE',
     })
     setTransactions((prev) => prev.filter((t) => t.id !== id))
-  }, [status])
+  }, [status, accessToken])
 
   const clearAll = useCallback(async () => {
     if (status !== 'authenticated') return
+    if (!accessToken) throw new Error('session_not_ready')
     await apiCall<void>('/api/v1/user/transactions', tokenRef.current, {
       method: 'DELETE',
     })
     setTransactions([])
     cursorRef.current = null
     setHasMore(false)
-  }, [status])
+  }, [status, accessToken])
 
   const bulkImport = useCallback(async (txs: CreateTxPayload[]) => {
     if (status !== 'authenticated' || txs.length === 0) return null
+    if (!accessToken) throw new Error('session_not_ready')
     try {
       const res = await apiCall<BulkImportResponse>(
         '/api/v1/user/transactions/bulk-import',
@@ -243,7 +248,7 @@ export function useUserTransactions(filters: TxFilters = {}) {
       setError(e instanceof Error ? e.message : String(e))
       return null
     }
-  }, [status, reload])
+  }, [status, accessToken, reload])
 
   return {
     transactions,

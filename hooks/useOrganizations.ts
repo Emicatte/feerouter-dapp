@@ -87,6 +87,7 @@ export function useOrganizations() {
 
   const createOrganization = useCallback(
     async (input: CreateOrgInput): Promise<OrganizationListItem> => {
+      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       try {
@@ -108,11 +109,12 @@ export function useOrganizations() {
         setSaving(false)
       }
     },
-    [reload],
+    [reload, accessToken],
   )
 
   const switchActive = useCallback(
     async (orgId: string): Promise<void> => {
+      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       const prev = activeOrgId
@@ -145,11 +147,12 @@ export function useOrganizations() {
         setSaving(false)
       }
     },
-    [activeOrgId],
+    [activeOrgId, accessToken],
   )
 
   const updateOrganization = useCallback(
     async (orgId: string, patch: UpdateOrgInput): Promise<void> => {
+      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       try {
@@ -170,7 +173,7 @@ export function useOrganizations() {
         setSaving(false)
       }
     },
-    [reload],
+    [reload, accessToken],
   )
 
   return {
