@@ -64,7 +64,8 @@ function readContacts(): AddressContactLike[] {
 }
 
 export function PostLoginMerge() {
-  const { status } = useSession()
+  const { data: session, status } = useSession()
+  const accessToken = (session as { access_token?: string } | null)?.access_token
   const { bulkImport } = useUserTransactions()
   const { bulkImport: bulkImportContacts } = useUserContacts()
   const txDoneRef = useRef(false)
@@ -72,7 +73,7 @@ export function PostLoginMerge() {
 
   // Tx merge (pre-existing behaviour — unchanged semantics)
   useEffect(() => {
-    if (status !== 'authenticated' || txDoneRef.current) return
+    if (status !== 'authenticated' || !accessToken || txDoneRef.current) return
     const pending = readPending()
     if (pending.length === 0) {
       txDoneRef.current = true
@@ -84,11 +85,11 @@ export function PostLoginMerge() {
       if (res) clearPending()
       else txDoneRef.current = false
     })()
-  }, [status, bulkImport])
+  }, [status, accessToken, bulkImport])
 
   // Contacts merge (new — additive)
   useEffect(() => {
-    if (status !== 'authenticated' || contactsDoneRef.current) return
+    if (status !== 'authenticated' || !accessToken || contactsDoneRef.current) return
     const local = readContacts()
     if (local.length === 0) {
       contactsDoneRef.current = true
@@ -103,7 +104,7 @@ export function PostLoginMerge() {
       // is idempotent (upsert on UNIQUE(user_id, address)).
       if (!res) contactsDoneRef.current = false
     })()
-  }, [status, bulkImportContacts])
+  }, [status, accessToken, bulkImportContacts])
 
   return null
 }
