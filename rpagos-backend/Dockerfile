@@ -20,6 +20,9 @@ COPY . .
 # Create reports directory and tmp for SQLite
 RUN mkdir -p /app/reports /tmp/data && chown -R rpagos:rpagos /app /tmp/data
 
+COPY --chown=rpagos:rpagos scripts/entrypoint.sh /app/scripts/entrypoint.sh
+RUN chmod +x /app/scripts/entrypoint.sh
+
 USER rpagos
 
 # Health check
@@ -28,4 +31,4 @@ USER rpagos
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+CMD ["/app/scripts/entrypoint.sh"]
