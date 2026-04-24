@@ -1,9 +1,12 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { C } from "@/app/designTokens";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 export function WhySignInSection() {
   const t = useTranslations("auth.whySignIn");
+  const isMobile = useIsMobile();
 
   const features = [
     { key: "routes", icon: <RouteIcon /> },
@@ -13,23 +16,48 @@ export function WhySignInSection() {
   ] as const;
 
   return (
-    <section className="py-20 px-6 max-w-6xl mx-auto">
-      <div className="mb-12 max-w-2xl">
+    <section
+      style={{
+        padding: isMobile ? "60px 24px" : "80px 96px",
+        maxWidth: 1440,
+        margin: "0 auto",
+      }}
+    >
+      <div style={{ maxWidth: 880, marginBottom: isMobile ? 32 : 48 }}>
         <div
-          className="text-[11px] tracking-[0.18em] font-mono mb-3"
-          style={{ color: "#C8512C" }}
+          style={{
+            fontFamily: C.M,
+            fontSize: 11,
+            letterSpacing: "0.18em",
+            color: C.purple,
+            fontWeight: 500,
+            marginBottom: 12,
+          }}
         >
           {t("eyebrow")}
         </div>
         <h2
-          className="text-4xl md:text-5xl font-bold leading-[1.05]"
-          style={{ color: "#2C2C2A" }}
+          style={{
+            fontFamily: C.D,
+            fontSize: "clamp(28px, 4vw, 52px)",
+            fontWeight: 600,
+            color: C.text,
+            lineHeight: 1.1,
+            letterSpacing: "-0.02em",
+            margin: "0 0 16px",
+          }}
         >
           {t("heading")}
         </h2>
         <p
-          className="mt-4 text-lg leading-relaxed"
-          style={{ color: "#888780" }}
+          style={{
+            fontFamily: C.D,
+            fontSize: 15,
+            color: C.sub,
+            lineHeight: 1.6,
+            margin: 0,
+            maxWidth: 680,
+          }}
         >
           {t("subheading")}
         </p>
