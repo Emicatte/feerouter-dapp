@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { apiCall } from '@/lib/auth-client'
+import { apiCall, waitForToken } from '@/lib/auth-client'
 
 export interface SavedRoute {
   id: string
@@ -60,10 +60,10 @@ export function useUserRoutes() {
 
   const save = useCallback(
     async (name: string, config: Record<string, unknown>, isFavorite = false) => {
-      if (!accessToken) throw new Error('session_not_ready')
+      const token = await waitForToken(tokenRef)
       const created = await apiCall<SavedRoute>(
         '/api/v1/user/routes',
-        tokenRef.current,
+        token,
         {
           method: 'POST',
           body: JSON.stringify({
@@ -76,16 +76,16 @@ export function useUserRoutes() {
       setRoutes((r) => [created, ...r])
       return created
     },
-    [accessToken],
+    [],
   )
 
   const remove = useCallback(async (id: string) => {
-    if (!accessToken) throw new Error('session_not_ready')
-    await apiCall<void>(`/api/v1/user/routes/${id}`, tokenRef.current, {
+    const token = await waitForToken(tokenRef)
+    await apiCall<void>(`/api/v1/user/routes/${id}`, token, {
       method: 'DELETE',
     })
     setRoutes((r) => r.filter((x) => x.id !== id))
-  }, [accessToken])
+  }, [])
 
   return {
     routes,

@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { apiCall } from '@/lib/auth-client'
+import { apiCall, waitForToken } from '@/lib/auth-client'
 
 export interface NotificationPreferences {
   email_login_new_device: boolean
@@ -69,14 +69,14 @@ export function useNotificationPreferences() {
   const toggle = useCallback(
     async (key: BoolKey, value: boolean) => {
       if (status !== 'authenticated' || !preferences) return
-      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       const prev = preferences
       setPreferences({ ...preferences, [key]: value })
       try {
+        const token = await waitForToken(tokenRef)
         const updated = await apiCall<NotificationPreferences>(
           '/api/v1/user/notifications/preferences',
-          tokenRef.current,
+          token,
           { method: 'PATCH', body: JSON.stringify({ [key]: value }) },
         )
         setPreferences(updated)
@@ -87,7 +87,7 @@ export function useNotificationPreferences() {
         setSaving(false)
       }
     },
-    [status, accessToken, preferences],
+    [status, preferences],
   )
 
   return {

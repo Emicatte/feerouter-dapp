@@ -1,5 +1,6 @@
 'use client'
 
+import type { MutableRefObject } from 'react'
 import { signOut } from 'next-auth/react'
 
 /**
@@ -55,4 +56,23 @@ export async function apiCall<T>(
     throw new Error(err.code || err.detail?.code || `HTTP ${res.status}`)
   }
   return res.json() as Promise<T>
+}
+
+/**
+ * Resolve as soon as the shared tokenRef gets a non-empty access_token, or
+ * throw 'session_not_ready' after `timeoutMs` if it never lands. Used by
+ * mutation callbacks to bridge the 0-2s window post-login where NextAuth says
+ * `authenticated` but AuthBootstrap hasn't yet produced the server token.
+ */
+export async function waitForToken(
+  tokenRef: MutableRefObject<string | undefined>,
+  timeoutMs = 2000,
+  intervalMs = 100,
+): Promise<string> {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    if (tokenRef.current) return tokenRef.current
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
+  throw new Error('session_not_ready')
 }

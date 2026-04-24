@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { apiCall } from '@/lib/auth-client'
+import { apiCall, waitForToken } from '@/lib/auth-client'
 import type { OrgRole } from '@/hooks/useOrganizations'
 
 export interface MembershipItem {
@@ -101,14 +101,14 @@ export function useOrgMembers(orgId: string | null) {
 
   const inviteMember = useCallback(
     async (input: InviteMemberInput): Promise<InviteItem> => {
-      if (!accessToken) throw new Error('session_not_ready')
       if (!orgId) throw new Error('no_active_org')
       setSaving(true)
       setError(null)
       try {
+        const token = await waitForToken(tokenRef)
         const result = await apiCall<InviteItem>(
           `/api/v1/organizations/${orgId}/invites`,
-          tokenRef.current,
+          token,
           {
             method: 'POST',
             body: JSON.stringify(input),
@@ -124,19 +124,19 @@ export function useOrgMembers(orgId: string | null) {
         setSaving(false)
       }
     },
-    [orgId, reload, accessToken],
+    [orgId, reload],
   )
 
   const changeRole = useCallback(
     async (targetUserId: string, role: OrgRole): Promise<void> => {
-      if (!accessToken) throw new Error('session_not_ready')
       if (!orgId) throw new Error('no_active_org')
       setSaving(true)
       setError(null)
       try {
+        const token = await waitForToken(tokenRef)
         await apiCall<MembershipItem>(
           `/api/v1/organizations/${orgId}/members/${targetUserId}/role`,
-          tokenRef.current,
+          token,
           {
             method: 'PATCH',
             body: JSON.stringify({ role }),
@@ -151,19 +151,19 @@ export function useOrgMembers(orgId: string | null) {
         setSaving(false)
       }
     },
-    [orgId, reload, accessToken],
+    [orgId, reload],
   )
 
   const removeMember = useCallback(
     async (targetUserId: string): Promise<void> => {
-      if (!accessToken) throw new Error('session_not_ready')
       if (!orgId) throw new Error('no_active_org')
       setSaving(true)
       setError(null)
       try {
+        const token = await waitForToken(tokenRef)
         await apiCall<void>(
           `/api/v1/organizations/${orgId}/members/${targetUserId}`,
-          tokenRef.current,
+          token,
           { method: 'DELETE' },
         )
         await reload()
@@ -175,19 +175,19 @@ export function useOrgMembers(orgId: string | null) {
         setSaving(false)
       }
     },
-    [orgId, reload, accessToken],
+    [orgId, reload],
   )
 
   const revokeInvite = useCallback(
     async (inviteId: string): Promise<void> => {
-      if (!accessToken) throw new Error('session_not_ready')
       if (!orgId) throw new Error('no_active_org')
       setSaving(true)
       setError(null)
       try {
+        const token = await waitForToken(tokenRef)
         await apiCall<void>(
           `/api/v1/organizations/${orgId}/invites/${inviteId}`,
-          tokenRef.current,
+          token,
           { method: 'DELETE' },
         )
         await reload()
@@ -199,7 +199,7 @@ export function useOrgMembers(orgId: string | null) {
         setSaving(false)
       }
     },
-    [orgId, reload, accessToken],
+    [orgId, reload],
   )
 
   return {

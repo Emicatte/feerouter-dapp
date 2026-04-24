@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { apiCall } from '@/lib/auth-client'
+import { apiCall, waitForToken } from '@/lib/auth-client'
 import { useCurrentOrg } from '@/hooks/useCurrentOrg'
 
 export interface UserWallet {
@@ -113,11 +113,11 @@ export function useUserWallets() {
 
   const requestChallenge = useCallback(
     async (address: string, chainId: number): Promise<WalletChallenge> => {
-      if (!accessToken) throw new Error('session_not_ready')
       setError(null)
+      const token = await waitForToken(tokenRef)
       return apiCall<WalletChallenge>(
         '/api/v1/user/wallets/challenge',
-        tokenRef.current,
+        token,
         {
           method: 'POST',
           body: JSON.stringify({
@@ -128,18 +128,18 @@ export function useUserWallets() {
         },
       )
     },
-    [accessToken],
+    [],
   )
 
   const verifyAndLink = useCallback(
     async (input: VerifyAndLinkInput): Promise<UserWallet> => {
-      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       try {
+        const token = await waitForToken(tokenRef)
         const wallet = await apiCall<UserWallet>(
           '/api/v1/user/wallets/verify',
-          tokenRef.current,
+          token,
           {
             method: 'POST',
             body: JSON.stringify({
@@ -162,12 +162,11 @@ export function useUserWallets() {
         setSaving(false)
       }
     },
-    [reload, accessToken],
+    [reload],
   )
 
   const setPrimary = useCallback(
     async (id: string): Promise<void> => {
-      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       const prev = wallets
@@ -175,9 +174,10 @@ export function useUserWallets() {
         cur.map((w) => ({ ...w, is_primary: w.id === id })),
       )
       try {
+        const token = await waitForToken(tokenRef)
         await apiCall<UserWallet>(
           `/api/v1/user/wallets/${id}`,
-          tokenRef.current,
+          token,
           {
             method: 'PATCH',
             body: JSON.stringify({ is_primary: true }),
@@ -193,12 +193,11 @@ export function useUserWallets() {
         setSaving(false)
       }
     },
-    [wallets, reload, accessToken],
+    [wallets, reload],
   )
 
   const updateLabel = useCallback(
     async (id: string, label: string): Promise<void> => {
-      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       const prev = wallets
@@ -206,9 +205,10 @@ export function useUserWallets() {
         cur.map((w) => (w.id === id ? { ...w, label } : w)),
       )
       try {
+        const token = await waitForToken(tokenRef)
         await apiCall<UserWallet>(
           `/api/v1/user/wallets/${id}`,
-          tokenRef.current,
+          token,
           {
             method: 'PATCH',
             body: JSON.stringify({ label }),
@@ -224,16 +224,16 @@ export function useUserWallets() {
         setSaving(false)
       }
     },
-    [wallets, reload, accessToken],
+    [wallets, reload],
   )
 
   const unlink = useCallback(
     async (id: string): Promise<void> => {
-      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       try {
-        await apiCall<void>(`/api/v1/user/wallets/${id}`, tokenRef.current, {
+        const token = await waitForToken(tokenRef)
+        await apiCall<void>(`/api/v1/user/wallets/${id}`, token, {
           method: 'DELETE',
         })
         await reload()
@@ -245,7 +245,7 @@ export function useUserWallets() {
         setSaving(false)
       }
     },
-    [reload, accessToken],
+    [reload],
   )
 
   return {

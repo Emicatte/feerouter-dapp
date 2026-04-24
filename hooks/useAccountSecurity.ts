@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { apiCall } from '@/lib/auth-client'
+import { apiCall, waitForToken } from '@/lib/auth-client'
 
 /**
  * Hook for `/settings/security` — owns the three backend surfaces the page
@@ -140,13 +140,13 @@ export function useAccountSecurity() {
 
   const revokeSession = useCallback(
     async (sessionId: string) => {
-      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       try {
+        const token = await waitForToken(tokenRef)
         await apiCall<{ revoked: boolean; session_id: string }>(
           `/api/v1/user/account/sessions/${encodeURIComponent(sessionId)}`,
-          tokenRef.current,
+          token,
           { method: 'DELETE' },
         )
         await reloadSessions()
@@ -158,17 +158,17 @@ export function useAccountSecurity() {
         setSaving(false)
       }
     },
-    [reloadSessions, accessToken],
+    [reloadSessions],
   )
 
   const revokeAllOthers = useCallback(async () => {
-    if (!accessToken) throw new Error('session_not_ready')
     setSaving(true)
     setError(null)
     try {
+      const token = await waitForToken(tokenRef)
       const data = await apiCall<{ revoked_count: number }>(
         '/api/v1/user/account/sessions/revoke-all',
-        tokenRef.current,
+        token,
         { method: 'POST' },
       )
       await reloadSessions()
@@ -180,17 +180,17 @@ export function useAccountSecurity() {
     } finally {
       setSaving(false)
     }
-  }, [reloadSessions, accessToken])
+  }, [reloadSessions])
 
   const forgetDevice = useCallback(
     async (deviceId: string) => {
-      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       try {
+        const token = await waitForToken(tokenRef)
         await apiCall<unknown>(
           `/api/v1/user/account/known-devices/${encodeURIComponent(deviceId)}`,
-          tokenRef.current,
+          token,
           { method: 'DELETE' },
         )
         await reloadDevices()
@@ -202,18 +202,18 @@ export function useAccountSecurity() {
         setSaving(false)
       }
     },
-    [reloadDevices, accessToken],
+    [reloadDevices],
   )
 
   const requestDeletion = useCallback(
     async (input: DeletionRequestInput) => {
-      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       try {
+        const token = await waitForToken(tokenRef)
         const data = await apiCall<AccountStatus>(
           '/api/v1/user/account/delete',
-          tokenRef.current,
+          token,
           {
             method: 'POST',
             body: JSON.stringify({
@@ -239,17 +239,17 @@ export function useAccountSecurity() {
         setSaving(false)
       }
     },
-    [accessToken],
+    [],
   )
 
   const cancelDeletion = useCallback(async () => {
-    if (!accessToken) throw new Error('session_not_ready')
     setSaving(true)
     setError(null)
     try {
+      const token = await waitForToken(tokenRef)
       const data = await apiCall<AccountStatus>(
         '/api/v1/user/account/delete/cancel',
-        tokenRef.current,
+        token,
         { method: 'POST' },
       )
       setAccountStatus(data)
@@ -268,7 +268,7 @@ export function useAccountSecurity() {
     } finally {
       setSaving(false)
     }
-  }, [accessToken])
+  }, [])
 
   return {
     status: accountStatus,

@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { apiCall } from '@/lib/auth-client'
+import { apiCall, waitForToken } from '@/lib/auth-client'
 
 export interface ServerContact {
   id: string
@@ -110,11 +110,11 @@ export function useUserContacts() {
   const upsert = useCallback(
     async (payload: CreateContactPayload) => {
       if (status !== 'authenticated') return null
-      if (!accessToken) throw new Error('session_not_ready')
       try {
+        const token = await waitForToken(tokenRef)
         const c = await apiCall<ServerContact>(
           '/api/v1/user/contacts',
-          tokenRef.current,
+          token,
           { method: 'POST', body: JSON.stringify(payload) },
         )
         setContacts((prev) => {
@@ -132,17 +132,17 @@ export function useUserContacts() {
         return null
       }
     },
-    [status, accessToken],
+    [status],
   )
 
   const update = useCallback(
     async (id: string, patch: UpdateContactPayload) => {
       if (status !== 'authenticated') return null
-      if (!accessToken) throw new Error('session_not_ready')
       try {
+        const token = await waitForToken(tokenRef)
         const c = await apiCall<ServerContact>(
           `/api/v1/user/contacts/${id}`,
-          tokenRef.current,
+          token,
           { method: 'PATCH', body: JSON.stringify(patch) },
         )
         setContacts((prev) => prev.map((x) => (x.id === id ? c : x)))
@@ -152,15 +152,15 @@ export function useUserContacts() {
         return null
       }
     },
-    [status, accessToken],
+    [status],
   )
 
   const remove = useCallback(
     async (id: string) => {
       if (status !== 'authenticated') return
-      if (!accessToken) throw new Error('session_not_ready')
+      const token = await waitForToken(tokenRef)
       try {
-        await apiCall<void>(`/api/v1/user/contacts/${id}`, tokenRef.current, {
+        await apiCall<void>(`/api/v1/user/contacts/${id}`, token, {
           method: 'DELETE',
         })
       } catch {
@@ -168,30 +168,30 @@ export function useUserContacts() {
       }
       setContacts((prev) => prev.filter((x) => x.id !== id))
     },
-    [status, accessToken],
+    [status],
   )
 
   const clearAll = useCallback(async () => {
     if (status !== 'authenticated') return
-    if (!accessToken) throw new Error('session_not_ready')
+    const token = await waitForToken(tokenRef)
     try {
-      await apiCall<void>('/api/v1/user/contacts', tokenRef.current, {
+      await apiCall<void>('/api/v1/user/contacts', token, {
         method: 'DELETE',
       })
     } catch {
       /* 204 body empty */
     }
     setContacts([])
-  }, [status, accessToken])
+  }, [status])
 
   const bulkImport = useCallback(
     async (items: CreateContactPayload[]) => {
       if (status !== 'authenticated' || items.length === 0) return null
-      if (!accessToken) throw new Error('session_not_ready')
       try {
+        const token = await waitForToken(tokenRef)
         const res = await apiCall<BulkImportResponse>(
           '/api/v1/user/contacts/bulk-import',
-          tokenRef.current,
+          token,
           { method: 'POST', body: JSON.stringify({ contacts: items }) },
         )
         await reload()
@@ -201,7 +201,7 @@ export function useUserContacts() {
         return null
       }
     },
-    [status, accessToken, reload],
+    [status, reload],
   )
 
   return {

@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { apiCall } from '@/lib/auth-client'
+import { apiCall, waitForToken } from '@/lib/auth-client'
 
 export type ServerTxType =
   | 'transfer'
@@ -173,11 +173,11 @@ export function useUserTransactions(filters: TxFilters = {}) {
 
   const create = useCallback(async (payload: CreateTxPayload) => {
     if (status !== 'authenticated') return null
-    if (!accessToken) throw new Error('session_not_ready')
     try {
+      const token = await waitForToken(tokenRef)
       const tx = await apiCall<ServerTransaction>(
         '/api/v1/user/transactions',
-        tokenRef.current,
+        token,
         { method: 'POST', body: JSON.stringify(payload) },
       )
       setTransactions((prev) => {
@@ -194,15 +194,15 @@ export function useUserTransactions(filters: TxFilters = {}) {
       setError(e instanceof Error ? e.message : String(e))
       return null
     }
-  }, [status, accessToken])
+  }, [status])
 
   const update = useCallback(async (id: string, patch: UpdateTxPayload) => {
     if (status !== 'authenticated') return null
-    if (!accessToken) throw new Error('session_not_ready')
     try {
+      const token = await waitForToken(tokenRef)
       const tx = await apiCall<ServerTransaction>(
         `/api/v1/user/transactions/${id}`,
-        tokenRef.current,
+        token,
         { method: 'PATCH', body: JSON.stringify(patch) },
       )
       setTransactions((prev) => prev.map((t) => (t.id === id ? tx : t)))
@@ -211,35 +211,35 @@ export function useUserTransactions(filters: TxFilters = {}) {
       setError(e instanceof Error ? e.message : String(e))
       return null
     }
-  }, [status, accessToken])
+  }, [status])
 
   const remove = useCallback(async (id: string) => {
     if (status !== 'authenticated') return
-    if (!accessToken) throw new Error('session_not_ready')
-    await apiCall<void>(`/api/v1/user/transactions/${id}`, tokenRef.current, {
+    const token = await waitForToken(tokenRef)
+    await apiCall<void>(`/api/v1/user/transactions/${id}`, token, {
       method: 'DELETE',
     })
     setTransactions((prev) => prev.filter((t) => t.id !== id))
-  }, [status, accessToken])
+  }, [status])
 
   const clearAll = useCallback(async () => {
     if (status !== 'authenticated') return
-    if (!accessToken) throw new Error('session_not_ready')
-    await apiCall<void>('/api/v1/user/transactions', tokenRef.current, {
+    const token = await waitForToken(tokenRef)
+    await apiCall<void>('/api/v1/user/transactions', token, {
       method: 'DELETE',
     })
     setTransactions([])
     cursorRef.current = null
     setHasMore(false)
-  }, [status, accessToken])
+  }, [status])
 
   const bulkImport = useCallback(async (txs: CreateTxPayload[]) => {
     if (status !== 'authenticated' || txs.length === 0) return null
-    if (!accessToken) throw new Error('session_not_ready')
     try {
+      const token = await waitForToken(tokenRef)
       const res = await apiCall<BulkImportResponse>(
         '/api/v1/user/transactions/bulk-import',
-        tokenRef.current,
+        token,
         { method: 'POST', body: JSON.stringify({ transactions: txs }) },
       )
       await reload()
@@ -248,7 +248,7 @@ export function useUserTransactions(filters: TxFilters = {}) {
       setError(e instanceof Error ? e.message : String(e))
       return null
     }
-  }, [status, accessToken, reload])
+  }, [status, reload])
 
   return {
     transactions,

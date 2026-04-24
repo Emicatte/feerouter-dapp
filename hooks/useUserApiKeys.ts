@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { apiCall } from '@/lib/auth-client'
+import { apiCall, waitForToken } from '@/lib/auth-client'
 import { useCurrentOrg } from '@/hooks/useCurrentOrg'
 
 export interface ApiKeyListItem {
@@ -127,13 +127,13 @@ export function useUserApiKeys() {
 
   const createKey = useCallback(
     async (input: CreateApiKeyInput): Promise<ApiKeyCreateResult> => {
-      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       try {
+        const token = await waitForToken(tokenRef)
         const result = await apiCall<ApiKeyCreateResult>(
           '/api/v1/user/api-keys',
-          tokenRef.current,
+          token,
           {
             method: 'POST',
             body: JSON.stringify({
@@ -152,12 +152,11 @@ export function useUserApiKeys() {
         setSaving(false)
       }
     },
-    [reload, accessToken],
+    [reload],
   )
 
   const updateLabel = useCallback(
     async (id: string, label: string): Promise<void> => {
-      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       const prev = keys
@@ -165,9 +164,10 @@ export function useUserApiKeys() {
         cur.map((k) => (k.id === id ? { ...k, label } : k)),
       )
       try {
+        const token = await waitForToken(tokenRef)
         await apiCall<ApiKeyListItem>(
           `/api/v1/user/api-keys/${id}`,
-          tokenRef.current,
+          token,
           {
             method: 'PATCH',
             body: JSON.stringify({ label }),
@@ -183,16 +183,16 @@ export function useUserApiKeys() {
         setSaving(false)
       }
     },
-    [keys, reload, accessToken],
+    [keys, reload],
   )
 
   const revokeKey = useCallback(
     async (id: string): Promise<void> => {
-      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       try {
-        await apiCall<void>(`/api/v1/user/api-keys/${id}`, tokenRef.current, {
+        const token = await waitForToken(tokenRef)
+        await apiCall<void>(`/api/v1/user/api-keys/${id}`, token, {
           method: 'DELETE',
         })
         await reload()
@@ -204,7 +204,7 @@ export function useUserApiKeys() {
         setSaving(false)
       }
     },
-    [reload, accessToken],
+    [reload],
   )
 
   return {

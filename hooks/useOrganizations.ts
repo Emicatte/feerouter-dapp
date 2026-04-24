@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { apiCall } from '@/lib/auth-client'
+import { apiCall, waitForToken } from '@/lib/auth-client'
 
 export type OrgRole = 'admin' | 'operator' | 'viewer'
 
@@ -87,13 +87,13 @@ export function useOrganizations() {
 
   const createOrganization = useCallback(
     async (input: CreateOrgInput): Promise<OrganizationListItem> => {
-      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       try {
+        const token = await waitForToken(tokenRef)
         const result = await apiCall<OrganizationListItem>(
           '/api/v1/organizations',
-          tokenRef.current,
+          token,
           {
             method: 'POST',
             body: JSON.stringify({ name: input.name }),
@@ -109,20 +109,20 @@ export function useOrganizations() {
         setSaving(false)
       }
     },
-    [reload, accessToken],
+    [reload],
   )
 
   const switchActive = useCallback(
     async (orgId: string): Promise<void> => {
-      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       const prev = activeOrgId
       setActiveOrgId(orgId)
       try {
+        const token = await waitForToken(tokenRef)
         await apiCall<{ active_org_id: string }>(
           '/api/v1/organizations/switch',
-          tokenRef.current,
+          token,
           {
             method: 'POST',
             body: JSON.stringify({ org_id: orgId }),
@@ -147,18 +147,18 @@ export function useOrganizations() {
         setSaving(false)
       }
     },
-    [activeOrgId, accessToken],
+    [activeOrgId],
   )
 
   const updateOrganization = useCallback(
     async (orgId: string, patch: UpdateOrgInput): Promise<void> => {
-      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       try {
+        const token = await waitForToken(tokenRef)
         await apiCall<OrganizationListItem>(
           `/api/v1/organizations/${orgId}`,
-          tokenRef.current,
+          token,
           {
             method: 'PATCH',
             body: JSON.stringify(patch),
@@ -173,7 +173,7 @@ export function useOrganizations() {
         setSaving(false)
       }
     },
-    [reload, accessToken],
+    [reload],
   )
 
   return {

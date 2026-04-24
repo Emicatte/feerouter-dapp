@@ -2,7 +2,7 @@
 
 import { useSession } from 'next-auth/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { apiCall } from '@/lib/auth-client'
+import { apiCall, waitForToken } from '@/lib/auth-client'
 
 export interface AuthMethods {
   has_password: boolean
@@ -67,13 +67,13 @@ export function useAccountMethods() {
 
   const _mutate = useCallback(
     async (path: string, body?: unknown) => {
-      if (!accessToken) throw new Error('session_not_ready')
       setSaving(true)
       setError(null)
       try {
+        const token = await waitForToken(tokenRef)
         await apiCall<{ status: string }>(
           `/api/v1/user/account/${path}`,
-          tokenRef.current,
+          token,
           {
             method: 'POST',
             body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -88,7 +88,7 @@ export function useAccountMethods() {
         setSaving(false)
       }
     },
-    [reload, accessToken],
+    [reload],
   )
 
   const addPassword = useCallback(
