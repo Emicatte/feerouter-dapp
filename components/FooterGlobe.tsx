@@ -650,7 +650,7 @@ export default function FooterGlobe() {
                   className={styles.colLink}
                   onMouseEnter={() => setHovered(link.label)}
                   onMouseLeave={() => setHovered(null)}
-                  style={{ color: hovered === link.label ? '#fff' : undefined, textDecoration: 'none', display: 'block' }}
+                  style={{ color: hovered === link.label ? '#C8512C' : undefined, textDecoration: 'none', display: 'block' }}
                 >
                   {link.label}
                 </a>
