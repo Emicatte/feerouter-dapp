@@ -58,7 +58,7 @@ COOKIE_PATH = "/api/v1/auth"
 # Per-email login quota: 3 attempts / hour. Separate from the per-IP
 # middleware quota (5 / 10 min) on POST /auth/google. Intended to prevent
 # a distributed IP attack from credential-stuffing a single victim's email.
-EMAIL_QUOTA_MAX = 3
+EMAIL_QUOTA_MAX = 30
 EMAIL_QUOTA_WINDOW = 3600
 
 # Fallback correlation id reader (middleware stores it in request.state.correlation_id).
