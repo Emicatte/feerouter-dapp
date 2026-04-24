@@ -57,7 +57,7 @@ ENDPOINT_LIMITS: list[tuple[str, str, int, int, str]] = [
     ("POST", "/api/v1/webhooks/alchemy",           1000,    60,  "ip"),
     ("GET",  "/api/v1/audit/log",                    30,    60,  "ip"),
     # End-user auth (Google OAuth + session mgmt)
-    ("POST", "/api/v1/auth/google",                  30,    60,  "ip"),   # 5 per 10min
+    ("POST", "/api/v1/auth/google",                  100,    60,  "ip"),   # 5 per 10min
     ("POST", "/api/v1/auth/refresh",                 20,    60,  "ip"),   # 20/min
     ("POST", "/api/v1/auth/logout",                  30,    60,  "ip"),   # 30/min
     # User-scoped saved-routes CRUD (defense in depth over the auth gate)
