@@ -854,267 +854,267 @@
   "legal": {
     "shell": {
       "breadcrumb": {
-        "home": "Home",
-        "docs": "Docs"
+        "home": "Inicio",
+        "docs": "Documentos"
       },
-      "disclaimer": "This document is an illustrative template, not legal advice. Consult qualified counsel before relying on it for any compliance or contractual decision.",
-      "lastUpdatedLabel": "Last updated:",
-      "backToHome": "← Back to home"
+      "disclaimer": "Este documento es una plantilla ilustrativa, no constituye asesoramiento jurídico. Consulta a un abogado cualificado antes de basarte en él para cualquier decisión contractual o de cumplimiento.",
+      "lastUpdatedLabel": "Última actualización:",
+      "backToHome": "← Volver al inicio"
     },
     "privacy": {
       "metadata": {
-        "title": "Privacy Policy — RSends",
-        "description": "How RSends (Rpagos S.R.L) collects, uses, retains, and shares personal data. GDPR and Costa Rica Law 8968 disclosures."
+        "title": "Política de privacidad — RSends",
+        "description": "Cómo RSends (Rpagos S.R.L) recopila, utiliza, conserva y comparte los datos personales. Información conforme al GDPR y a la Ley 8968 de Costa Rica."
       },
-      "eyebrow": "Privacy Policy",
-      "title": "How we handle your data",
-      "lastUpdated": "April 25, 2026",
-      "breadcrumbLabel": "Privacy",
-      "intro": "This Privacy Policy describes how Rpagos S.R.L (\"<strong>RSends</strong>\", \"we\", \"us\") collects, uses, stores, and shares personal data when you use the RSends platform, dashboard, APIs, and related services (collectively, the \"<strong>Service</strong>\").",
+      "eyebrow": "Política de privacidad",
+      "title": "Cómo tratamos tus datos",
+      "lastUpdated": "25 de abril de 2026",
+      "breadcrumbLabel": "Privacidad",
+      "intro": "Esta Política de privacidad describe cómo Rpagos S.R.L (\"<strong>RSends</strong>\", \"nosotros\") recopila, utiliza, conserva y comparte los datos personales cuando utilizas la plataforma, el panel, las API y los servicios relacionados de RSends (colectivamente, el \"<strong>Servicio</strong>\").",
       "sections": {
         "controller": {
-          "heading": "1. Data Controller",
-          "intro": "The data controller responsible for your personal data is:",
+          "heading": "1. Responsable del tratamiento",
+          "intro": "El responsable del tratamiento de tus datos personales es:",
           "addressLines": [
             "<strong>Rpagos S.R.L</strong>",
-            "Registered in Costa Rica, registry no. 4062001345466",
+            "Inscrita en Costa Rica, n.º de registro 4062001345466",
             "San José, Costa Rica",
-            "Contact: <privacyMail>privacy@rsends.io</privacyMail>"
+            "Contacto: <privacyMail>privacy@rsends.io</privacyMail>"
           ]
         },
         "dataCollect": {
-          "heading": "2. Data we collect",
-          "intro": "We collect the following categories of personal data:",
+          "heading": "2. Datos que recopilamos",
+          "intro": "Recopilamos las siguientes categorías de datos personales:",
           "items": [
-            "<strong>Account information</strong> — name, email address, phone number, business name, tax identifiers, and authentication credentials.",
-            "<strong>Identity verification (KYC) data</strong> — government-issued ID, proof of address, ultimate beneficial ownership records, and documentation supporting source of funds.",
-            "<strong>Transaction data</strong> — wallet addresses, transaction hashes, amounts, source and destination chains, settlement records, fees, and counterparty references.",
-            "<strong>Technical data</strong> — IP address, device type, browser fingerprint, cookie identifiers, log files, and approximate geolocation derived from IP.",
-            "<strong>Communications</strong> — support tickets, emails, and any correspondence you send to us."
+            "<strong>Información de la cuenta</strong> — nombre, dirección de correo electrónico, número de teléfono, razón social, identificadores fiscales y credenciales de autenticación.",
+            "<strong>Datos de verificación de identidad (KYC)</strong> — documento de identidad emitido por una autoridad pública, comprobante de domicilio, registros de los beneficiarios finales y documentación que acredite el origen de los fondos.",
+            "<strong>Datos de las transacciones</strong> — direcciones de wallet, hashes de transacción, importes, blockchain de origen y de destino, registros de liquidación, comisiones y referencias de las contrapartes.",
+            "<strong>Datos técnicos</strong> — dirección IP, tipo de dispositivo, huella del navegador, identificadores de cookies, archivos de registro y geolocalización aproximada derivada de la IP.",
+            "<strong>Comunicaciones</strong> — tickets de soporte, correos electrónicos y cualquier correspondencia que nos envíes."
           ]
         },
         "legalBasis": {
-          "heading": "3. Legal basis for processing",
-          "intro": "We process your personal data on the following legal bases:",
+          "heading": "3. Base jurídica del tratamiento",
+          "intro": "Tratamos tus datos personales sobre las siguientes bases jurídicas:",
           "items": [
-            "<strong>Performance of a contract</strong> — to provide the Service, process transactions, and operate your account.",
-            "<strong>Legal obligation</strong> — to comply with anti-money-laundering (AML), counter-terrorism-financing (CTF), DAC8 reporting (EU users), tax reporting, and sanctions-screening obligations.",
-            "<strong>Legitimate interest</strong> — fraud prevention, network security, product improvement, and internal analytics.",
-            "<strong>Consent</strong> — where required (for example, optional marketing communications), which you may withdraw at any time."
+            "<strong>Ejecución de un contrato</strong> — para prestar el Servicio, ejecutar transacciones y operar tu cuenta.",
+            "<strong>Obligación legal</strong> — para cumplir con las obligaciones de prevención del blanqueo de capitales (AML), de la financiación del terrorismo (CTF), de reporte DAC8 (usuarios UE), fiscales y de cribado de sanciones.",
+            "<strong>Interés legítimo</strong> — prevención del fraude, seguridad de la red, mejora del producto y analíticas internas.",
+            "<strong>Consentimiento</strong> — cuando sea necesario (por ejemplo, comunicaciones de marketing opcionales), revocable en cualquier momento."
           ]
         },
         "howWeUse": {
-          "heading": "4. How we use your data",
+          "heading": "4. Cómo utilizamos tus datos",
           "items": [
-            "To open, maintain, and secure your account.",
-            "To execute and settle transactions on the supported blockchains.",
-            "To perform KYC, sanctions screening, and ongoing AML monitoring.",
-            "To detect, prevent, and investigate fraud and abuse.",
-            "To provide customer support and respond to your requests.",
-            "To comply with applicable law and respond to lawful requests from authorities."
+            "Para abrir, mantener y proteger tu cuenta.",
+            "Para ejecutar y liquidar transacciones en las blockchains compatibles.",
+            "Para realizar KYC, cribado de sanciones y monitoreo AML continuo.",
+            "Para detectar, prevenir e investigar fraudes y abusos.",
+            "Para prestar atención al cliente y responder a tus solicitudes.",
+            "Para cumplir con la normativa aplicable y responder a las solicitudes legítimas de las autoridades."
           ]
         },
         "dataSharing": {
-          "heading": "5. Data sharing",
-          "intro": "We share personal data only with:",
+          "heading": "5. Compartición de datos",
+          "intro": "Compartimos los datos personales únicamente con:",
           "items": [
-            "<strong>Service providers</strong> — KYC vendors, blockchain analytics partners, cloud hosting providers, and email/communication tools, all bound by data-processing agreements.",
-            "<strong>Authorities and regulators</strong> — when required by law, court order, or in response to a lawful request, including under DAC8 information-exchange obligations.",
-            "<strong>Successors</strong> — in connection with a merger, acquisition, or sale of assets, subject to equivalent privacy protections."
+            "<strong>Proveedores de servicios</strong> — proveedores KYC, partners de blockchain analytics, proveedores de hosting en la nube y herramientas de correo/comunicación, todos vinculados por contratos de tratamiento de datos.",
+            "<strong>Autoridades y reguladores</strong> — cuando lo exija la ley, una orden judicial o en respuesta a una solicitud legítima, incluyendo las obligaciones de intercambio de información DAC8.",
+            "<strong>Sucesores</strong> — en relación con una fusión, adquisición o cesión de activos, sujeto a protecciones de privacidad equivalentes."
           ],
-          "note": "We do <strong>not</strong> sell your personal data and we do not share it with advertisers."
+          "note": "<strong>No</strong> vendemos tus datos personales y no los compartimos con anunciantes."
         },
         "transfers": {
-          "heading": "6. International transfers",
-          "body": "We are headquartered in Costa Rica. Personal data of users located in the European Economic Area (EEA) or the United Kingdom is transferred to Costa Rica under the European Commission's Standard Contractual Clauses (SCCs), supplemented by appropriate technical and organisational safeguards."
+          "heading": "6. Transferencias internacionales",
+          "body": "Tenemos nuestra sede en Costa Rica. Los datos personales de los usuarios situados en el Espacio Económico Europeo (EEE) o en el Reino Unido se transfieren a Costa Rica al amparo de las Cláusulas Contractuales Tipo (CCT) de la Comisión Europea, complementadas con medidas técnicas y organizativas adecuadas."
         },
         "retention": {
-          "heading": "7. Retention",
-          "body": "We retain personal data for the duration of your account plus <strong>five (5) years</strong> following termination, in line with our record-keeping obligations under Costa Rican AML regulations and contractual commitments. Transaction records may be retained longer where required by law."
+          "heading": "7. Conservación",
+          "body": "Conservamos los datos personales durante la vigencia de tu cuenta más <strong>cinco (5) años</strong> tras su cierre, conforme a nuestras obligaciones de conservación de registros previstas en la normativa AML costarricense y en los compromisos contractuales. Los registros de transacciones podrán conservarse durante más tiempo cuando así lo exija la ley."
         },
         "rights": {
-          "heading": "8. Your rights",
-          "intro": "Depending on your jurisdiction, you have the following rights:",
+          "heading": "8. Tus derechos",
+          "intro": "Según tu jurisdicción, dispones de los siguientes derechos:",
           "items": [
-            "<strong>EEA / UK users (GDPR Articles 15–22)</strong> — access, rectification, erasure, restriction of processing, data portability, objection to processing, and the right not to be subject to solely automated decisions.",
-            "<strong>Costa Rica users (Law 8968)</strong> — the rights of access, rectification, deletion (where permitted), and revocation of consent."
+            "<strong>Usuarios EEE / Reino Unido (arts. 15-22 GDPR)</strong> — acceso, rectificación, supresión, limitación del tratamiento, portabilidad de datos, oposición al tratamiento y derecho a no ser objeto de decisiones basadas únicamente en el tratamiento automatizado.",
+            "<strong>Usuarios de Costa Rica (Ley 8968)</strong> — derechos de acceso, rectificación, supresión (cuando proceda) y revocación del consentimiento."
           ],
-          "howTo": "To exercise these rights, contact <privacyMail>privacy@rsends.io</privacyMail>. We will respond within the timeframes required by applicable law. Some rights may be limited where we are required to retain data for legal or regulatory reasons (for example, AML record-keeping).",
-          "authority": "You also have the right to lodge a complaint with your local supervisory authority — in Costa Rica, the <em>Agencia de Protección de Datos de los Habitantes (PRODHAB)</em>; in the EEA, your national data protection authority."
+          "howTo": "Para ejercer estos derechos, escribe a <privacyMail>privacy@rsends.io</privacyMail>. Responderemos en los plazos previstos por la normativa aplicable. Algunos derechos pueden quedar limitados cuando estemos obligados a conservar los datos por motivos legales o regulatorios (por ejemplo, conservación de registros AML).",
+          "authority": "Asimismo, tienes derecho a presentar una reclamación ante la autoridad de control competente — en Costa Rica, la <em>Agencia de Protección de Datos de los Habitantes (PRODHAB)</em>; en el EEE, tu autoridad nacional de protección de datos."
         },
         "security": {
-          "heading": "9. Security",
-          "body": "We apply technical and organisational measures designed to protect your data against unauthorised access, loss, alteration, or disclosure, including encryption in transit and at rest, access controls, segregation of duties, and continuous monitoring. No system is 100% secure; we will notify you of a personal-data breach where required by law."
+          "heading": "9. Seguridad",
+          "body": "Aplicamos medidas técnicas y organizativas destinadas a proteger tus datos frente a accesos no autorizados, pérdida, alteración o divulgación, incluyendo cifrado en tránsito y en reposo, controles de acceso, segregación de funciones y monitoreo continuo. Ningún sistema es 100% seguro; te notificaremos las violaciones de datos personales cuando lo exija la ley."
         },
         "cookies": {
           "heading": "10. Cookies",
-          "body": "For details about the cookies and similar technologies used on the Service, please see our <linkCookies>Cookie Policy</linkCookies>."
+          "body": "Para más información sobre las cookies y tecnologías similares utilizadas en el Servicio, consulta nuestra <linkCookies>Política de cookies</linkCookies>."
         },
         "children": {
-          "heading": "11. Children",
-          "body": "The Service is not directed to individuals under 18. We do not knowingly collect personal data from minors."
+          "heading": "11. Menores",
+          "body": "El Servicio no está dirigido a personas menores de 18 años. No recopilamos conscientemente datos personales de menores."
         },
         "changes": {
-          "heading": "12. Changes to this policy",
-          "body": "We may update this Privacy Policy from time to time. Material changes will be communicated through the Service or by email. The \"Last updated\" date at the top of this page reflects the most recent revision."
+          "heading": "12. Cambios en esta política",
+          "body": "Podremos actualizar esta Política de privacidad ocasionalmente. Las modificaciones sustanciales se comunicarán a través del Servicio o por correo electrónico. La fecha de \"Última actualización\" en la parte superior de esta página refleja la revisión más reciente."
         },
         "contact": {
-          "heading": "13. Contact",
+          "heading": "13. Contacto",
           "lines": [
-            "Privacy enquiries: <privacyMail>privacy@rsends.io</privacyMail>",
-            "Postal: Rpagos S.R.L, San José, Costa Rica."
+            "Consultas en materia de privacidad: <privacyMail>privacy@rsends.io</privacyMail>",
+            "Dirección postal: Rpagos S.R.L, San José, Costa Rica."
           ]
         }
       }
     },
     "terms": {
       "metadata": {
-        "title": "Terms of Service — RSends",
-        "description": "The terms governing your use of the RSends custodial multi-chain payment gateway provided by Rpagos S.R.L (Costa Rica)."
+        "title": "Términos del servicio — RSends",
+        "description": "Los términos que rigen el uso de la pasarela de pago custodial multi-cadena RSends prestada por Rpagos S.R.L (Costa Rica)."
       },
-      "eyebrow": "Terms of Service",
-      "title": "Terms of Service",
-      "lastUpdated": "April 25, 2026",
-      "breadcrumbLabel": "Terms",
-      "intro1": "These Terms of Service (the \"<strong>Terms</strong>\") form a binding agreement between you (the \"<strong>Customer</strong>\") and <strong>Rpagos S.R.L</strong> (\"<strong>RSends</strong>\", \"we\", \"us\"), a company registered in Costa Rica (registry no. 4062001345466), with offices in San José, Costa Rica.",
-      "intro2": "By creating an account, accessing the dashboard, or using any RSends API, you agree to be bound by these Terms. If you do not agree, do not use the Service.",
+      "eyebrow": "Términos del servicio",
+      "title": "Términos del servicio",
+      "lastUpdated": "25 de abril de 2026",
+      "breadcrumbLabel": "Términos",
+      "intro1": "Los presentes Términos del servicio (los \"<strong>Términos</strong>\") constituyen un acuerdo vinculante entre el usuario (el \"<strong>Cliente</strong>\") y <strong>Rpagos S.R.L</strong> (\"<strong>RSends</strong>\", \"nosotros\"), una sociedad inscrita en Costa Rica (n.º de registro 4062001345466), con oficinas en San José, Costa Rica.",
+      "intro2": "Al crear una cuenta, acceder al panel o utilizar cualquier API de RSends, aceptas quedar vinculado por los presentes Términos. Si no estás de acuerdo, no utilices el Servicio.",
       "sections": {
         "service": {
-          "heading": "1. The Service",
-          "body": "RSends provides a <strong>custodial multi-chain payment gateway</strong> that enables merchants to accept stablecoin payments across supported public blockchains (currently Base, Ethereum, Arbitrum, Optimism, Polygon, BNB Chain, Avalanche, Tron, and Solana) and receive periodic settlements in USDT. Specific features, supported networks, and limits may change over time."
+          "heading": "1. El Servicio",
+          "body": "RSends presta una <strong>pasarela de pago custodial multi-cadena</strong> que permite a los comercios aceptar pagos en stablecoins en las blockchains públicas compatibles (actualmente Base, Ethereum, Arbitrum, Optimism, Polygon, BNB Chain, Avalanche, Tron y Solana) y recibir liquidaciones periódicas en USDT. Las funcionalidades específicas, las redes admitidas y los límites pueden variar con el tiempo."
         },
         "eligibility": {
-          "heading": "2. Eligibility",
-          "intro": "You may use the Service only if:",
+          "heading": "2. Requisitos de elegibilidad",
+          "intro": "Solo puedes utilizar el Servicio si:",
           "items": [
-            "You are at least 18 years of age and have legal capacity to enter into contracts.",
-            "You are not a resident of, or located in, a jurisdiction subject to comprehensive sanctions administered by OFAC, the United Nations, or the European Union.",
-            "You are not listed on, or owned or controlled by a person listed on, any applicable sanctions list.",
-            "You are not legally barred from using payment, custody, or virtual-asset services in your jurisdiction."
+            "Tienes al menos 18 años y capacidad legal para celebrar contratos.",
+            "No eres residente ni te encuentras en una jurisdicción sujeta a sanciones globales administradas por OFAC, las Naciones Unidas o la Unión Europea.",
+            "No figuras, ni eres propiedad o estás controlado por una persona que figure, en cualquier lista de sanciones aplicable.",
+            "No tienes prohibido legalmente el uso de servicios de pago, custodia o de activos virtuales en tu jurisdicción."
           ]
         },
         "account": {
-          "heading": "3. Account & KYC",
-          "body1": "To use the Service you must register an account and complete identity verification. You agree to provide accurate, current, and complete information and to keep it up to date. Additional information may be requested at any time pursuant to our <linkAmlKyc>AML/KYC Notice</linkAmlKyc>. We may suspend or terminate accounts where KYC cannot be completed or where information appears false or misleading.",
-          "body2": "You are responsible for maintaining the confidentiality of your credentials and for all activity under your account. Notify us immediately of any suspected unauthorised access."
+          "heading": "3. Cuenta y KYC",
+          "body1": "Para utilizar el Servicio debes registrar una cuenta y completar la verificación de identidad. Te comprometes a facilitar información exacta, actual y completa, y a mantenerla actualizada. Podremos solicitar información adicional en cualquier momento conforme a nuestro <linkAmlKyc>Aviso AML/KYC</linkAmlKyc>. Podremos suspender o cerrar cuentas cuando no se pueda completar el KYC o la información resulte falsa o engañosa.",
+          "body2": "Eres responsable de la confidencialidad de tus credenciales y de toda actividad realizada bajo tu cuenta. Notifícanos de inmediato cualquier sospecha de acceso no autorizado."
         },
         "custodial": {
-          "heading": "4. Custodial nature of the Service",
-          "intro": "RSends is a <strong>custodial</strong> service: between the moment a customer payment is received on-chain and the moment of settlement, the relevant funds are held by Rpagos S.R.L on your behalf. You acknowledge and accept that:",
+          "heading": "4. Naturaleza custodial del Servicio",
+          "intro": "RSends es un servicio <strong>con custodia</strong>: entre el momento en que el pago de un cliente se recibe on-chain y el momento de la liquidación, los fondos correspondientes los conserva Rpagos S.R.L por tu cuenta. Reconoces y aceptas que:",
           "items": [
-            "You do not control the private keys to the receiving wallets and you have no direct on-chain access to held balances.",
-            "Funds held in custody are recorded as your entitlement on our books and records and are segregated from RSends' operating funds.",
-            "Custody is subject to operational, technical, and counterparty risks inherent in blockchain infrastructure."
+            "No controlas las claves privadas de los wallets de recepción y no tienes acceso directo on-chain a los saldos custodiados.",
+            "Los fondos en custodia se registran como crédito a tu favor en nuestros libros contables y se mantienen separados de los fondos operativos de RSends.",
+            "La custodia está sujeta a riesgos operativos, técnicos y de contraparte inherentes a la infraestructura blockchain."
           ]
         },
         "settlement": {
-          "heading": "5. Settlement",
-          "body": "Settlements are paid out in <strong>USDT</strong> on a <strong>weekly</strong> cycle, with an initial <strong>three (3) day</strong> hold on the first settlement to a newly added payout address for fraud-prevention purposes. Settlement timing may be extended where compliance review is required."
+          "heading": "5. Liquidación",
+          "body": "Las liquidaciones se realizan en <strong>USDT</strong> con cadencia <strong>semanal</strong>, con una retención inicial de <strong>tres (3) días</strong> sobre la primera liquidación a una nueva dirección de pago, con fines de prevención del fraude. Los plazos de liquidación pueden ampliarse cuando se requiera revisión de cumplimiento."
         },
         "fees": {
-          "heading": "6. Fees",
-          "body": "Fees applicable to the Service are set out on our pricing page and may be amended from time to time. Fees are deducted from settlements unless otherwise agreed in writing. We will provide reasonable advance notice of any material fee changes."
+          "heading": "6. Comisiones",
+          "body": "Las comisiones aplicables al Servicio se establecen en nuestra página de precios y pueden modificarse ocasionalmente. Las comisiones se deducen de las liquidaciones salvo acuerdo escrito en contrario. Daremos un preaviso razonable de cualquier modificación sustancial de las comisiones."
         },
         "prohibited": {
-          "heading": "7. Prohibited activities",
-          "intro": "You agree not to use the Service to:",
+          "heading": "7. Actividades prohibidas",
+          "intro": "Te comprometes a no utilizar el Servicio para:",
           "items": [
-            "Process payments related to unlawful gambling, illegal goods or services, intellectual property infringement, or any activity prohibited by applicable law.",
-            "Send funds to or from mixers, tumblers, darknet markets, or sanctioned addresses.",
-            "Engage in market manipulation, fraud, or money laundering.",
-            "Circumvent transaction limits, identity verification, or other compliance controls.",
-            "Use the Service to facilitate transactions for, or on behalf of, sanctioned persons or jurisdictions."
+            "Procesar pagos relacionados con juego ilícito, bienes o servicios ilegales, infracción de la propiedad intelectual o cualquier actividad prohibida por la normativa aplicable.",
+            "Enviar fondos hacia o desde mixers, tumblers, mercados de la darknet o direcciones sancionadas.",
+            "Realizar manipulación de mercado, fraude o blanqueo de capitales.",
+            "Eludir los límites de transacción, la verificación de identidad u otros controles de cumplimiento.",
+            "Utilizar el Servicio para facilitar transacciones a favor de, o por cuenta de, personas o jurisdicciones sancionadas."
           ],
-          "note": "We may freeze, reverse, or refuse transactions that we reasonably believe violate these Terms or applicable law, and we may report such transactions to authorities as required."
+          "note": "Podremos congelar, revertir o rechazar transacciones que consideremos razonablemente contrarias a los presentes Términos o a la normativa aplicable, y podremos comunicarlas a las autoridades cuando proceda."
         },
         "obligations": {
-          "heading": "8. Customer obligations",
+          "heading": "8. Obligaciones del Cliente",
           "items": [
-            "Comply with all applicable laws, including AML, sanctions, tax, and consumer-protection laws.",
-            "Provide accurate transaction descriptions and customer information when requested.",
-            "Maintain adequate records of your own.",
-            "Cooperate promptly with reasonable compliance requests."
+            "Cumplir con toda la normativa aplicable, incluida la AML, en materia de sanciones, fiscal y de protección al consumidor.",
+            "Facilitar descripciones de transacción e información del cliente exactas cuando se solicite.",
+            "Conservar documentación adecuada por tu parte.",
+            "Cooperar puntualmente con las solicitudes razonables de cumplimiento."
           ]
         },
         "disclaimers": {
-          "heading": "9. Disclaimers",
-          "body": "The Service is provided \"<strong>as is</strong>\" and \"<strong>as available</strong>\". To the maximum extent permitted by law, we disclaim all warranties, express or implied, including merchantability, fitness for a particular purpose, and non-infringement. We do not warrant that the Service will be uninterrupted, error-free, or free of harmful components. Stablecoin and blockchain operations are subject to risks (volatility, depeg, network congestion, smart-contract risk) that we do not control."
+          "heading": "9. Exclusiones de garantía",
+          "body": "El Servicio se presta \"<strong>tal cual</strong>\" y \"<strong>según disponibilidad</strong>\". En la máxima medida permitida por la ley, declinamos toda garantía, expresa o implícita, incluidas las de comerciabilidad, idoneidad para un fin determinado y no infracción. No garantizamos que el Servicio esté libre de interrupciones, errores o componentes dañinos. Las operaciones con stablecoins y blockchain están sujetas a riesgos (volatilidad, depeg, congestión de red, riesgo de smart contract) que no controlamos."
         },
         "liability": {
-          "heading": "10. Limitation of liability",
-          "body": "To the maximum extent permitted by law, RSends' aggregate liability for all claims arising out of or relating to the Service is limited to the fees you paid to us in the twelve (12) months preceding the event giving rise to the claim. We will not be liable for indirect, incidental, special, consequential, or punitive damages, or for lost profits, revenue, data, or business opportunities."
+          "heading": "10. Limitación de responsabilidad",
+          "body": "En la máxima medida permitida por la ley, la responsabilidad agregada de RSends por cualquier reclamación derivada del Servicio o relacionada con él se limita a las comisiones que nos hayas pagado en los doce (12) meses anteriores al hecho que dio origen a la reclamación. No seremos responsables por daños indirectos, incidentales, especiales, consecuenciales o punitivos, ni por lucro cesante, pérdida de ingresos, datos u oportunidades de negocio."
         },
         "indemnity": {
-          "heading": "11. Indemnity",
-          "body": "You agree to indemnify and hold harmless RSends and its officers, directors, employees, and agents from any claim, demand, or damage, including reasonable legal fees, arising out of your breach of these Terms, your violation of applicable law, or your misuse of the Service."
+          "heading": "11. Indemnización",
+          "body": "Te comprometes a indemnizar y mantener indemne a RSends y a sus directivos, administradores, empleados y agentes frente a cualquier reclamación, demanda o daño, incluidos honorarios legales razonables, derivados del incumplimiento de los presentes Términos, de la vulneración de la normativa aplicable o del uso indebido del Servicio."
         },
         "termination": {
-          "heading": "12. Termination",
-          "body": "Either party may terminate the agreement on <strong>thirty (30) days'</strong> written notice. We may suspend or terminate immediately where required by law, where we suspect fraud or breach of these Terms, or where continued provision of the Service would expose us to legal or regulatory risk. On termination we will release any remaining balance to you, subject to applicable holds and compliance review. Records will be retained for five (5) years post-termination as required by law."
+          "heading": "12. Terminación",
+          "body": "Cualquiera de las partes podrá resolver el contrato con un preaviso por escrito de <strong>treinta (30) días</strong>. Podremos suspender o resolver de forma inmediata cuando lo exija la ley, ante sospechas de fraude o incumplimiento de los presentes Términos, o cuando la continuidad del Servicio nos exponga a riesgo legal o regulatorio. Una vez resuelto el contrato liberaremos el saldo restante, sujeto a las retenciones aplicables y a la revisión de cumplimiento. Los registros se conservarán durante cinco (5) años tras la terminación, conforme exige la ley."
         },
         "governingLaw": {
-          "heading": "13. Governing law & dispute resolution",
-          "body": "These Terms are governed by the laws of <strong>Costa Rica</strong>, without regard to conflict-of-laws principles. Any dispute arising out of or relating to these Terms shall be finally settled by <strong>arbitration</strong> seated in San José, Costa Rica, in accordance with the rules of the Centro Internacional de Conciliación y Arbitraje (CICA), in the Spanish or English language as the parties agree."
+          "heading": "13. Ley aplicable y resolución de controversias",
+          "body": "Los presentes Términos se rigen por la legislación de <strong>Costa Rica</strong>, sin atención a los principios de conflicto de leyes. Cualquier controversia derivada de los presentes Términos o relacionada con ellos se resolverá de forma definitiva mediante <strong>arbitraje</strong> con sede en San José, Costa Rica, conforme a las reglas del Centro Internacional de Conciliación y Arbitraje (CICA), en lengua española o inglesa según acuerden las partes."
         },
         "changes": {
-          "heading": "14. Changes to these Terms",
-          "body": "We may amend these Terms from time to time. We will notify you of material changes through the Service or by email. Your continued use of the Service after the effective date of the change constitutes your acceptance of the revised Terms."
+          "heading": "14. Cambios en estos Términos",
+          "body": "Podremos modificar los presentes Términos ocasionalmente. Notificaremos las modificaciones sustanciales a través del Servicio o por correo electrónico. El uso continuado del Servicio tras la fecha de efectividad del cambio constituye tu aceptación de los Términos modificados."
         },
         "contact": {
-          "heading": "15. Contact",
+          "heading": "15. Contacto",
           "lines": [
-            "Legal enquiries: <legalMail>legal@rsends.io</legalMail>",
-            "Postal: Rpagos S.R.L, San José, Costa Rica."
+            "Consultas legales: <legalMail>legal@rsends.io</legalMail>",
+            "Dirección postal: Rpagos S.R.L, San José, Costa Rica."
           ]
         }
       }
     },
     "cookies": {
       "metadata": {
-        "title": "Cookie Policy — RSends",
-        "description": "How RSends uses cookies and similar technologies on the platform, dashboard, and marketing site."
+        "title": "Política de cookies — RSends",
+        "description": "Cómo RSends utiliza cookies y tecnologías similares en la plataforma, el panel y el sitio de marketing."
       },
-      "eyebrow": "Cookie Policy",
-      "title": "Cookie Policy",
-      "lastUpdated": "April 25, 2026",
+      "eyebrow": "Política de cookies",
+      "title": "Política de cookies",
+      "lastUpdated": "25 de abril de 2026",
       "breadcrumbLabel": "Cookies",
-      "intro": "This Cookie Policy explains how Rpagos S.R.L (\"<strong>RSends</strong>\") uses cookies and similar technologies on the RSends website, dashboard, and related services. It supplements our <linkPrivacy>Privacy Policy</linkPrivacy>.",
+      "intro": "Esta Política de cookies explica cómo Rpagos S.R.L (\"<strong>RSends</strong>\") utiliza cookies y tecnologías similares en el sitio web, el panel y los servicios relacionados de RSends. Complementa nuestra <linkPrivacy>Política de privacidad</linkPrivacy>.",
       "sections": {
         "what": {
-          "heading": "1. What are cookies?",
-          "body": "Cookies are small text files placed on your device when you visit a website. They allow the site to recognise your device, remember your preferences, and operate certain features. We also use related technologies such as local storage, session storage, and pixel tags; we refer to all of these collectively as \"cookies\" in this Policy."
+          "heading": "1. ¿Qué son las cookies?",
+          "body": "Las cookies son pequeños archivos de texto que se almacenan en tu dispositivo cuando visitas un sitio web. Permiten que el sitio reconozca tu dispositivo, recuerde tus preferencias y opere ciertas funcionalidades. También utilizamos tecnologías relacionadas como local storage, session storage y pixel tags; en esta Política nos referimos a todas ellas colectivamente como \"cookies\"."
         },
         "categories": {
-          "heading": "2. Categories of cookies we use",
+          "heading": "2. Categorías de cookies que utilizamos",
           "necessary": {
-            "heading": "Strictly necessary",
-            "body": "These cookies are required for the Service to function and cannot be switched off. They support authentication, session integrity, fraud prevention, and load balancing.",
+            "heading": "Estrictamente necesarias",
+            "body": "Estas cookies son indispensables para el funcionamiento del Servicio y no se pueden desactivar. Sirven para la autenticación, la integridad de la sesión, la prevención del fraude y el balanceo de carga.",
             "items": [
-              "<code>__Host-session</code> — secure HTTP-only session cookie used to keep you signed in.",
-              "<code>csrf</code> — anti-CSRF token used to protect form submissions and state-changing API requests."
+              "<code>__Host-session</code> — cookie de sesión segura HTTP-only utilizada para mantenerte autenticado.",
+              "<code>csrf</code> — token anti-CSRF utilizado para proteger el envío de formularios y las solicitudes API que modifican el estado."
             ]
           },
           "functional": {
-            "heading": "Functional",
-            "body": "These cookies remember the choices you make to improve your experience. They are not used for tracking across other sites.",
+            "heading": "Funcionales",
+            "body": "Estas cookies recuerdan las opciones que eliges para mejorar tu experiencia. No se utilizan para el seguimiento entre sitios.",
             "items": [
-              "<code>NEXT_LOCALE</code> — remembers your preferred language.",
-              "<code>theme</code> — remembers your light/dark theme preference (where applicable)."
+              "<code>NEXT_LOCALE</code> — recuerda tu idioma preferido.",
+              "<code>theme</code> — recuerda tu preferencia de tema claro/oscuro (cuando proceda)."
             ]
           },
           "analytics": {
-            "heading": "Analytics",
-            "body": "We may use anonymised, aggregated analytics to understand how the Service is used and to improve it. Where we use such tools, we will update this Policy to list the specific provider, the data collected, and the retention period. We do not use analytics that build cross-site profiles of you."
+            "heading": "Analíticas",
+            "body": "Podremos utilizar herramientas de analíticas anonimizadas y agregadas para entender cómo se usa el Servicio y mejorarlo. Si utilizamos dichas herramientas, actualizaremos esta Política indicando el proveedor concreto, los datos recogidos y el periodo de conservación. No utilizamos analíticas que construyan perfiles cross-site del usuario."
           },
           "advertising": {
-            "heading": "Advertising and tracking",
-            "body": "We do <strong>not</strong> use advertising cookies, retargeting pixels, or third-party tracking technologies on the Service."
+            "heading": "Publicidad y seguimiento",
+            "body": "<strong>No</strong> utilizamos cookies publicitarias, píxeles de retargeting ni tecnologías de seguimiento de terceros en el Servicio."
           }
         },
         "managing": {
-          "heading": "3. Managing cookies",
-          "body": "You can control cookies through your browser settings. Most browsers allow you to view existing cookies, block cookies from specific domains, or delete cookies entirely. Note that disabling strictly-necessary cookies may prevent the Service from functioning correctly.",
-          "browsersIntro": "Browser-specific guidance:",
+          "heading": "3. Gestión de cookies",
+          "body": "Puedes controlar las cookies a través de la configuración de tu navegador. La mayoría de los navegadores permite ver las cookies existentes, bloquear cookies de dominios concretos o eliminar cookies por completo. Desactivar las cookies estrictamente necesarias puede impedir el correcto funcionamiento del Servicio.",
+          "browsersIntro": "Guías específicas por navegador:",
           "browsers": [
             "<chrome>Google Chrome</chrome>",
             "<firefox>Mozilla Firefox</firefox>",
@@ -1123,97 +1123,97 @@
           ]
         },
         "changes": {
-          "heading": "4. Changes to this Policy",
-          "body": "We may update this Cookie Policy as our cookie usage evolves. The \"Last updated\" date at the top of this page reflects the most recent revision."
+          "heading": "4. Cambios en esta Política",
+          "body": "Podremos actualizar esta Política de cookies a medida que evolucione nuestro uso de cookies. La fecha de \"Última actualización\" en la parte superior de esta página refleja la revisión más reciente."
         },
         "contact": {
-          "heading": "5. Contact",
-          "body": "Questions about this Cookie Policy: <privacyMail>privacy@rsends.io</privacyMail>."
+          "heading": "5. Contacto",
+          "body": "Consultas sobre esta Política de cookies: <privacyMail>privacy@rsends.io</privacyMail>."
         }
       }
     },
     "amlKyc": {
       "metadata": {
-        "title": "AML / KYC Notice — RSends",
-        "description": "Anti-Money-Laundering and Know-Your-Customer obligations applicable to RSends users, including FATF, EU DAC8, and Costa Rica AML/CFT framework."
+        "title": "Aviso AML / KYC — RSends",
+        "description": "Obligaciones de prevención del blanqueo de capitales y de conocimiento del cliente aplicables a los usuarios de RSends, incluidos FATF, DAC8 UE y el marco AML/CFT de Costa Rica."
       },
-      "eyebrow": "AML / KYC Notice",
-      "title": "Anti-Money-Laundering and Know-Your-Customer programme",
-      "lastUpdated": "April 25, 2026",
+      "eyebrow": "Aviso AML / KYC",
+      "title": "Programa de prevención del blanqueo de capitales y conocimiento del cliente",
+      "lastUpdated": "25 de abril de 2026",
       "breadcrumbLabel": "AML / KYC",
-      "intro": "This Notice describes the anti-money-laundering (\"<strong>AML</strong>\"), counter-terrorism-financing (\"<strong>CTF</strong>\"), and customer-due-diligence obligations that Rpagos S.R.L (\"<strong>RSends</strong>\") applies to all users of the Service. It is provided for transparency and forms part of our Terms of Service.",
+      "intro": "Este Aviso describe las obligaciones de prevención del blanqueo de capitales (\"<strong>AML</strong>\"), de la financiación del terrorismo (\"<strong>CTF</strong>\") y de debida diligencia del cliente que Rpagos S.R.L (\"<strong>RSends</strong>\") aplica a todos los usuarios del Servicio. Se ofrece con fines de transparencia y forma parte de nuestros Términos del servicio.",
       "sections": {
         "framework": {
-          "heading": "1. Compliance framework",
-          "intro": "RSends operates a risk-based compliance programme aligned with:",
+          "heading": "1. Marco de cumplimiento",
+          "intro": "RSends aplica un programa de cumplimiento basado en el riesgo, alineado con:",
           "items": [
-            "The Recommendations of the <strong>Financial Action Task Force (FATF)</strong>, in particular Recommendation 15 on Virtual Asset Service Providers.",
-            "<strong>EU Directive 2023/2226 (DAC8)</strong> for the automatic exchange of information on crypto-asset transactions for users tax-resident in the European Union.",
-            "Costa Rica's AML/CFT framework, including <em>Ley 8204</em> and applicable regulations issued by SUGEF and the Instituto Costarricense sobre Drogas (ICD).",
-            "International sanctions regimes, including <strong>OFAC</strong> (United States), consolidated United Nations sanctions, and EU restrictive measures."
+            "Las Recomendaciones del <strong>Financial Action Task Force (FATF)</strong>, en particular la Recomendación 15 sobre Proveedores de Servicios de Activos Virtuales.",
+            "La <strong>Directiva UE 2023/2226 (DAC8)</strong> para el intercambio automático de información sobre transacciones de criptoactivos para usuarios con residencia fiscal en la Unión Europea.",
+            "El marco AML/CFT de Costa Rica, incluida la <em>Ley 8204</em> y las regulaciones aplicables emitidas por SUGEF y el Instituto Costarricense sobre Drogas (ICD).",
+            "Los regímenes internacionales de sanciones, incluidos <strong>OFAC</strong> (Estados Unidos), las sanciones consolidadas de las Naciones Unidas y las medidas restrictivas de la UE."
           ]
         },
         "threeLevel": {
-          "heading": "2. Three-level customer screening",
-          "intro": "We apply a three-level approach to customer screening:",
+          "heading": "2. Cribado del cliente en tres niveles",
+          "intro": "Aplicamos un enfoque de tres niveles para el cribado del cliente:",
           "items": [
-            "<strong>Level 1 — Identity verification.</strong> Confirmation of identity using government-issued documents and a liveness check, sanctions and politically-exposed-person (PEP) screening, and basic risk scoring.",
-            "<strong>Level 2 — Enhanced due diligence (EDD).</strong> Triggered for higher-risk profiles (high transaction volume, exposure to high-risk jurisdictions, complex ownership structures). Requires additional documentation, including source of funds, source of wealth, and ultimate beneficial ownership records.",
-            "<strong>Level 3 — Continuous monitoring.</strong> Ongoing transaction monitoring against customer profiles, periodic re-verification, blockchain analytics screening of counterparties and wallet addresses, and risk-based reviews."
+            "<strong>Nivel 1 — Verificación de identidad.</strong> Confirmación de la identidad mediante documentos emitidos por autoridades públicas y prueba de vida (liveness check), cribado de sanciones y de personas políticamente expuestas (PEP), y puntuación de riesgo básica.",
+            "<strong>Nivel 2 — Diligencia debida reforzada (EDD).</strong> Activada para perfiles de mayor riesgo (volumen transaccional alto, exposición a jurisdicciones de alto riesgo, estructuras de propiedad complejas). Requiere documentación adicional, incluido el origen de los fondos, el origen del patrimonio y los registros de los beneficiarios finales.",
+            "<strong>Nivel 3 — Monitoreo continuo.</strong> Monitoreo continuo de las transacciones frente al perfil del cliente, reverificación periódica, cribado mediante blockchain analytics de contrapartes y direcciones de wallet, y revisiones basadas en riesgo."
           ]
         },
         "cdd": {
-          "heading": "3. Customer Due Diligence (CDD) requirements",
-          "intro": "To open and maintain an account, you must provide:",
+          "heading": "3. Requisitos de debida diligencia del cliente (CDD)",
+          "intro": "Para abrir y mantener una cuenta debes facilitar:",
           "items": [
-            "A valid government-issued photo identification document.",
-            "Proof of residential address dated within the last three (3) months.",
-            "For corporate users: certificate of incorporation, register of directors, register of shareholders, and identification of all ultimate beneficial owners holding 25% or more.",
-            "A description of the intended use of the Service, expected transaction volumes, and counterparties."
+            "Un documento de identidad con fotografía, válido y emitido por una autoridad pública.",
+            "Comprobante de domicilio con fecha de los últimos tres (3) meses.",
+            "Para usuarios corporativos: certificado de constitución, registro de administradores, registro de socios e identificación de todos los beneficiarios finales que ostenten el 25% o más.",
+            "Una descripción del uso previsto del Servicio, los volúmenes transaccionales esperados y las contrapartes."
           ],
-          "note": "We may request additional information at any time as part of our risk-based monitoring obligations."
+          "note": "Podremos solicitar información adicional en cualquier momento como parte de nuestras obligaciones de monitoreo basado en riesgo."
         },
         "sourceOfFunds": {
-          "heading": "4. Source of funds",
-          "body": "For transactions exceeding applicable thresholds, or where risk indicators suggest elevated risk, we may require documentation of the source of funds and source of wealth. Acceptable evidence includes employment records, business financial statements, sale-of-asset documentation, or audited corporate accounts. We may delay or decline transactions until satisfactory evidence is provided."
+          "heading": "4. Origen de los fondos",
+          "body": "Para transacciones que superen los umbrales aplicables, o cuando los indicadores de riesgo sugieran un riesgo elevado, podremos requerir documentación sobre el origen de los fondos y el origen del patrimonio. A modo de ejemplo, se admiten justificantes laborales, estados financieros empresariales, documentación de venta de activos o cuentas corporativas auditadas. Podremos retrasar o rechazar las transacciones hasta que se aporte documentación satisfactoria."
         },
         "sanctions": {
-          "heading": "5. Sanctions screening",
-          "body1": "All users, beneficial owners, and counterparties (including counterparty wallet addresses) are screened against the OFAC SDN List, EU consolidated sanctions list, UN sanctions list, and additional national lists where relevant. Lists are refreshed at least daily, and screening is repeated continuously throughout the customer lifecycle.",
-          "body2": "Transactions involving sanctioned persons, sanctioned wallet addresses, or sanctioned jurisdictions will be blocked and reported to the relevant authorities as required."
+          "heading": "5. Cribado de sanciones",
+          "body1": "Todos los usuarios, beneficiarios finales y contrapartes (incluidas las direcciones de wallet de las contrapartes) son objeto de cribado frente a la OFAC SDN List, la lista consolidada de sanciones de la UE, la lista de sanciones de la ONU y otras listas nacionales cuando sea pertinente. Las listas se actualizan al menos a diario y el cribado se repite de forma continua durante todo el ciclo de vida del cliente.",
+          "body2": "Las transacciones que involucren a personas sancionadas, direcciones de wallet sancionadas o jurisdicciones sancionadas serán bloqueadas y comunicadas a las autoridades competentes cuando proceda."
         },
         "sar": {
-          "heading": "6. Suspicious-activity reporting",
-          "body": "Where transactions or behaviour suggest possible money laundering, terrorism financing, sanctions evasion, fraud, or other financial crime, we will file an internal Suspicious Activity Report (SAR) and, where required, escalate to the Costa Rican Financial Intelligence Unit and to other competent authorities. We may not be permitted to inform you that a report has been filed (\"tipping-off\")."
+          "heading": "6. Reporte de operaciones sospechosas",
+          "body": "Cuando las transacciones o conductas sugieran posible blanqueo de capitales, financiación del terrorismo, evasión de sanciones, fraude u otro delito financiero, presentaremos un Reporte de Operación Sospechosa (ROS) interno y, cuando proceda, lo escalaremos a la Unidad de Inteligencia Financiera de Costa Rica y a otras autoridades competentes. Es posible que no estemos autorizados a informarte de que se ha presentado un reporte (\"prohibición de revelación\" o tipping-off)."
         },
         "records": {
-          "heading": "7. Record keeping",
-          "body": "We retain customer-due-diligence records, transaction records, and AML monitoring records for a period of at least <strong>five (5) years</strong> from the end of the business relationship or from the date of the transaction, in accordance with Costa Rican regulations."
+          "heading": "7. Conservación de registros",
+          "body": "Conservamos los registros de debida diligencia del cliente, los registros de transacciones y los registros de monitoreo AML durante un periodo no inferior a <strong>cinco (5) años</strong> desde la finalización de la relación de negocio o desde la fecha de la transacción, conforme a la normativa costarricense."
         },
         "cooperation": {
-          "heading": "8. Customer cooperation",
-          "intro": "By using the Service you agree to:",
+          "heading": "8. Cooperación del cliente",
+          "intro": "Al utilizar el Servicio te comprometes a:",
           "items": [
-            "Provide accurate, complete, and up-to-date information.",
-            "Respond promptly to compliance requests, including documentation requests and source-of-funds verifications.",
-            "Notify us promptly of changes to your beneficial ownership, control, or registered address.",
-            "Not use the Service to evade compliance controls or in connection with sanctioned activity."
+            "Facilitar información exacta, completa y actualizada.",
+            "Responder puntualmente a las solicitudes de cumplimiento, incluidas las solicitudes documentales y las verificaciones de origen de los fondos.",
+            "Notificarnos puntualmente cualquier cambio relativo a tu titular efectivo, control o domicilio social.",
+            "No utilizar el Servicio para eludir los controles de cumplimiento ni en relación con actividades sancionadas."
           ],
-          "note": "Failure to cooperate may result in suspension or termination of your account and, where appropriate, reporting to authorities."
+          "note": "La falta de cooperación podrá derivar en la suspensión o cierre de tu cuenta y, cuando proceda, en la comunicación a las autoridades."
         },
         "riskBased": {
-          "heading": "9. Risk-based approach",
-          "body": "Our compliance programme is risk-based and proportionate. The level of due diligence, monitoring, and review applied to a relationship depends on the assessed risk, taking into account customer type, geography, products used, transaction patterns, and external risk indicators."
+          "heading": "9. Enfoque basado en el riesgo",
+          "body": "Nuestro programa de cumplimiento se basa en el riesgo y es proporcionado. El nivel de debida diligencia, monitoreo y revisión aplicado a una relación depende del riesgo evaluado, teniendo en cuenta el tipo de cliente, la geografía, los productos utilizados, los patrones transaccionales y los indicadores de riesgo externos."
         },
         "changes": {
-          "heading": "10. Changes to this Notice",
-          "body": "We update this Notice from time to time as the regulatory landscape evolves. The \"Last updated\" date at the top of this page reflects the most recent revision."
+          "heading": "10. Cambios en este Aviso",
+          "body": "Actualizamos este Aviso ocasionalmente a medida que evoluciona el marco regulatorio. La fecha de \"Última actualización\" en la parte superior de esta página refleja la revisión más reciente."
         },
         "contact": {
-          "heading": "11. Contact",
+          "heading": "11. Contacto",
           "lines": [
-            "Compliance enquiries: <complianceMail>compliance@rsends.io</complianceMail>",
-            "Postal: Rpagos S.R.L, Compliance Office, San José, Costa Rica."
+            "Consultas en materia de cumplimiento: <complianceMail>compliance@rsends.io</complianceMail>",
+            "Dirección postal: Rpagos S.R.L, Compliance Office, San José, Costa Rica."
           ]
         }
       }
