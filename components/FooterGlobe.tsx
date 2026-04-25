@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useEffect, useCallback, useState } from 'react'
+import { Link } from '@/i18n/navigation'
 import styles from './FooterGlobe.module.css'
 
 // ═══════════════════════════════════════════════════════════
@@ -666,9 +667,13 @@ export default function FooterGlobe() {
             <span className={styles.brandName}>RSends Inc.</span>
             <span>&copy; 2026</span>
             <span style={{ opacity: 0.3 }}>&middot;</span>
-            <a href="#terms" className={styles.bottomTextLink} style={{ textDecoration: 'none', color: 'inherit' }}>Terms</a>
+            <Link href="/docs/terms" className={styles.bottomTextLink} style={{ textDecoration: 'none', color: 'inherit' }}>Terms</Link>
             <span style={{ opacity: 0.3 }}>&middot;</span>
-            <a href="#privacy" className={styles.bottomTextLink} style={{ textDecoration: 'none', color: 'inherit' }}>Privacy</a>
+            <Link href="/docs/privacy" className={styles.bottomTextLink} style={{ textDecoration: 'none', color: 'inherit' }}>Privacy</Link>
+            <span style={{ opacity: 0.3 }}>&middot;</span>
+            <Link href="/docs/cookies" className={styles.bottomTextLink} style={{ textDecoration: 'none', color: 'inherit' }}>Cookies</Link>
+            <span style={{ opacity: 0.3 }}>&middot;</span>
+            <Link href="/docs/aml-kyc" className={styles.bottomTextLink} style={{ textDecoration: 'none', color: 'inherit' }}>AML/KYC</Link>
           </div>
           <div className={styles.socials}>
             {SOCIALS.map(s => (
