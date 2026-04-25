@@ -1,6 +1,7 @@
 'use client'
 
 import { ReactNode } from 'react'
+import { useTranslations } from 'next-intl'
 import { Link } from '@/i18n/navigation'
 import { C } from '@/app/designTokens'
 import { useIsMobile } from '@/hooks/useIsMobile'
@@ -15,6 +16,7 @@ type Props = {
 
 export default function LegalShell({ eyebrow, title, lastUpdated, breadcrumbLabel, children }: Props) {
   const isMobile = useIsMobile()
+  const t = useTranslations('legal.shell')
 
   return (
     <main
@@ -46,13 +48,13 @@ export default function LegalShell({ eyebrow, title, lastUpdated, breadcrumbLabe
           >
             <li>
               <Link href="/" style={{ color: 'inherit', textDecoration: 'none' }}>
-                Home
+                {t('breadcrumb.home')}
               </Link>
             </li>
             <li style={{ color: 'rgba(10,10,10,0.25)' }}>/</li>
             <li>
               <Link href="/docs" style={{ color: 'inherit', textDecoration: 'none' }}>
-                Docs
+                {t('breadcrumb.docs')}
               </Link>
             </li>
             <li style={{ color: 'rgba(10,10,10,0.25)' }}>/</li>
@@ -73,8 +75,7 @@ export default function LegalShell({ eyebrow, title, lastUpdated, breadcrumbLabe
             lineHeight: 1.6,
           }}
         >
-          This document is an illustrative template, not legal advice. Consult qualified counsel
-          before relying on it for any compliance or contractual decision.
+          {t('disclaimer')}
         </div>
 
         <p
@@ -113,7 +114,7 @@ export default function LegalShell({ eyebrow, title, lastUpdated, breadcrumbLabe
             margin: '0 0 48px',
           }}
         >
-          Last updated: {lastUpdated}
+          {t('lastUpdatedLabel')} {lastUpdated}
         </p>
 
         <div className="legal-content">{children}</div>
@@ -135,7 +136,7 @@ export default function LegalShell({ eyebrow, title, lastUpdated, breadcrumbLabe
               textDecoration: 'none',
             }}
           >
-            ← Back to home
+            {t('backToHome')}
           </Link>
         </div>
       </div>

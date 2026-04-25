@@ -849,5 +849,373 @@
       "max_members_reached": "Questa organizzazione è piena.",
       "unknown": "Qualcosa è andato storto. Riprova."
     }
+  },
+  "legal": {
+    "shell": {
+      "breadcrumb": {
+        "home": "Home",
+        "docs": "Documenti"
+      },
+      "disclaimer": "Il presente documento è un modello illustrativo e non costituisce parere legale. Consulta un consulente qualificato prima di basarti su di esso per qualsiasi decisione contrattuale o di compliance.",
+      "lastUpdatedLabel": "Ultimo aggiornamento:",
+      "backToHome": "← Torna alla home"
+    },
+    "privacy": {
+      "metadata": {
+        "title": "Informativa sulla privacy — RSends",
+        "description": "Come RSends (Rpagos S.R.L) raccoglie, utilizza, conserva e condivide i dati personali. Informazioni ai sensi del GDPR e della Legge 8968 della Costa Rica."
+      },
+      "eyebrow": "Informativa sulla privacy",
+      "title": "Come trattiamo i tuoi dati",
+      "lastUpdated": "25 aprile 2026",
+      "breadcrumbLabel": "Privacy",
+      "intro": "La presente Informativa sulla privacy descrive come Rpagos S.R.L (\"<strong>RSends</strong>\", \"noi\") raccoglie, utilizza, conserva e condivide i dati personali quando si utilizzano la piattaforma, la dashboard, le API e i relativi servizi RSends (collettivamente, il \"<strong>Servizio</strong>\").",
+      "sections": {
+        "controller": {
+          "heading": "1. Titolare del trattamento",
+          "intro": "Il titolare del trattamento dei tuoi dati personali è:",
+          "addressLines": [
+            "<strong>Rpagos S.R.L</strong>",
+            "Iscritta in Costa Rica, n. registro 4062001345466",
+            "San José, Costa Rica",
+            "Contatto: <privacyMail>privacy@rsends.io</privacyMail>"
+          ]
+        },
+        "dataCollect": {
+          "heading": "2. Dati che raccogliamo",
+          "intro": "Raccogliamo le seguenti categorie di dati personali:",
+          "items": [
+            "<strong>Informazioni dell'account</strong> — nome, indirizzo email, numero di telefono, ragione sociale, identificativi fiscali e credenziali di autenticazione.",
+            "<strong>Dati di verifica dell'identità (KYC)</strong> — documento d'identità rilasciato da un'autorità pubblica, prova di residenza, dati sui titolari effettivi e documentazione a supporto dell'origine dei fondi.",
+            "<strong>Dati delle transazioni</strong> — indirizzi wallet, hash delle transazioni, importi, blockchain di origine e destinazione, registri di settlement, commissioni e riferimenti delle controparti.",
+            "<strong>Dati tecnici</strong> — indirizzo IP, tipo di dispositivo, fingerprint del browser, identificatori cookie, file di log e geolocalizzazione approssimativa derivata dall'IP.",
+            "<strong>Comunicazioni</strong> — ticket di supporto, email e qualsiasi corrispondenza inviataci."
+          ]
+        },
+        "legalBasis": {
+          "heading": "3. Base giuridica del trattamento",
+          "intro": "Trattiamo i tuoi dati personali sulle seguenti basi giuridiche:",
+          "items": [
+            "<strong>Esecuzione di un contratto</strong> — per fornire il Servizio, eseguire le transazioni e gestire il tuo account.",
+            "<strong>Obbligo di legge</strong> — per adempiere agli obblighi antiriciclaggio (AML), di contrasto al finanziamento del terrorismo (CTF), di reporting DAC8 (utenti UE), fiscali e di screening sanzioni.",
+            "<strong>Legittimo interesse</strong> — prevenzione delle frodi, sicurezza della rete, miglioramento del prodotto e analisi interne.",
+            "<strong>Consenso</strong> — ove richiesto (ad esempio, comunicazioni di marketing facoltative), revocabile in qualsiasi momento."
+          ]
+        },
+        "howWeUse": {
+          "heading": "4. Come utilizziamo i tuoi dati",
+          "items": [
+            "Per aprire, mantenere e proteggere il tuo account.",
+            "Per eseguire e regolare le transazioni sulle blockchain supportate.",
+            "Per effettuare KYC, screening sanzioni e monitoraggio AML continuo.",
+            "Per rilevare, prevenire e indagare frodi e abusi.",
+            "Per fornire assistenza clienti e rispondere alle tue richieste.",
+            "Per rispettare la normativa applicabile e rispondere a richieste legittime delle autorità."
+          ]
+        },
+        "dataSharing": {
+          "heading": "5. Condivisione dei dati",
+          "intro": "Condividiamo i dati personali esclusivamente con:",
+          "items": [
+            "<strong>Fornitori di servizi</strong> — provider KYC, partner di blockchain analytics, fornitori di hosting cloud e strumenti email/comunicazione, tutti vincolati da contratti di trattamento dei dati.",
+            "<strong>Autorità e regolatori</strong> — quando richiesto dalla legge, da un ordine dell'autorità o in risposta a una richiesta legittima, anche in adempimento agli obblighi di scambio di informazioni DAC8.",
+            "<strong>Successori</strong> — in caso di fusione, acquisizione o cessione di asset, fatte salve tutele equivalenti sulla privacy."
+          ],
+          "note": "<strong>Non</strong> vendiamo i tuoi dati personali e non li condividiamo con inserzionisti."
+        },
+        "transfers": {
+          "heading": "6. Trasferimenti internazionali",
+          "body": "La nostra sede è in Costa Rica. I dati personali degli utenti situati nello Spazio Economico Europeo (SEE) o nel Regno Unito sono trasferiti in Costa Rica sulla base delle Clausole Contrattuali Standard (CCS) della Commissione Europea, integrate da adeguate misure tecniche e organizzative."
+        },
+        "retention": {
+          "heading": "7. Conservazione",
+          "body": "Conserviamo i dati personali per la durata del tuo account più <strong>cinque (5) anni</strong> dopo la cessazione, in linea con i nostri obblighi di tenuta dei registri previsti dalla normativa AML costaricana e dagli impegni contrattuali. I registri delle transazioni possono essere conservati più a lungo se richiesto dalla legge."
+        },
+        "rights": {
+          "heading": "8. I tuoi diritti",
+          "intro": "A seconda della tua giurisdizione, hai i seguenti diritti:",
+          "items": [
+            "<strong>Utenti SEE / Regno Unito (artt. 15–22 GDPR)</strong> — accesso, rettifica, cancellazione, limitazione del trattamento, portabilità dei dati, opposizione al trattamento e diritto di non essere sottoposto a decisioni esclusivamente automatizzate.",
+            "<strong>Utenti Costa Rica (Legge 8968)</strong> — diritti di accesso, rettifica, cancellazione (ove consentita) e revoca del consenso."
+          ],
+          "howTo": "Per esercitare questi diritti, scrivi a <privacyMail>privacy@rsends.io</privacyMail>. Risponderemo entro i termini previsti dalla normativa applicabile. Alcuni diritti possono essere limitati ove siamo tenuti a conservare i dati per ragioni legali o regolamentari (ad esempio, tenuta dei registri AML).",
+          "authority": "Hai inoltre il diritto di proporre reclamo all'autorità di controllo competente — in Costa Rica, l'<em>Agencia de Protección de Datos de los Habitantes (PRODHAB)</em>; nel SEE, l'autorità nazionale di protezione dei dati."
+        },
+        "security": {
+          "heading": "9. Sicurezza",
+          "body": "Adottiamo misure tecniche e organizzative finalizzate a proteggere i tuoi dati da accessi non autorizzati, perdita, alterazione o divulgazione, tra cui crittografia in transito e a riposo, controlli di accesso, separazione dei compiti e monitoraggio continuo. Nessun sistema è sicuro al 100%; ti notificheremo eventuali violazioni di dati personali quando richiesto dalla legge."
+        },
+        "cookies": {
+          "heading": "10. Cookie",
+          "body": "Per i dettagli sui cookie e sulle tecnologie analoghe utilizzate sul Servizio, consulta la nostra <linkCookies>Cookie Policy</linkCookies>."
+        },
+        "children": {
+          "heading": "11. Minori",
+          "body": "Il Servizio non è rivolto a soggetti minori di 18 anni. Non raccogliamo consapevolmente dati personali di minori."
+        },
+        "changes": {
+          "heading": "12. Modifiche alla presente Informativa",
+          "body": "Possiamo aggiornare di volta in volta la presente Informativa sulla privacy. Le modifiche sostanziali saranno comunicate tramite il Servizio o via email. La data \"Ultimo aggiornamento\" in cima a questa pagina riflette l'ultima revisione."
+        },
+        "contact": {
+          "heading": "13. Contatti",
+          "lines": [
+            "Richieste in materia di privacy: <privacyMail>privacy@rsends.io</privacyMail>",
+            "Indirizzo postale: Rpagos S.R.L, San José, Costa Rica."
+          ]
+        }
+      }
+    },
+    "terms": {
+      "metadata": {
+        "title": "Termini di servizio — RSends",
+        "description": "I termini che disciplinano l'uso del gateway di pagamento custodial multi-chain RSends fornito da Rpagos S.R.L (Costa Rica)."
+      },
+      "eyebrow": "Termini di servizio",
+      "title": "Termini di servizio",
+      "lastUpdated": "25 aprile 2026",
+      "breadcrumbLabel": "Termini",
+      "intro1": "I presenti Termini di servizio (i \"<strong>Termini</strong>\") costituiscono un accordo vincolante tra l'utente (il \"<strong>Cliente</strong>\") e <strong>Rpagos S.R.L</strong> (\"<strong>RSends</strong>\", \"noi\"), società iscritta in Costa Rica (n. registro 4062001345466), con sede a San José, Costa Rica.",
+      "intro2": "Creando un account, accedendo alla dashboard o utilizzando una qualsiasi API RSends, accetti di essere vincolato dai presenti Termini. In caso di disaccordo, non utilizzare il Servizio.",
+      "sections": {
+        "service": {
+          "heading": "1. Il Servizio",
+          "body": "RSends fornisce un <strong>gateway di pagamento custodial multi-chain</strong> che consente ai merchant di accettare pagamenti in stablecoin sulle blockchain pubbliche supportate (attualmente Base, Ethereum, Arbitrum, Optimism, Polygon, BNB Chain, Avalanche, Tron e Solana) e ricevere settlement periodici in USDT. Funzionalità specifiche, reti supportate e limiti possono variare nel tempo."
+        },
+        "eligibility": {
+          "heading": "2. Requisiti di idoneità",
+          "intro": "Puoi utilizzare il Servizio solo se:",
+          "items": [
+            "Hai almeno 18 anni e disponi della capacità giuridica per stipulare contratti.",
+            "Non sei residente o ubicato in una giurisdizione soggetta a sanzioni globali amministrate da OFAC, Nazioni Unite o Unione Europea.",
+            "Non sei iscritto, posseduto o controllato da una persona iscritta in alcuna lista di sanzioni applicabile.",
+            "Non sei legalmente interdetto dall'utilizzo di servizi di pagamento, custodia o virtual asset nella tua giurisdizione."
+          ]
+        },
+        "account": {
+          "heading": "3. Account e KYC",
+          "body1": "Per utilizzare il Servizio devi registrare un account e completare la verifica dell'identità. Ti impegni a fornire informazioni accurate, attuali e complete e a mantenerle aggiornate. Possono essere richieste informazioni aggiuntive in qualsiasi momento ai sensi della nostra <linkAmlKyc>Informativa AML/KYC</linkAmlKyc>. Possiamo sospendere o chiudere account in cui il KYC non possa essere completato o le informazioni risultino false o fuorvianti.",
+          "body2": "Sei responsabile della riservatezza delle tue credenziali e di tutte le attività svolte attraverso il tuo account. Notificaci immediatamente qualsiasi sospetto accesso non autorizzato."
+        },
+        "custodial": {
+          "heading": "4. Natura custodial del Servizio",
+          "intro": "RSends è un servizio <strong>custodial</strong>: tra il momento in cui un pagamento del cliente viene ricevuto on-chain e il momento del settlement, i relativi fondi sono detenuti da Rpagos S.R.L per tuo conto. Riconosci e accetti che:",
+          "items": [
+            "Non controlli le chiavi private dei wallet di ricezione e non hai accesso diretto on-chain ai saldi detenuti.",
+            "I fondi in custodia sono registrati come tuo credito nei nostri libri contabili e tenuti separati dai fondi operativi di RSends.",
+            "La custodia è soggetta a rischi operativi, tecnici e di controparte tipici delle infrastrutture blockchain."
+          ]
+        },
+        "settlement": {
+          "heading": "5. Settlement",
+          "body": "I settlement sono regolati in <strong>USDT</strong> con cadenza <strong>settimanale</strong>, con un blocco iniziale di <strong>tre (3) giorni</strong> sul primo settlement verso un nuovo indirizzo di payout per finalità di prevenzione frodi. Le tempistiche di settlement possono essere prolungate in caso di revisione di compliance."
+        },
+        "fees": {
+          "heading": "6. Commissioni",
+          "body": "Le commissioni applicabili al Servizio sono indicate nella nostra pagina dei prezzi e possono essere modificate nel tempo. Le commissioni sono trattenute dai settlement salvo diverso accordo scritto. Forniremo un preavviso ragionevole per qualsiasi modifica sostanziale delle commissioni."
+        },
+        "prohibited": {
+          "heading": "7. Attività vietate",
+          "intro": "Ti impegni a non utilizzare il Servizio per:",
+          "items": [
+            "Trattare pagamenti relativi a gioco d'azzardo illecito, beni o servizi illegali, violazione di proprietà intellettuale o qualsiasi attività vietata dalla normativa applicabile.",
+            "Inviare fondi da o verso mixer, tumbler, marketplace darknet o indirizzi sanzionati.",
+            "Compiere manipolazione di mercato, frode o riciclaggio di denaro.",
+            "Eludere limiti di transazione, verifica dell'identità o altri controlli di compliance.",
+            "Utilizzare il Servizio per facilitare transazioni a favore di, o per conto di, persone o giurisdizioni sanzionate."
+          ],
+          "note": "Possiamo congelare, annullare o rifiutare transazioni che riteniamo ragionevolmente in violazione dei presenti Termini o della legge applicabile, e segnalare tali transazioni alle autorità competenti ove richiesto."
+        },
+        "obligations": {
+          "heading": "8. Obblighi del Cliente",
+          "items": [
+            "Rispettare tutta la normativa applicabile, incluse le norme AML, in materia di sanzioni, fiscali e di tutela del consumatore.",
+            "Fornire descrizioni di transazione e informazioni cliente accurate quando richiesto.",
+            "Conservare adeguata documentazione contabile.",
+            "Cooperare tempestivamente con le richieste ragionevoli di compliance."
+          ]
+        },
+        "disclaimers": {
+          "heading": "9. Esclusioni di garanzia",
+          "body": "Il Servizio è fornito \"<strong>così com'è</strong>\" e \"<strong>come disponibile</strong>\". Nella massima misura consentita dalla legge, escludiamo qualsiasi garanzia, espressa o implicita, comprese quelle di commerciabilità, idoneità a uno scopo particolare e non violazione. Non garantiamo che il Servizio sarà ininterrotto, privo di errori o privo di componenti dannose. Le operazioni in stablecoin e su blockchain sono soggette a rischi (volatilità, depeg, congestione di rete, rischio smart contract) che non controlliamo."
+        },
+        "liability": {
+          "heading": "10. Limitazione di responsabilità",
+          "body": "Nella massima misura consentita dalla legge, la responsabilità complessiva di RSends per qualsiasi pretesa derivante dal o relativa al Servizio è limitata alle commissioni che ci hai corrisposto nei dodici (12) mesi precedenti l'evento generatore della pretesa. Non saremo responsabili per danni indiretti, incidentali, speciali, consequenziali o punitivi, né per perdita di profitti, ricavi, dati od opportunità di business."
+        },
+        "indemnity": {
+          "heading": "11. Manleva",
+          "body": "Ti impegni a manlevare e tenere indenne RSends, i suoi amministratori, dirigenti, dipendenti e agenti da qualsiasi pretesa, richiesta o danno, comprese spese legali ragionevoli, derivanti dalla violazione dei presenti Termini, dalla violazione della legge applicabile o dall'uso improprio del Servizio."
+        },
+        "termination": {
+          "heading": "12. Risoluzione",
+          "body": "Ciascuna parte può recedere dal contratto con preavviso scritto di <strong>trenta (30) giorni</strong>. Possiamo sospendere o risolvere immediatamente ove richiesto dalla legge, in caso di sospetta frode o violazione dei presenti Termini, o qualora la prosecuzione del Servizio ci esponga a rischio legale o regolamentare. Alla risoluzione rilasceremo l'eventuale saldo residuo, fatti salvi i fermi applicabili e la revisione di compliance. I registri saranno conservati per cinque (5) anni dopo la risoluzione, come previsto dalla legge."
+        },
+        "governingLaw": {
+          "heading": "13. Legge applicabile e risoluzione delle controversie",
+          "body": "I presenti Termini sono disciplinati dalla legge della <strong>Costa Rica</strong>, senza riguardo ai principi di conflitto di leggi. Qualsiasi controversia derivante dai o relativa ai presenti Termini sarà definitivamente risolta mediante <strong>arbitrato</strong> con sede a San José, Costa Rica, secondo le regole del Centro Internacional de Conciliación y Arbitraje (CICA), in lingua spagnola o inglese a seconda dell'accordo tra le parti."
+        },
+        "changes": {
+          "heading": "14. Modifiche ai presenti Termini",
+          "body": "Possiamo modificare i presenti Termini di volta in volta. Notificheremo le modifiche sostanziali tramite il Servizio o via email. L'uso continuato del Servizio dopo la data di efficacia della modifica costituisce accettazione dei Termini revisionati."
+        },
+        "contact": {
+          "heading": "15. Contatti",
+          "lines": [
+            "Richieste legali: <legalMail>legal@rsends.io</legalMail>",
+            "Indirizzo postale: Rpagos S.R.L, San José, Costa Rica."
+          ]
+        }
+      }
+    },
+    "cookies": {
+      "metadata": {
+        "title": "Cookie Policy — RSends",
+        "description": "Come RSends utilizza i cookie e le tecnologie analoghe sulla piattaforma, sulla dashboard e sul sito di marketing."
+      },
+      "eyebrow": "Cookie Policy",
+      "title": "Cookie Policy",
+      "lastUpdated": "25 aprile 2026",
+      "breadcrumbLabel": "Cookie",
+      "intro": "La presente Cookie Policy spiega come Rpagos S.R.L (\"<strong>RSends</strong>\") utilizza i cookie e le tecnologie analoghe sul sito, sulla dashboard e sui servizi correlati di RSends. Integra la nostra <linkPrivacy>Informativa sulla privacy</linkPrivacy>.",
+      "sections": {
+        "what": {
+          "heading": "1. Cosa sono i cookie?",
+          "body": "I cookie sono piccoli file di testo memorizzati sul tuo dispositivo quando visiti un sito web. Consentono al sito di riconoscere il tuo dispositivo, ricordare le tue preferenze e abilitare determinate funzionalità. Utilizziamo anche tecnologie correlate come local storage, session storage e pixel tag; ai fini della presente Policy, ci riferiamo a tutte queste collettivamente come \"cookie\"."
+        },
+        "categories": {
+          "heading": "2. Categorie di cookie utilizzate",
+          "necessary": {
+            "heading": "Strettamente necessari",
+            "body": "Questi cookie sono indispensabili al funzionamento del Servizio e non possono essere disattivati. Supportano autenticazione, integrità della sessione, prevenzione frodi e bilanciamento del carico.",
+            "items": [
+              "<code>__Host-session</code> — cookie di sessione sicuro HTTP-only utilizzato per mantenerti autenticato.",
+              "<code>csrf</code> — token anti-CSRF utilizzato per proteggere l'invio di moduli e le richieste API che modificano lo stato."
+            ]
+          },
+          "functional": {
+            "heading": "Funzionali",
+            "body": "Questi cookie ricordano le scelte effettuate per migliorare la tua esperienza. Non sono utilizzati per il tracciamento su altri siti.",
+            "items": [
+              "<code>NEXT_LOCALE</code> — ricorda la tua lingua preferita.",
+              "<code>theme</code> — ricorda la tua preferenza tema chiaro/scuro (ove applicabile)."
+            ]
+          },
+          "analytics": {
+            "heading": "Analytics",
+            "body": "Possiamo utilizzare strumenti di analytics anonimizzati e aggregati per comprendere come viene utilizzato il Servizio e migliorarlo. Se utilizzeremo tali strumenti, aggiorneremo la presente Policy indicando il fornitore specifico, i dati raccolti e il periodo di conservazione. Non utilizziamo strumenti analytics che costruiscono profili cross-site sull'utente."
+          },
+          "advertising": {
+            "heading": "Pubblicità e tracciamento",
+            "body": "<strong>Non</strong> utilizziamo cookie pubblicitari, pixel di retargeting o tecnologie di tracciamento di terze parti sul Servizio."
+          }
+        },
+        "managing": {
+          "heading": "3. Gestione dei cookie",
+          "body": "Puoi controllare i cookie tramite le impostazioni del tuo browser. La maggior parte dei browser consente di visualizzare i cookie esistenti, bloccare i cookie da domini specifici o eliminare i cookie integralmente. La disattivazione dei cookie strettamente necessari può impedire il corretto funzionamento del Servizio.",
+          "browsersIntro": "Guide specifiche per browser:",
+          "browsers": [
+            "<chrome>Google Chrome</chrome>",
+            "<firefox>Mozilla Firefox</firefox>",
+            "<safari>Apple Safari</safari>",
+            "<edge>Microsoft Edge</edge>"
+          ]
+        },
+        "changes": {
+          "heading": "4. Modifiche alla presente Policy",
+          "body": "Possiamo aggiornare la presente Cookie Policy in funzione dell'evoluzione del nostro utilizzo dei cookie. La data \"Ultimo aggiornamento\" in cima a questa pagina riflette l'ultima revisione."
+        },
+        "contact": {
+          "heading": "5. Contatti",
+          "body": "Domande sulla presente Cookie Policy: <privacyMail>privacy@rsends.io</privacyMail>."
+        }
+      }
+    },
+    "amlKyc": {
+      "metadata": {
+        "title": "Informativa AML / KYC — RSends",
+        "description": "Obblighi antiriciclaggio e di adeguata verifica della clientela applicabili agli utenti RSends, inclusi FATF, DAC8 UE e quadro AML/CFT della Costa Rica."
+      },
+      "eyebrow": "Informativa AML / KYC",
+      "title": "Programma antiriciclaggio e adeguata verifica della clientela",
+      "lastUpdated": "25 aprile 2026",
+      "breadcrumbLabel": "AML / KYC",
+      "intro": "La presente Informativa descrive gli obblighi antiriciclaggio (\"<strong>AML</strong>\"), di contrasto al finanziamento del terrorismo (\"<strong>CTF</strong>\") e di adeguata verifica della clientela che Rpagos S.R.L (\"<strong>RSends</strong>\") applica a tutti gli utenti del Servizio. È fornita per finalità di trasparenza e costituisce parte integrante dei nostri Termini di servizio.",
+      "sections": {
+        "framework": {
+          "heading": "1. Quadro di compliance",
+          "intro": "RSends adotta un programma di compliance basato sul rischio, allineato con:",
+          "items": [
+            "Le Raccomandazioni del <strong>Financial Action Task Force (FATF)</strong>, in particolare la Raccomandazione 15 sui prestatori di servizi relativi a virtual asset.",
+            "La <strong>Direttiva UE 2023/2226 (DAC8)</strong> per lo scambio automatico di informazioni sulle transazioni in cripto-attività per gli utenti fiscalmente residenti nell'Unione Europea.",
+            "Il quadro AML/CFT della Costa Rica, inclusa la <em>Ley 8204</em> e le pertinenti regolamentazioni emanate da SUGEF e dall'Instituto Costarricense sobre Drogas (ICD).",
+            "Regimi sanzionatori internazionali, inclusi <strong>OFAC</strong> (Stati Uniti), sanzioni consolidate delle Nazioni Unite e misure restrittive dell'UE."
+          ]
+        },
+        "threeLevel": {
+          "heading": "2. Screening della clientela su tre livelli",
+          "intro": "Applichiamo un approccio a tre livelli per lo screening della clientela:",
+          "items": [
+            "<strong>Livello 1 — Verifica dell'identità.</strong> Conferma dell'identità mediante documenti rilasciati da autorità pubbliche e liveness check, screening sanzioni e persone politicamente esposte (PEP), e scoring di rischio di base.",
+            "<strong>Livello 2 — Adeguata verifica rafforzata (EDD).</strong> Attivata per profili a rischio più elevato (volume transazionale elevato, esposizione a giurisdizioni ad alto rischio, strutture proprietarie complesse). Richiede documentazione aggiuntiva, inclusa l'origine dei fondi, l'origine del patrimonio e l'identificazione dei titolari effettivi.",
+            "<strong>Livello 3 — Monitoraggio continuo.</strong> Monitoraggio continuo delle transazioni rispetto al profilo del cliente, ri-verifica periodica, screening di blockchain analytics su controparti e indirizzi wallet, e revisioni risk-based."
+          ]
+        },
+        "cdd": {
+          "heading": "3. Requisiti di adeguata verifica (CDD)",
+          "intro": "Per aprire e mantenere un account devi fornire:",
+          "items": [
+            "Un documento d'identità con foto valido rilasciato da un'autorità pubblica.",
+            "Prova di residenza con data degli ultimi tre (3) mesi.",
+            "Per utenti corporate: certificato di costituzione, registro degli amministratori, registro dei soci e identificazione di tutti i titolari effettivi che detengono il 25% o più.",
+            "Una descrizione dell'uso previsto del Servizio, dei volumi transazionali attesi e delle controparti."
+          ],
+          "note": "Possiamo richiedere informazioni aggiuntive in qualsiasi momento nell'ambito dei nostri obblighi di monitoraggio risk-based."
+        },
+        "sourceOfFunds": {
+          "heading": "4. Origine dei fondi",
+          "body": "Per transazioni che superano le soglie applicabili, o quando indicatori di rischio suggeriscono un rischio elevato, possiamo richiedere documentazione sull'origine dei fondi e sull'origine del patrimonio. Sono ammesse, a titolo esemplificativo, evidenze di rapporti di lavoro, bilanci aziendali, documentazione di cessione di beni o conti corporate certificati. Possiamo ritardare o rifiutare le transazioni fino a che la documentazione non sia ritenuta soddisfacente."
+        },
+        "sanctions": {
+          "heading": "5. Screening sanzioni",
+          "body1": "Tutti gli utenti, i titolari effettivi e le controparti (inclusi gli indirizzi wallet delle controparti) sono sottoposti a screening rispetto alla OFAC SDN List, alla lista consolidata delle sanzioni UE, alla lista delle sanzioni ONU e ad ulteriori liste nazionali ove rilevanti. Le liste sono aggiornate almeno con cadenza giornaliera, e lo screening è ripetuto in modo continuativo per tutto il ciclo di vita del cliente.",
+          "body2": "Le transazioni che coinvolgono persone sanzionate, indirizzi wallet sanzionati o giurisdizioni sanzionate saranno bloccate e segnalate alle autorità competenti come richiesto."
+        },
+        "sar": {
+          "heading": "6. Segnalazione di operazioni sospette",
+          "body": "Quando le transazioni o i comportamenti suggeriscano possibili attività di riciclaggio, finanziamento del terrorismo, elusione di sanzioni, frode o altri reati finanziari, predisporremo una Segnalazione di Operazioni Sospette (SOS) interna e, ove richiesto, la inoltreremo all'Unità di Informazione Finanziaria della Costa Rica e alle altre autorità competenti. Potremmo non essere autorizzati a informarti dell'avvenuta segnalazione (\"divieto di tipping-off\")."
+        },
+        "records": {
+          "heading": "7. Conservazione dei registri",
+          "body": "Conserviamo i registri di adeguata verifica, i registri delle transazioni e i registri di monitoraggio AML per un periodo non inferiore a <strong>cinque (5) anni</strong> dalla cessazione del rapporto d'affari o dalla data della transazione, conformemente alla normativa costaricana."
+        },
+        "cooperation": {
+          "heading": "8. Cooperazione del cliente",
+          "intro": "Utilizzando il Servizio ti impegni a:",
+          "items": [
+            "Fornire informazioni accurate, complete e aggiornate.",
+            "Rispondere tempestivamente alle richieste di compliance, incluse le richieste documentali e le verifiche sull'origine dei fondi.",
+            "Notificarci tempestivamente eventuali cambiamenti relativi al titolare effettivo, al controllo o alla sede legale.",
+            "Non utilizzare il Servizio per eludere i controlli di compliance o in connessione con attività sanzionate."
+          ],
+          "note": "La mancata cooperazione può comportare la sospensione o la chiusura dell'account e, ove appropriato, la segnalazione alle autorità."
+        },
+        "riskBased": {
+          "heading": "9. Approccio basato sul rischio",
+          "body": "Il nostro programma di compliance è basato sul rischio e proporzionato. Il livello di adeguata verifica, monitoraggio e revisione applicato a una relazione dipende dal rischio valutato, tenendo conto della tipologia di cliente, della geografia, dei prodotti utilizzati, dei pattern transazionali e degli indicatori di rischio esterni."
+        },
+        "changes": {
+          "heading": "10. Modifiche alla presente Informativa",
+          "body": "Aggiorniamo periodicamente la presente Informativa in base all'evoluzione del quadro regolamentare. La data \"Ultimo aggiornamento\" in cima a questa pagina riflette l'ultima revisione."
+        },
+        "contact": {
+          "heading": "11. Contatti",
+          "lines": [
+            "Richieste in materia di compliance: <complianceMail>compliance@rsends.io</complianceMail>",
+            "Indirizzo postale: Rpagos S.R.L, Compliance Office, San José, Costa Rica."
+          ]
+        }
+      }
+    }
   }
 }
