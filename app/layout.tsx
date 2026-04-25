@@ -4,9 +4,6 @@ import './globals.css'
 import { Providers } from './providers'
 import { AuthSessionProvider } from '@/components/auth/AuthSessionProvider'
 import { AuthBootstrap } from '@/components/auth/AuthBootstrap'
-import dynamic from 'next/dynamic'
-
-const FooterGlobe = dynamic(() => import('../components/FooterGlobe'), { ssr: false })
 
 const dmMono = DM_Mono({
   subsets:  ['latin'],
@@ -56,7 +53,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <AuthBootstrap />
           <Providers>
             {children}
-            <FooterGlobe />
           </Providers>
         </AuthSessionProvider>
       </body>
