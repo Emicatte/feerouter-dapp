@@ -890,7 +890,7 @@ function HeroTitle({ isMobile }: { isMobile?: boolean }) {
               letterSpacing: 0,
             }}
           >
-            Start building →
+            Start sending →
           </button>
         </Link>
         <button
