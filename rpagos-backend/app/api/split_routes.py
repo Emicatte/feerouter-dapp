@@ -21,7 +21,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select, desc, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +33,7 @@ from app.models.split_models import (
     SplitRecipient,
     SplitExecution,
 )
+from app.security.auth import require_wallet_auth
 from app.services.split_engine import (
     compute_split,
     format_split_plan,
@@ -262,21 +263,45 @@ async def _get_contract_or_404(
     return contract
 
 
+async def _verify_split_owner(contract: SplitContract, wallet_address: str) -> None:
+    """Verifica che `wallet_address` sia owner del contratto.
+
+    Nullable owner_address (legacy row non backfillata) → 403, mai accettare
+    ownership implicita. Forza il backfill prima di un'eventuale migration
+    NOT NULL futura.
+    """
+    if contract.owner_address is None:
+        raise HTTPException(
+            status_code=403, detail="Contract has no owner; access denied"
+        )
+    if contract.owner_address != wallet_address.lower():
+        raise HTTPException(
+            status_code=403, detail="Not the owner of this split contract"
+        )
+
+
 # ═══════════════════════════════════════════════════════════
 #  1. POST /contracts — create SplitContract
 # ═══════════════════════════════════════════════════════════
 
 @split_router.post("/contracts")
+@require_wallet_auth
 async def create_split_contract(
+    request: Request,
     req: CreateSplitContractRequest,
     db: AsyncSession = Depends(get_db),
+    wallet_address: str = "",
 ):
     """Crea un nuovo SplitContract per un cliente.
 
     Il contratto è immutabile dopo creazione: per modificare,
     si crea una nuova versione con stesso `client_id`. La versione
     viene incrementata automaticamente.
+
+    Auth: wallet signature obbligatoria. owner_address = wallet del firmatario.
     """
+    owner = wallet_address.lower()
+
     # Validazione di fondo (stessa regola usata da compute_split)
     recipients_dicts = [r.model_dump() for r in req.recipients]
     valid, err = validate_recipients(recipients_dicts)
@@ -291,6 +316,7 @@ async def create_split_contract(
             client_name=req.client_name or None,
             contract_ref=req.contract_ref or None,
             master_wallet=req.master_wallet.lower(),
+            owner_address=owner,
             chain_id=req.chain_id,
             rsend_fee_bps=req.rsend_fee_bps,
             allowed_tokens=(
@@ -397,18 +423,24 @@ async def get_contract(
 # ═══════════════════════════════════════════════════════════
 
 @split_router.post("/contracts/{contract_id}/deactivate")
+@require_wallet_auth
 async def deactivate_contract(
+    request: Request,
     contract_id: int,
     db: AsyncSession = Depends(get_db),
+    wallet_address: str = "",
 ):
     """Disattiva un contratto.
 
     Soft-delete: il record resta per audit. I pagamenti in arrivo
     non verranno più splittati finché non viene creata una nuova versione.
     Operazione idempotente.
+
+    Auth: wallet signature obbligatoria. Solo l'owner del contratto può disattivarlo.
     """
     try:
         contract = await _get_contract_or_404(db, contract_id, with_recipients=False)
+        await _verify_split_owner(contract, wallet_address)
 
         if not contract.is_active:
             # Idempotente — nessuna modifica necessaria
