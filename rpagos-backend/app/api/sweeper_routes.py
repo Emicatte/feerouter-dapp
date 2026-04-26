@@ -150,7 +150,10 @@ class CreateRulePayload(BaseModel):
 
 
 class UpdateRulePayload(BaseModel):
-    version: int = Field(..., description="Current version for optimistic locking")
+    version: Optional[int] = Field(
+        None,
+        description="Current version for optimistic locking. If omitted, lock is skipped.",
+    )
     label: Optional[str] = None
     destination_wallet: Optional[str] = Field(None, min_length=42, max_length=42)
     distribution_list_id: Optional[str] = Field(None, description="UUID of distribution list")
@@ -777,8 +780,8 @@ async def update_rule(
     rule = await _get_rule_or_404(db, rule_id)
     await _verify_owner(rule, wallet_address)
 
-    # Optimistic locking: version must match
-    if rule.version != payload.version:
+    # Optimistic locking: opt-in. Verifica solo se il client ha inviato version.
+    if payload.version is not None and rule.version != payload.version:
         raise HTTPException(
             status_code=409,
             detail={
