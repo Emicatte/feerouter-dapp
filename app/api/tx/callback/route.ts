@@ -32,7 +32,7 @@ import { createHmac } from 'crypto'
  */
 
 function getSecret() {
-  return process.env.HMAC_SECRET || process.env.NEXT_PUBLIC_HMAC_SECRET || ''
+  return process.env.HMAC_SECRET || ''
 }
 
 function getBackendUrl() {
