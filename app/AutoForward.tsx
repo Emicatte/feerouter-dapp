@@ -10,7 +10,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAccount, useChainId } from 'wagmi'
 import { motion, AnimatePresence } from 'framer-motion'
-import { mutationHeaders } from '../lib/rsendFetch'
+import { useForwardingRules } from '../lib/useForwardingRules'
+import { logger } from '../lib/logger'
 
 // Same-origin proxy → see app/api/backend/[...path]/route.ts
 const BACKEND = '/api/backend'
@@ -18,11 +19,6 @@ const BACKEND = '/api/backend'
 import { C as BaseC } from '@/app/designTokens'
 const C = { ...BaseC, pink: '#C8512C', card: 'rgba(255,255,255,0.92)' }
 
-interface Rule {
-  id: number; source_wallet: string; destination_wallet: string
-  is_active: boolean; min_threshold: number; gas_strategy: string
-  max_gas_percent: number; token_symbol: string; chain_id: number
-}
 interface SweepLog {
   id: number; destination: string; amount: number; token: string
   gas_percent: number | null; status: string; tx_hash: string | null
@@ -121,9 +117,13 @@ interface Props { onClose?: () => void }
 export default function AutoForward({ onClose }: Props) {
   const { address } = useAccount()
   const chainId = useChainId()
-  const [rules, setRules] = useState<Rule[]>([])
+  const {
+    rules, loading,
+    createRule: createRuleSigned,
+    updateRule,
+  } = useForwardingRules(address)
   const [logs, setLogs] = useState<SweepLog[]>([])
-  const [loading, setLoading] = useState(true)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [dest, setDest] = useState('')
   const [threshold, setThreshold] = useState('0.001')
@@ -132,16 +132,12 @@ export default function AutoForward({ onClose }: Props) {
 
   const loadData = useCallback(async () => {
     if (!address) return
-    setLoading(true)
     try {
-      const [rulesRes, logsRes] = await Promise.all([
-        fetch(`${BACKEND}/api/v1/forwarding/rules?wallet=${address}`),
-        fetch(`${BACKEND}/api/v1/forwarding/logs?wallet=${address}&limit=10`),
-      ])
-      if (rulesRes.ok) setRules((await rulesRes.json()).rules ?? [])
+      const logsRes = await fetch(
+        `${BACKEND}/api/v1/forwarding/logs?owner_address=${address.toLowerCase()}&per_page=10`
+      )
       if (logsRes.ok) setLogs((await logsRes.json()).logs ?? [])
     } catch {}
-    setLoading(false)
   }, [address])
 
   useEffect(() => { loadData() }, [loadData])
@@ -152,35 +148,39 @@ export default function AutoForward({ onClose }: Props) {
     return () => clearInterval(iv)
   }, [loadData])
 
-  const createRule = async () => {
+  const handleCreateRule = async () => {
     if (!address || !dest) return
+    setErrorMsg(null)
     try {
-      await fetch(`${BACKEND}/api/v1/forwarding/rules`, {
-        method: 'POST',
-        headers: mutationHeaders(),
-        body: JSON.stringify({
-          source_wallet: address,
-          destination_wallet: dest,
-          min_threshold: parseFloat(threshold),
-          gas_strategy: gasStrategy,
-          max_gas_percent: parseFloat(maxGas),
-          token_symbol: 'ETH',
-          chain_id: chainId,
-        }),
+      await createRuleSigned({
+        owner_address: address,
+        source_wallet: address,
+        destination_wallet: dest,
+        min_threshold: parseFloat(threshold),
+        gas_strategy: gasStrategy,
+        max_gas_percent: parseFloat(maxGas),
+        token_symbol: 'ETH',
+        chain_id: chainId,
       })
       setShowCreate(false)
       setDest('')
       loadData()
-    } catch {}
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setErrorMsg(msg)
+      logger.error('AutoForward', 'createRule failed', { error: msg })
+    }
   }
 
-  const toggleRule = async (id: number, active: boolean) => {
-    await fetch(`${BACKEND}/api/v1/forwarding/rules/${id}`, {
-      method: 'PUT',
-      headers: mutationHeaders(),
-      body: JSON.stringify({ is_active: !active }),
-    })
-    loadData()
+  const handleToggle = async (id: number, active: boolean) => {
+    setErrorMsg(null)
+    try {
+      await updateRule(id, { is_active: !active })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setErrorMsg(msg)
+      logger.error('AutoForward', 'toggleRule failed', { id: String(id), error: msg })
+    }
   }
 
   if (!address) return null
@@ -200,6 +200,18 @@ export default function AutoForward({ onClose }: Props) {
           {showCreate ? '✕' : '+ Nuova Regola'}
         </button>
       </div>
+
+      {errorMsg && (
+        <div role="alert" style={{
+          padding: '8px 12px', borderRadius: 8, marginBottom: 10,
+          background: `${C.red}10`,
+          border: `1px solid ${C.red}25`,
+          color: C.red,
+          fontFamily: C.M, fontSize: 11,
+        }}>
+          {errorMsg}
+        </div>
+      )}
 
       {/* Create form */}
       <AnimatePresence>
@@ -252,7 +264,7 @@ export default function AutoForward({ onClose }: Props) {
                 </div>
               </div>
 
-              <button onClick={createRule} disabled={!dest.startsWith('0x')} style={{
+              <button onClick={handleCreateRule} disabled={!dest.startsWith('0x')} style={{
                 width:'100%', padding:'14px', borderRadius:14, border:'none',
                 background: dest.startsWith('0x') ? `linear-gradient(135deg, ${C.purple}, #D4724A)` : 'rgba(10,10,10,0.04)',
                 color: dest.startsWith('0x') ? '#fff' : 'rgba(10,10,10,0.35)',
@@ -286,7 +298,7 @@ export default function AutoForward({ onClose }: Props) {
                   Min: {r.min_threshold} {r.token_symbol} · {r.gas_strategy}
                 </div>
               </div>
-              <button onClick={() => toggleRule(r.id, r.is_active)} style={{
+              <button onClick={() => handleToggle(r.id, r.is_active)} style={{
                 padding:'4px 10px', borderRadius:8,
                 background: r.is_active ? `${C.green}10` : 'rgba(10,10,10,0.04)',
                 border:`1px solid ${r.is_active ? `${C.green}25` : C.border}`,
