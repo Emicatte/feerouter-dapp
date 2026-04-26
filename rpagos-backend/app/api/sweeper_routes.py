@@ -900,23 +900,29 @@ async def delete_rule(
     )
     has_logs = log_count.scalar() > 0
 
-    if has_logs:
-        # Soft delete — mantieni per audit trail
-        rule.is_active = False
-        rule.is_paused = True
-        action = "soft_delete"
-    else:
-        # Hard delete — nessun log collegato
-        await db.delete(rule)
-        action = "delete"
+    action = "soft_delete" if has_logs else "delete"
 
+    # Audit log creato e flushato PRIMA del delete: rule_id ancora valido,
+    # old_values cattura lo stato pre-mutazione. Su hard-delete il successivo
+    # ondelete=SET NULL azzererà rule_id anche su questa riga, ma action,
+    # actor e old_values["id"] preservano l'identità per DAC8.
     audit = AuditLog(
         rule_id=rule_id,
         action=action,
         actor=wallet_address.lower(),
-        old_values=_serialize_rule(rule) if has_logs else {"id": rule_id},
+        old_values=_serialize_rule(rule),
     )
     db.add(audit)
+    await db.flush()
+
+    if has_logs:
+        # Soft delete — mantieni per audit trail
+        rule.is_active = False
+        rule.is_paused = True
+    else:
+        # Hard delete — nessun log collegato
+        await db.delete(rule)
+
     await db.commit()
 
     # Remove source address from Alchemy webhook if no other rules need it

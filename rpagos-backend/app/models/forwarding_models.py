@@ -198,7 +198,12 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
-    rule_id = Column(Integer, ForeignKey("forwarding_rules.id"), nullable=False, index=True)
+    rule_id = Column(
+        Integer,
+        ForeignKey("forwarding_rules.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     action = Column(String(50), nullable=False)
     actor = Column(String(42), nullable=False)
     old_values = Column(JSON, nullable=True)
