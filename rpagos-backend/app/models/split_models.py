@@ -47,6 +47,12 @@ class SplitContract(Base):
     # Master wallet (riceve il pagamento iniziale)
     master_wallet = Column(String(42), nullable=False)        # 0x... address
 
+    # Owner del contratto (chi può modificarlo via wallet auth).
+    # nullable=True in questa migration additiva — verrà reso NOT NULL
+    # in commit successivo dopo backfill verificato.
+    # String(42) per wallet EVM ("0x" + 40 hex), normalizzato lowercase.
+    owner_address = Column(String(42), nullable=True, index=True)
+
     # Chain
     chain_id = Column(Integer, nullable=False, default=8453)  # Base default
     chain_family = Column(String(10), default="evm")
